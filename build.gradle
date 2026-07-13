@@ -138,7 +138,11 @@ publishing {
 
 tasks.named('test') {
     useJUnitPlatform()
-    // The leak canary needs soft references to be force-cleared, so cap the heap to create OOM pressure.
+    // Leak canaries assert module ClassLoaders are reclaimed after undeploy. Spring's internal caches pin them
+    // via SoftReferences, so clear soft refs eagerly on every GC — System.gc() then reclaims them deterministically.
+    // This replaces the old "allocate until OOM to force soft-ref clearing" ballast, which collaterally threw OOM
+    // on async threads (HttpClient/Tomcat pollers) and flaked CI.
+    jvmArgs '-XX:SoftRefLRUPolicyMSPerMB=0'
     maxHeapSize = '512m'
     testLogging {
         events 'passed', 'failed', 'skipped'

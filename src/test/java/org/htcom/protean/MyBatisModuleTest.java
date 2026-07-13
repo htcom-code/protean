@@ -158,7 +158,6 @@ class MyBatisModuleTest {
 
         boolean reclaimed = false;
         for (int i = 0; i < 8 && !reclaimed; i++) {
-            applyMemoryPressure();
             System.gc();
             Thread.sleep(30);
             reclaimed = ref.get() == null;
@@ -167,13 +166,4 @@ class MyBatisModuleTest {
                 "a MyBatis module (per-module SqlSessionFactory) must also have its ClassLoader reclaimed after undeploy");
     }
 
-    private static void applyMemoryPressure() {
-        try {
-            java.util.List<byte[]> ballast = new java.util.ArrayList<>();
-            while (true) {
-                ballast.add(new byte[8 * 1024 * 1024]);
-            }
-        } catch (OutOfMemoryError ignored) {
-        }
-    }
 }

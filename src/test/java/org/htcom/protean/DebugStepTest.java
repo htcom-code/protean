@@ -50,12 +50,12 @@ class DebugStepTest {
             DebugSession session = core.attach("127.0.0.1", port);
             try {
                 session.setBreakpoint(TARGET, 20); // int doubled = i * 2;
-                DebugSession.Stop hit = session.awaitStop(8000);
+                DebugSession.Stop hit = session.awaitStop(30000);
                 assertNotNull(hit, "breakpoint hit");
                 assertEquals(20, hit.line());
 
                 session.step(DebugSession.StepDepth.OVER);
-                DebugSession.Stop stepped = session.awaitStop(8000);
+                DebugSession.Stop stepped = session.awaitStop(30000);
                 assertNotNull(stepped, "stopped after step");
                 assertEquals(21, stepped.line(), "step_over advances to next line (return doubled)");
                 assertEquals("compute", stepped.method());

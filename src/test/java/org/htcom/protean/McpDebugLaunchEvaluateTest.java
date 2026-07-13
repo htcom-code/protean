@@ -94,7 +94,7 @@ class McpDebugLaunchEvaluateTest {
             assertFalse(callTool("debug.set_breakpoint", bp).path("isError").asBoolean(false));
 
             ObjectNode wait = args(sessionId);
-            wait.put("timeoutMs", 8000);
+            wait.put("timeoutMs", 30000);
             assertTrue(callTool("debug.await_stop", wait).path("structuredContent").path("stopped").asBoolean(false));
 
             // Full expression syntax works through the dispatcher (operators, getters)

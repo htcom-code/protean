@@ -99,7 +99,6 @@ class ControllerAdviceModuleTest {
 
         boolean reclaimed = false;
         for (int i = 0; i < 8 && !reclaimed; i++) {
-            applyMemoryPressure();
             System.gc();
             Thread.sleep(30);
             reclaimed = ref.get() == null;
@@ -109,13 +108,4 @@ class ControllerAdviceModuleTest {
                         + "(exceptionHandlerAdviceCache eviction required)");
     }
 
-    private static void applyMemoryPressure() {
-        try {
-            java.util.List<byte[]> ballast = new java.util.ArrayList<>();
-            while (true) {
-                ballast.add(new byte[8 * 1024 * 1024]);
-            }
-        } catch (OutOfMemoryError ignored) {
-        }
-    }
 }

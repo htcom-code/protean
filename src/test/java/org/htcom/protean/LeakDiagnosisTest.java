@@ -85,20 +85,10 @@ class LeakDiagnosisTest {
 
     private static boolean reclaimed(WeakReference<?> ref) throws InterruptedException {
         for (int i = 0; i < 8 && ref.get() != null; i++) {
-            applyMemoryPressure();
             System.gc();
             Thread.sleep(30);
         }
         return ref.get() == null;
     }
 
-    private static void applyMemoryPressure() {
-        try {
-            java.util.List<byte[]> ballast = new java.util.ArrayList<>();
-            while (true) {
-                ballast.add(new byte[8 * 1024 * 1024]);
-            }
-        } catch (OutOfMemoryError ignored) {
-        }
-    }
 }
