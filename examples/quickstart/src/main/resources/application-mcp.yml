@@ -16,7 +16,8 @@
 protean:
   mcp:
     enabled: true
-    # To also enable the debugging tools (debug.*), uncomment below (the activation key is debug.enabled — dotted, not hyphenated debug-enabled):
+    # The debug.* tools are already exposed whenever mcp.enabled=true; to also enable their execution, uncomment below
+    # (the execution key is debug.enabled — dotted, not hyphenated debug-enabled):
     # debug:
     #   enabled: true
     # Or, for the MCP + worker-isolation + debug combination, use the debug profile: gradle :examples:quickstart:runMcpDebug

@@ -103,7 +103,7 @@ registerScenario(project, 'runMcpWorker', ['mcp'], ['--protean.isolation.mode=wo
 registerScenario(project, 'runMcpApproval', ['mcp'], ['--protean.gate.approval.required=true'], false,
         'MCP + approval gate — deployment stops at PENDING_APPROVAL and serves after approve_module')
 registerScenario(project, 'runMcpDebug', ['debug'], [], false,
-        'MCP + worker isolation + Level 3 debugging — debug.* tools enabled (JDI). The activation key is protean.mcp.debug.enabled (dotted)')
+        'MCP + worker isolation + Level 3 debugging — debug.* tools exposed (JDI); execution enabled via protean.mcp.debug.enabled (dotted)')
 
 // container family — requires the Docker daemon; bootJar runs first automatically.
 registerScenario(project, 'runContainerCompute', ['worker-demo', 'container'], [], true,

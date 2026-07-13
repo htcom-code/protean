@@ -286,7 +286,7 @@ protean:
       scopes-supported: [mcp.read, mcp.write]
 ```
 
-스코프→동작 매핑은 `ModuleActionAuthorizer` 에 둔다(예: `DEPLOY`/`UPDATE`/`DELETE` 에 `mcp.write`, `READ` 에 `mcp.read` 요구). 흐름 설명과 결정 배경은 [`examples/oauth-mcp/README.md`](../../examples/oauth-mcp/README.md) 참고.
+스코프→동작 매핑은 `ModuleActionAuthorizer` 에 둔다(예: `DEPLOY`/`UPDATE`/`DELETE` 에 `mcp.write`, `READ` 에 `mcp.read` 요구). 흐름 설명과 결정 배경은 [`examples/oauth-mcp/README.ko.md`](../../examples/oauth-mcp/README.ko.md) 참고.
 
 ## MCP 클라이언트에서 연결·구동 (Claude Code · Curator · …)
 
