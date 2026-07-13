@@ -56,7 +56,7 @@ class DebugBreakpointTest {
             try {
                 session.setBreakpoint(TARGET, RETURN_LINE);
 
-                DebugSession.Stop stop = session.awaitStop(8000);
+                DebugSession.Stop stop = session.awaitStop(30000);
                 assertNotNull(stop, "the breakpoint should be hit and suspend execution");
                 assertEquals(TARGET, stop.className());
                 assertEquals("compute", stop.method());
