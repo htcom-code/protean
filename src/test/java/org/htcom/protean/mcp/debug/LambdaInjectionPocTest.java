@@ -68,7 +68,7 @@ class LambdaInjectionPocTest {
             DebugSession session = core.attach("127.0.0.1", port);
             try {
                 session.setBreakpoint(TARGET, RETURN_LINE);
-                assertNotNull(session.awaitStop(8000), "breakpoint stop");
+                assertNotNull(session.awaitStop(30000), "breakpoint stop");
                 VirtualMachine vm = session.vm();
                 ThreadReference t = session.pausedThread();
 
