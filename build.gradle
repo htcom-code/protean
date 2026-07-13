@@ -15,7 +15,7 @@ plugins {
     // irreducibly timing-sensitive on loaded 2-vCPU GitHub runners — a breakpoint occasionally isn't hit
     // even within a generous timeout. Retry lets a flaky pass on a rerun; a genuinely broken test is
     // deterministic and still fails all attempts. Local runs keep maxRetries=0 so devs still see flakiness.
-    id 'org.gradle.test-retry' version '1.6.2'
+    id 'org.gradle.test-retry' version '1.6.5'
 }
 
 group = 'org.htcom'
