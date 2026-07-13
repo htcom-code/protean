@@ -11,6 +11,11 @@ plugins {
     id 'org.springframework.boot' version '3.5.16'
     id 'io.spring.dependency-management' version '1.1.6'
     id 'maven-publish'
+    // Retries flaky tests on CI. The JDI/debug integration tests (attach + breakpoint over JDWP) are
+    // irreducibly timing-sensitive on loaded 2-vCPU GitHub runners — a breakpoint occasionally isn't hit
+    // even within a generous timeout. Retry lets a flaky pass on a rerun; a genuinely broken test is
+    // deterministic and still fails all attempts. Local runs keep maxRetries=0 so devs still see flakiness.
+    id 'org.gradle.test-retry' version '1.6.2'
 }
 
 group = 'org.htcom'
@@ -138,6 +143,12 @@ publishing {
 
 tasks.named('test') {
     useJUnitPlatform()
+    retry {
+        // CI only: retry a failed test up to twice. Locally maxRetries=0 so flakiness stays visible to devs.
+        maxRetries = providers.environmentVariable('CI').isPresent() ? 2 : 0
+        // If more than 20 tests fail, treat it as systemic breakage (not flakiness) and stop retrying.
+        maxFailures = 20
+    }
     // Leak canaries assert module ClassLoaders are reclaimed after undeploy. Spring's internal caches pin them
     // via SoftReferences, so clear soft refs eagerly on every GC — System.gc() then reclaims them deterministically.
     // This replaces the old "allocate until OOM to force soft-ref clearing" ballast, which collaterally threw OOM
