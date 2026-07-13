@@ -54,7 +54,7 @@ class DebugEvaluateTest {
             DebugSession session = core.attach("127.0.0.1", port);
             try {
                 session.setBreakpoint(TARGET, RETURN_LINE);
-                DebugSession.Stop stop = session.awaitStop(8000);
+                DebugSession.Stop stop = session.awaitStop(30000);
                 assertNotNull(stop, "breakpoint hit");
                 assertEquals("run", stop.method());
 

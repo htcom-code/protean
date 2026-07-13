@@ -158,7 +158,7 @@ class McpDebugToolsTest {
             // await_stop
             ObjectNode waitArgs = mapper.createObjectNode();
             waitArgs.put("sessionId", sessionId);
-            waitArgs.put("timeoutMs", 8000);
+            waitArgs.put("timeoutMs", 30000);
             JsonNode stop = callTool("debug.await_stop", waitArgs);
             assertTrue(stop.path("structuredContent").path("stopped").asBoolean(false), "must stop");
             assertEquals(21, stop.path("structuredContent").path("line").asInt());

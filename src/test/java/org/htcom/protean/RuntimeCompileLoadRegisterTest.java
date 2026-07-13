@@ -90,9 +90,9 @@ class RuntimeCompileLoadRegisterTest {
     /**
      * Leak canary: register then unregister a module, drop all strong references, and check the ClassLoader is reclaimed.
      *
-     * Key distinction:
-     *  - Not being reclaimed by System.gc() alone can be normal (Spring's internal caches use soft references).
-     *  - Not being reclaimed even under memory pressure is a real hard leak — a Metaspace leak.
+     * The test JVM runs with -XX:SoftRefLRUPolicyMSPerMB=0 (see root build.gradle), so System.gc() clears the
+     * SoftReferences in Spring's internal caches that would otherwise pin the ClassLoader. Not being reclaimed after
+     * repeated GC therefore indicates a real hard leak — a Metaspace leak (a lingering thread/static/ThreadLocal).
      */
     @Test
     void module_classloader_is_reclaimable_after_unload() throws Exception {
@@ -109,44 +109,25 @@ class RuntimeCompileLoadRegisterTest {
         handler = null;
         module = null;
 
-        // step 1: plain GC — soft references may not be cleared here
-        boolean clearedByPlainGc = gcUntilCleared(ref, 10, false);
+        // SoftRefLRUPolicyMSPerMB=0 makes System.gc() clear Spring's soft-cached refs, so plain GC reclaims it.
+        boolean cleared = gcUntilCleared(ref, 10);
 
-        // step 2: memory pressure — the JVM clears all soft references just before OOM
-        boolean clearedUnderPressure = clearedByPlainGc || gcUntilCleared(ref, 10, true);
+        System.out.println("[leak-canary] cleared=" + cleared);
 
-        System.out.println("[leak-canary] clearedByPlainGc=" + clearedByPlainGc
-                + " clearedUnderPressure=" + clearedUnderPressure);
-
-        assertTrue(clearedUnderPressure,
-                "the module ClassLoader is not reclaimed even under memory pressure -> a real hard leak "
+        assertTrue(cleared,
+                "the module ClassLoader is not reclaimed after repeated GC -> a real hard leak "
                         + "(suspect a lingering thread/static/ThreadLocal)");
     }
 
-    /** Repeats GC until ref is cleared. When pressure=true, allocates up to just before OOM to force soft refs to clear. */
-    private static boolean gcUntilCleared(WeakReference<?> ref, int rounds, boolean pressure) throws InterruptedException {
+    /** Repeats System.gc() until the ref is cleared or rounds are exhausted. */
+    private static boolean gcUntilCleared(WeakReference<?> ref, int rounds) throws InterruptedException {
         for (int i = 0; i < rounds; i++) {
             if (ref.get() == null) {
                 return true;
-            }
-            if (pressure) {
-                applyMemoryPressure();
             }
             System.gc();
             Thread.sleep(30);
         }
         return ref.get() == null;
-    }
-
-    /** Fills the heap to trigger OOM then reclaims it — to force soft references to clear. */
-    private static void applyMemoryPressure() {
-        try {
-            java.util.List<byte[]> ballast = new java.util.ArrayList<>();
-            while (true) {
-                ballast.add(new byte[8 * 1024 * 1024]); // 8MB chunk
-            }
-        } catch (OutOfMemoryError ignored) {
-            // soft references have been cleared. ballast goes out of scope here and is reclaimed.
-        }
     }
 }
