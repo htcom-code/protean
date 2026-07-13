@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/htcom-code/protean/security/advisories/new
+    about: Report a vulnerability privately — do not open a public issue. See SECURITY.md.
+  - name: Question / usage help
+    url: https://github.com/htcom-code/protean/discussions
+    about: For "how do I …" questions and consumer-integration help, open a Discussion rather than a bug report.

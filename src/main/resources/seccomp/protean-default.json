@@ -1,0 +1,35 @@
+{
+  "comment": "Protean default seccomp profile (defense-in-depth). defaultAction=ALLOW so it does not disturb JVM/Spring/Tomcat startup, while — separately from what cap-drop already blocks — denying dangerous syscalls once more at the seccomp level with EPERM. Baseline for untrusted-tier container workers.",
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "syscalls": [
+    {
+      "names": [
+        "symlink",
+        "symlinkat",
+        "ptrace",
+        "unshare",
+        "setns",
+        "mount",
+        "umount2",
+        "pivot_root",
+        "chroot",
+        "reboot",
+        "kexec_load",
+        "kexec_file_load",
+        "init_module",
+        "finit_module",
+        "delete_module",
+        "add_key",
+        "request_key",
+        "keyctl",
+        "bpf",
+        "perf_event_open",
+        "process_vm_readv",
+        "process_vm_writev"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Privilege-escalation / container-escape / memory-corruption / symlink-attack syscalls. A normal JVM workload does not use them."
+    }
+  ]
+}

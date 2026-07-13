@@ -1,0 +1,20 @@
+/*
+ * Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+// Lets Gradle auto-provision the Java 21 toolchain (build.gradle's languageVersion) when it is not already
+// installed, via the Foojay Disco API. No-op when a matching JDK is present (no network call), so it just
+// smooths a fresh `git clone` → `./gradlew` build for contributors without JDK 21.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
+}
+
+rootProject.name = 'protean'
+
+// Library consumption examples (not publishing targets). They consume the root library directly via project(':').
+include 'examples:quickstart'
+include 'examples:oauth-mcp'

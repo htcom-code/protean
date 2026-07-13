@@ -1,0 +1,24 @@
+# Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Redis for the OAuth example — single node (no cluster/sentinel needed for an example).
+# The AS login sessions (Spring Session) are persisted here.
+#
+#   docker compose -f examples/oauth-mcp/docker-compose.yml up -d
+#   ./gradlew :examples:oauth-mcp:bootRun
+#
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: protean-oauth-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

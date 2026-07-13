@@ -1,0 +1,141 @@
+# GitHub Actions CI — mirrors the operations guide's verification discipline
+# (docs/guide/11-operations.md): `gradle clean test` and `gradle bootJar` run as
+# SEPARATE gradle invocations because combining them (`clean bootJar test`) can
+# trigger a collateral OOM in LeakDiagnosisTest (the test task caps the heap at
+# 512m to force soft-reference eviction).
+#
+# Gradle is pinned by the committed wrapper (gradle/wrapper/gradle-wrapper.properties,
+# 8.14.5) and invoked via ./gradlew; setup-gradle only provides dependency caching.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.java"
+      - "**/*.gradle"
+      - "settings.gradle"
+      - "gradle.properties"
+      - "gradle/**"
+      - ".github/workflows/ci.yml"
+  # No paths filter on pull_request on purpose: every PR runs the workflow so a
+  # branch-protection required check always reports. A paths-filtered PR trigger
+  # skips the WHOLE workflow on a docs-only PR, which would leave a required
+  # check stuck "Expected — waiting for status" and block the merge. The
+  # ci-complete job below is the single stable status to mark required.
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The test gate. GitHub-hosted ubuntu runners ship Docker, so Testcontainers
+  # (MySQL/Postgres isolation) run here; container/worker tests that need the fat
+  # -boot.jar self-skip (no bootJar in this job) and are covered by isolation-test.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: test
+        run: ./gradlew clean test --console=plain
+
+  # build runs only after tests pass (mirrors the "bootJar/test separate" rule)
+  # and proves the plain jar + fat bootJar assemble.
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: bootJar
+        run: ./gradlew bootJar --console=plain
+
+  # Worker/container isolation tests self-skip when no bootJar is present (they
+  # need the fat -boot.jar), so the `test` job never exercises them. This job
+  # builds the bootJar first, then runs exactly those tests as a SEPARATE gradle
+  # invocation (combining bootJar + the full test task in one invocation can OOM
+  # LeakDiagnosisTest). Docker on ubuntu-latest backs the container cases; any
+  # case whose Docker/bootJar precondition is unmet still self-skips.
+  isolation-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: bootJar (isolation-test prerequisite)
+        run: ./gradlew bootJar --console=plain
+      - name: isolation + container tests
+        run: >
+          ./gradlew :test --console=plain
+          --tests "org.htcom.protean.OsIsolationTest"
+          --tests "org.htcom.protean.Container*"
+
+  # publish the library to GitHub Packages. Only on pushes to main (never on PRs,
+  # never on forks), and only after both gates pass. build.gradle registers the
+  # GitHubPackages remote solely when GITHUB_OWNER/REPO/ACTOR/TOKEN are all set —
+  # here they come from the Actions context + the built-in GITHUB_TOKEN secret,
+  # so the publish task resolves the remote automatically. `packages: write` is
+  # required to push to GitHub Packages.
+  publish:
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: publish to GitHub Packages
+        run: ./gradlew publishLibraryPublicationToGitHubPackagesRepository --console=plain
+        env:
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.event.repository.name }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Single always-run aggregation gate. Mark THIS as the required status check in
+  # branch protection: it runs even when upstream jobs are skipped (so a required
+  # check never gets stuck) and fails only if a needed job actually failed or was
+  # cancelled.
+  ci-complete:
+    if: always()
+    needs: [test, build, isolation-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: gate on upstream results
+        run: |
+          echo "test=${{ needs.test.result }} build=${{ needs.build.result }} isolation-test=${{ needs.isolation-test.result }}"
+          for r in "${{ needs.test.result }}" "${{ needs.build.result }}" "${{ needs.isolation-test.result }}"; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "a required job did not pass"
+              exit 1
+            fi
+          done
+          echo "all required jobs passed or were skipped"

@@ -1,0 +1,70 @@
+/*
+ * Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+// Protean library consumption example — integrated with an OAuth2 authentication/authorization stack (in-repo, not a publishing target).
+//
+// Purpose: stand up a realistic consumer authentication stack (Spring Authorization Server + Resource Server + H2 users +
+// Redis sessions) and actually integrate it with protean MCP's delegated authorization (ModuleActionAuthorizer + Principal),
+// demonstrating OAuth discovery metadata end to end.
+//
+// Same conventions as quickstart: root build.gradle untouched (own buildscript), maven-publish not applied (unpublished),
+// library consumed directly from current source via project(':').
+buildscript {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'org.springframework.boot:spring-boot-gradle-plugin:3.5.16'
+        classpath 'io.spring.gradle:dependency-management-plugin:1.1.6'
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'org.springframework.boot'
+apply plugin: 'io.spring.dependency-management'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        // Modules are compiled at runtime with javac, so a JDK (not a JRE) is required.
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    // The library being consumed (root project). Uses the current source directly, not a published artifact.
+    implementation project(':')
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+
+    // Consumer authentication stack: Authorization Server (issues tokens) + Resource Server (verifies tokens → Principal).
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-authorization-server'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+
+    // Redis login sessions (persists the AS's HttpSession to Redis) — started via docker-compose.
+    implementation 'org.springframework.session:spring-session-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // User store (in-memory H2) + boot-time seed.
+    runtimeOnly 'com.h2database:h2'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    // Test Redis is started deterministically via Testcontainers (Docker gate).
+    testImplementation 'org.testcontainers:junit-jupiter'
+}
+
+test {
+    useJUnitPlatform()
+}

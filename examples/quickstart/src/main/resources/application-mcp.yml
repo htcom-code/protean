@@ -1,0 +1,24 @@
+# Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# mcp profile — enables the MCP adapter so agents can deploy modules.
+#   Run: gradle :examples:quickstart:bootRun --args='--spring.profiles.active=mcp'
+#
+# No automatic deployment (DataAccessDeployer/WorkerDeployer are for the default/worker profiles only).
+# MCP endpoint: POST /platform/mcp (Streamable HTTP, zero-dep JSON-RPC).
+#
+# Note: MCP is a deployment entry point (an RCE surface), so it is off by default. This example has authorization unset
+# (permissive) and is for local demos only — for production authentication, see the mcp-integration and security guides.
+
+protean:
+  mcp:
+    enabled: true
+    # To also enable the debugging tools (debug.*), uncomment below (the activation key is debug.enabled — dotted, not hyphenated debug-enabled):
+    # debug:
+    #   enabled: true
+    # Or, for the MCP + worker-isolation + debug combination, use the debug profile: gradle :examples:quickstart:runMcpDebug
+  module-store:
+    dir: ${java.io.tmpdir}/protean-quickstart-mcp

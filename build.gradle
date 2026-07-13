@@ -1,0 +1,167 @@
+/*
+ * Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.6'
+    id 'maven-publish'
+}
+
+group = 'org.htcom'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    // Additional artifacts for library consumers' IDE navigation and documentation.
+    withSourcesJar()
+    withJavadocJar()
+}
+
+// Java 21 javadoc's doclint is strict and fails on minor missing tags → relax it so it doesn't block publishable artifacts.
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
+// There are two main() classes (ProteanApplication, ProteanWorkerLauncher), so bootJar can't pick one automatically → pin it.
+springBoot {
+    mainClass = 'org.htcom.protean.ProteanApplication'
+}
+
+// Library distribution: a consumable plain jar (no classifier) + a fat bootJar ('-boot') for the worker/runtime.
+//  - plain jar: the standard layout other projects use as a dependency (no BOOT-INF).
+//  - bootJar  : the executable form the embed worker explodes and runs (BOOT-INF/classes,lib).
+jar {
+    enabled = true
+    archiveClassifier = ''
+}
+bootJar {
+    enabled = true
+    archiveClassifier = 'boot'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Generates type-safe configuration (ProteanProperties) metadata → IDE autocompletion/validation for consumers.
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    // Promotion gate 1 compiles module test sources at runtime (junit-jupiter API) and runs them at install time
+    // (junit-platform-launcher) → this is a genuine runtime dependency, not test-only. When published as a library,
+    // transitively propagating it to the consumer's runtime is intended (the gate must also run in the consumer's runtime).
+    // The junit types are not exposed in Protean's public API signatures, so implementation (not api) is correct.
+    implementation 'org.junit.jupiter:junit-jupiter'
+    implementation 'org.junit.platform:junit-platform-launcher'
+    // Bytecode guardrail (promotion gate 2) — static scan of the compiled output.
+    implementation 'org.ow2.asm:asm:9.7'
+    // Optional strict-schema validation of MCP tool I/O (protean.mcp.strict-schema=true). compileOnly, so it is NOT
+    // shipped to consumers: the core stays zero-dep and falls back to the built-in top-level guard when the validator
+    // is absent. A consumer that opts into strict mode (e.g. to validate their own custom tools) adds it themselves.
+    // Pinned to 1.5.x: 2.x rewrote the API, 3.x moved to Jackson 3 — both incompatible with this project's Jackson 2.
+    compileOnly 'com.networknt:json-schema-validator:1.5.9'
+    runtimeOnly 'com.h2database:h2'
+    // For a worker/container to connect to a real DB (scoped provisioning), the driver must be present in the bootJar.
+    // But it must not be forced transitively onto consumers (data-access contract: the driver is host-bundled) →
+    // mark it optional in the published POM (see publishing.pom.withXml below). Vendor dialect classes stay in core (no driver coupling).
+    runtimeOnly 'com.mysql:mysql-connector-j'
+    runtimeOnly 'org.postgresql:postgresql'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Representative data-access stack e2e: simulates a consumer that bundles MyBatis on the host (decision B).
+    // Only core+spring, not the starter → the module configures its own SqlSessionFactory without autoconfig pollution.
+    testImplementation 'org.mybatis:mybatis:3.5.16'
+    testImplementation 'org.mybatis:mybatis-spring:3.0.4'
+    // Faithfully verify GRANT isolation of DB scoped provisioning against a real engine (Docker required).
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mysql'
+    testImplementation 'org.testcontainers:postgresql'
+    // Test-only: full JSON-Schema (nested/type) conformance of our declared MCP outputSchemas against real tool
+    // output. The runtime guard is deliberately zero-dep (top-level required only); full validation is a test-time
+    // guarantee, so this validator is NOT shipped to consumers (testImplementation, never implementation).
+    // Pinned to the 1.5.x line: 2.x rewrote the API (no JsonSchemaFactory/ValidationMessage) and 3.x migrated to
+    // Jackson 3 (tools.jackson); 1.5.x keeps the classic API on this project's Jackson 2.
+    testImplementation 'com.networknt:json-schema-validator:1.5.9'
+}
+
+// Library publishing. mavenLocal (~/.m2) for POM/consumability verification + a GitHub Packages remote (migration target).
+// The remote registry's URL/credentials are not hardcoded in build.gradle; they are externalized via
+// gradle.properties/environment variables and registered property-gated (disabled when unset → fill in the values after the repo is created).
+publishing {
+    publications {
+        library(MavenPublication) {
+            // group=org.htcom, artifactId=protean (settings.gradle rootProject.name), version=0.0.1-SNAPSHOT.
+            // components.java = plain jar (for consumption) + sources + javadoc + generated POM.
+            // implementation dependencies are written to the POM as runtime scope, api as compile, so consumers resolve them transitively.
+            from components.java
+            // The JDBC drivers (mysql/postgres) are needed for protean's own bootJar and tests, but must not be forced
+            // transitively onto consumers (version conflicts, dead weight; data-access contract = the driver is host-bundled).
+            // → mark them optional in the published POM. Consumers add their own driver explicitly when using worker DB provisioning.
+            pom.withXml {
+                def optionalArtifacts = ['mysql-connector-j', 'postgresql']
+                asNode().dependencies.dependency
+                        .findAll { optionalArtifacts.contains(it.artifactId.text()) }
+                        .each { it.appendNode('optional', 'true') }
+            }
+        }
+    }
+    repositories {
+        // mavenLocal is always available via the publishToMavenLocal task.
+        // The GitHub Packages remote is registered only when owner/repo/actor/token are all provided →
+        // automatically disabled before migration/repo creation (no hardcoding; fill in the values at migration time).
+        def ghOwner = findProperty('githubOwner') ?: System.getenv('GITHUB_OWNER')
+        def ghRepo  = findProperty('githubRepo')  ?: System.getenv('GITHUB_REPO')
+        def ghActor = findProperty('githubActor') ?: System.getenv('GITHUB_ACTOR')
+        def ghToken = findProperty('githubToken') ?: System.getenv('GITHUB_TOKEN')
+        if (ghOwner && ghRepo && ghActor && ghToken) {
+            maven {
+                name = 'GitHubPackages'
+                url = uri("https://maven.pkg.github.com/${ghOwner}/${ghRepo}")
+                credentials {
+                    username = ghActor
+                    password = ghToken
+                }
+            }
+        }
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // The leak canary needs soft references to be force-cleared, so cap the heap to create OOM pressure.
+    maxHeapSize = '512m'
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+}
+
+// Opt-in restart-scale benchmark (not part of the regression suite). Runs a real cold boot with many
+// ACTIVE modules in the store to measure restart-completion time, compile count, and memory.
+//   ./gradlew restartBench -Dbench.modules=1000
+tasks.register('restartBench', JavaExec) {
+    group = 'verification'
+    description = 'Measure cold-restart time / compile / memory with N registered modules (-Dbench.modules).'
+    mainClass = 'org.htcom.protean.bench.RestartBenchmark'
+    classpath = sourceSets.test.runtimeClasspath
+    // Size generously — each module keeps a child context + classloader + compiled classes in Metaspace.
+    maxHeapSize = System.getProperty('bench.heap', '3g')
+    jvmArgs = ['-XX:MaxMetaspaceSize=' + System.getProperty('bench.metaspace', '1500m')]
+    systemProperty 'bench.modules', System.getProperty('bench.modules', '1000')
+    systemProperty 'bench.parallelism', System.getProperty('bench.parallelism', '0')
+    systemProperty 'bench.reuse', System.getProperty('bench.reuse', 'true')
+    // JavaExec runs on the JRE by default; the runtime compiler needs a JDK's javac.
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}

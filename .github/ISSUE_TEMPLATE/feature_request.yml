@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a Protean capability — dynamic loading, promotion gates, isolation, MCP, debugging, data access, or an SPI extension point.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Protean** is a library, so consumers cannot patch it at their point of
+        use — completeness matters. Where an axis needs to vary, Protean opens a
+        **bean-registered SPI** (`CodeRule`, `DbDialect`, `ModuleActionAuthorizer`,
+        `WorkerRuntimeProvider`, `ModuleUnloadCallback`) rather than forcing a core
+        change. Please check whether an existing extension point fits before
+        proposing a core addition.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What are you trying to do, and what's missing or awkward with Protean today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: The API, config key, or behaviour you'd like. A sketch of the consumer call site (ModuleDescriptor / REST / MCP / a bean) helps.
+      render: java
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you've tried (a custom SPI bean, config, an external process) or other designs you weighed.
+    validations:
+      required: false
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I've considered whether an existing SPI (CodeRule, DbDialect, ModuleActionAuthorizer, WorkerRuntimeProvider, ModuleUnloadCallback) or config already covers this.
+          required: true
+        - label: This is about Protean's platform capabilities, not a security sandbox for untrusted source (an explicit non-goal — see the Trust model in the README).
+          required: false
