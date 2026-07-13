@@ -1,0 +1,54 @@
+# Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: protean-oauth-mcp-example
+
+  # User store — in-memory H2. At boot, schema.sql creates the standard Spring Security tables,
+  # and the UserSeed runner inserts users hashed with BCrypt via the PasswordEncoder.
+  datasource:
+    url: jdbc:h2:mem:oauthusers;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  sql:
+    init:
+      mode: always
+
+  # Redis login sessions (started via docker-compose). Boot fails if it isn't running → start compose first.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  session:
+    store-type: redis
+    timeout: 30m
+
+# Since the AS and RS are the same app, the Resource Server reuses the AS's local JwtDecoder bean
+# (OAuth2AuthorizationServerConfiguration.jwtDecoder) without a separate jwk-set-uri — removing HTTP fetch/startup-order/port dependencies.
+
+# --- protean MCP ---
+protean:
+  mcp:
+    enabled: true
+    # When present, this populates the protected-resource metadata. Currently the consumer-side controller reads it (delegation);
+    # whether to promote this hook into protean core is left as a future decision.
+    authorization:
+      resource: http://localhost:8080/platform/mcp
+      authorization-servers:
+        - http://localhost:8080
+      scopes-supported:
+        - mcp.read
+        - mcp.write
+
+logging:
+  level:
+    org.htcom.protean: INFO
+    org.springframework.security: INFO

@@ -1,0 +1,23 @@
+# Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# worker-demo profile — deploys the compute module to a separate JVM worker.
+#   Run: gradle :examples:quickstart:bootRun --args='--spring.profiles.active=worker-demo'
+#
+# Isolation mode is enabled via the protean.isolation.mode property (not the Spring profile "worker" — that is a
+# reserved profile marking a worker JVM spawned by Protean; enabling it in the main app would drop the orchestration beans).
+#
+# The main process spawns the worker JVM (reusing the current classpath, with a port handshake) and routes via ReverseProxy.
+# This is a heavier scenario that brings up an additional process.
+
+protean:
+  isolation:
+    mode: worker
+  worker:
+    modules-per-worker: 4
+    runtime: embed
+  module-store:
+    dir: ${java.io.tmpdir}/protean-quickstart-worker

@@ -1,0 +1,11 @@
+# GitHub Packages 발행 자격 — 템플릿(커밋 대상). 실제 값은 gradle.properties(.gitignore) 또는 GITHUB_* 환경변수로.
+#
+# 사용법:
+#   로컬  : 이 파일을 gradle.properties 로 복사한 뒤 아래 값을 채운다(토큰은 커밋 금지 → gradle.properties 는 .gitignore).
+#   CI    : GITHUB_OWNER / GITHUB_REPO / GITHUB_ACTOR / GITHUB_TOKEN 환경변수로 주입(GitHub Actions 는 GITHUB_ACTOR/GITHUB_TOKEN 기본 제공).
+#
+# 네 값이 모두 있을 때만 build.gradle 이 GitHub Packages 원격 repository 를 등록한다(없으면 mavenLocal 만).
+# githubOwner=htcom-code
+# githubRepo=<repo-name>
+# githubActor=<github-username>
+# githubToken=<personal-access-token: write:packages 스코프>

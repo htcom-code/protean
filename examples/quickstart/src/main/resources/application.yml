@@ -1,0 +1,29 @@
+# Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# Default profile (no profile active) — in-process data-access demo.
+# DataAccessDeployer deploys the data-access module at startup.
+
+spring:
+  application:
+    name: protean-quickstart
+  # Host-bundled H2 (in-memory) — modules receive this DataSource's JdbcTemplate injected parent-first.
+  datasource:
+    url: jdbc:h2:mem:quickstart;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+# Protean configuration. Uses the defaults (admin REST on, in-process, gates 1/2 tests/review on, MCP off).
+protean:
+  admin:
+    enabled: true
+  isolation:
+    mode: in-process
+  # Dedicated demo store directory (separated per profile → previous deployments don't mix when switching profiles).
+  # Deployments remain durable here and are restored via reconcile on restart. Delete this directory to reset.
+  module-store:
+    dir: ${java.io.tmpdir}/protean-quickstart-default

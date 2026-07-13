@@ -1,0 +1,10 @@
+# Internal design/plan docs stay tracked here (GitLab) but are excluded from
+# `git archive`, which is used to seed the public GitHub mirror. They remain on
+# disk and in history; only the exported snapshot omits them.
+docs/plan/ export-ignore
+docs/mcp/ export-ignore
+docs/design/ export-ignore
+
+# Claude Code local tooling config (Bash allowlist etc.) — internal, stays tracked
+# here but must not seed the public GitHub mirror.
+.claude/ export-ignore

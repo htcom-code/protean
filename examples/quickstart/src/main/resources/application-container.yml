@@ -1,0 +1,49 @@
+# Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# container profile — runs modules isolated in Docker container workers (OS-level isolation: cgroup/read-only/cap-drop/seccomp).
+#
+# Prerequisites:
+#   1. The Docker daemon must be running (external requirement).
+#   2. The embed runtime explodes the host bootJar and mounts it read-only into the container, so build the bootJar first:
+#        gradle bootJar
+#
+# Running — this profile only enables the isolation mode / container tuning. The module that actually goes into a container
+#        must be self-contained (compute/MCP), so combine it with the worker-demo or mcp profile.
+#        Placing the profile last (...,container) lets container's mode=container override the preceding profile's mode.
+#
+#   • Compute module in a container:
+#       gradle bootJar
+#       gradle :examples:quickstart:bootRun --args='--spring.profiles.active=worker-demo,container'
+#       # once deployed, verify on the host: docker ps  → a protean-worker-compute-... container appears
+#       curl 'localhost:8080/compute/square?n=7'   # → square=49 (served by the container worker)
+#
+#   • A module deployed via MCP in a container:
+#       gradle bootJar
+#       gradle :examples:quickstart:bootRun --args='--spring.profiles.active=mcp,container'
+#       # deploy a self-contained module via deploy_module → protean-worker-<id>-... appears in docker ps
+#
+# Notes:
+#   • The container track does not support shared-bean modules (those injected with the host JdbcTemplate parent-first)
+#     (no RPC bridge). So the default data-access module can't run in a container — only self-contained modules.
+#   • The default hardening (--read-only, --tmpfs /tmp, --cap-drop=ALL, no-new-privileges, --memory, --pids-limit)
+#     is always applied. network (egress blocking) and seccomp are added via the options below.
+
+protean:
+  isolation:
+    mode: container
+  worker:
+    runtime: embed          # explode the host bootJar into an exploded layout and mount it read-only (a sidecar needs a dedicated image)
+    container:
+      image: eclipse-temurin:21-jdk   # worker container base image (JDK 21 — needed for runtime javac compilation)
+      memory: 256m                     # cgroup memory limit
+      pids-limit: 512                  # PID limit to defend against fork bombs
+      auto-restart: false              # auto-redeploy on detecting a container crash (opt-in)
+      db-host: host.docker.internal    # target to rewrite the container's localhost to the host's published port
+      # network: internal              # egress isolation: specify an internet-blocked Docker network. Defaults to the default bridge if unset.
+      # seccomp: bundled               # bundled default seccomp profile (EPERM on dangerous syscalls). A file path also works. Uses the Docker default if unset.
+  module-store:
+    dir: ${java.io.tmpdir}/protean-quickstart-container

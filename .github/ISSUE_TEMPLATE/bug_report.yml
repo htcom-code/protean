@@ -1,0 +1,80 @@
+name: Bug report
+description: Protean misbehaves — wrong result, crash, leak, or a compile / promotion-gate / isolation / MCP / debug fault.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Protean** is a library that turns Spring Boot into
+        a runtime platform: it compiles Java source at runtime, loads it under a
+        dedicated ClassLoader, registers REST endpoints, and hot-swaps / unloads
+        them without a restart.
+
+        - File here for Protean's runtime: dynamic compile/load/unload, the
+          promotion gates (tests → review → verify), isolation modes
+          (in-process / worker / container), the MCP adapter, JDI Level 3
+          debugging, data-access provisioning, or a ClassLoader/thread/Metaspace leak.
+        - **Not a Protean bug:** a module's own business logic failing, or a
+          consumer Spring config problem, is usually your application — reduce it
+          to a minimal module first.
+        - **Security issues:** do **not** file here — see
+          [SECURITY.md](../blob/main/SECURITY.md).
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: The smallest module (descriptor/`module.yaml` + Java source) or REST/MCP call that triggers the bug. A failing test is ideal.
+      render: java
+      placeholder: |
+        // ModuleDescriptor or the REST/MCP payload, plus the gen.* source that reproduces it.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What you expected Protean to do.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead — HTTP response, error, stack trace, gate rejection reason, or leak evidence. Paste it verbatim.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Protean version / commit
+      description: Release tag (e.g. v0.0.1) or commit SHA. Coordinate is `org.htcom:protean`.
+      placeholder: "0.0.1-SNAPSHOT or abc1234"
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Java / Spring Boot / OS
+      description: JDK version (Protean needs 21), Spring Boot version, and OS/arch.
+      placeholder: "temurin-21, Spring Boot 3.5.16, macOS arm64"
+    validations:
+      required: false
+  - type: textarea
+    id: config
+    attributes:
+      label: Isolation mode & config
+      description: >-
+        Relevant `protean.*` config (isolation.mode, the gate toggles, mcp/debug
+        enabled, worker/container settings, module-store backend) and — for
+        worker/container — whether Docker was available. Many isolation/gate/leak
+        bugs only reproduce under a specific mode + config.
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Logs, traces (`/platform/traces`), heap/thread dumps, or other context.
+    validations:
+      required: false

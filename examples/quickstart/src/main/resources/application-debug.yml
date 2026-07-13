@@ -1,0 +1,36 @@
+# Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# debug profile — enables the MCP deployment entry point + Level 3 interactive debugging + worker isolation together.
+#   Run: gradle :examples:quickstart:runMcpDebug
+#     or gradle :examples:quickstart:bootRun --args='--spring.profiles.active=debug'
+#
+# What it combines:
+#   • MCP adapter (POST /platform/mcp) — agents deploy modules
+#   • debug.* tools (Level 3, JDI) — attach/set_breakpoint/await_stop/frames/get_variables/evaluate/step/redefine/terminate
+#   • Worker isolation (separate JVM) — deployed modules run isolated. debug.launch spawns a dedicated debug worker with JDWP enabled.
+#
+# WARNING: the debug activation key must be `protean.mcp.debug.enabled` (dotted).
+#    `protean.mcp.debug-enabled` (hyphenated) does not match DebugMcpConfiguration's @ConditionalOnProperty,
+#    so the debug surface is not enabled (tools not exposed). Use the nested debug.enabled as shown below.
+#
+# Note: MCP is a deployment entry point (an RCE surface), and debug is an even more dangerous interactive surface,
+#       so both are off by default. This profile is for local demos with authorization unset (permissive) only —
+#       for production authentication, see the mcp-integration and security guides.
+
+protean:
+  mcp:
+    enabled: true
+    debug:
+      enabled: true          # ← activation key (protean.mcp.debug.enabled). Not debug-enabled (hyphenated).
+      # session-idle-timeout: 30m   # auto-reclaim idle debug sessions (default 30m; 0/negative disables)
+  isolation:
+    mode: worker
+  worker:
+    modules-per-worker: 4
+    runtime: embed
+  module-store:
+    dir: ${java.io.tmpdir}/protean-quickstart-debug
