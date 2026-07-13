@@ -112,7 +112,6 @@ class ResourceChannelModuleTest {
 
         boolean reclaimed = false;
         for (int i = 0; i < 8 && !reclaimed; i++) {
-            applyMemoryPressure();
             System.gc();
             Thread.sleep(30);
             reclaimed = ref.get() == null;
@@ -148,13 +147,4 @@ class ResourceChannelModuleTest {
         assertThrows(ProteanException.class, () -> ResourcePaths.normalize("  "));
     }
 
-    private static void applyMemoryPressure() {
-        try {
-            java.util.List<byte[]> ballast = new java.util.ArrayList<>();
-            while (true) {
-                ballast.add(new byte[8 * 1024 * 1024]);
-            }
-        } catch (OutOfMemoryError ignored) {
-        }
-    }
 }
