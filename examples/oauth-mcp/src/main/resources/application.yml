@@ -38,8 +38,9 @@ spring:
 protean:
   mcp:
     enabled: true
-    # When present, this populates the protected-resource metadata. Currently the consumer-side controller reads it (delegation);
-    # whether to promote this hook into protean core is left as a future decision.
+    # When present, protean core auto-registers GET /.well-known/oauth-protected-resource
+    # (McpProtectedResourceMetadataController, gated by @ConditionalOnProperty on protean.mcp.authorization.resource).
+    # Token validation/authentication remains the consumer's Spring Security responsibility (pure delegation).
     authorization:
       resource: http://localhost:8080/platform/mcp
       authorization-servers:

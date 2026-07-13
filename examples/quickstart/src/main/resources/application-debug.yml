@@ -13,9 +13,12 @@
 #   • debug.* tools (Level 3, JDI) — attach/set_breakpoint/await_stop/frames/get_variables/evaluate/step/redefine/terminate
 #   • Worker isolation (separate JVM) — deployed modules run isolated. debug.launch spawns a dedicated debug worker with JDWP enabled.
 #
-# WARNING: the debug activation key must be `protean.mcp.debug.enabled` (dotted).
-#    `protean.mcp.debug-enabled` (hyphenated) does not match DebugMcpConfiguration's @ConditionalOnProperty,
-#    so the debug surface is not enabled (tools not exposed). Use the nested debug.enabled as shown below.
+# WARNING: the debug *execution* key must be `protean.mcp.debug.enabled` (dotted).
+#    The debug.* tools are always exposed when protean.mcp.enabled=true — that is what
+#    DebugMcpConfiguration's @ConditionalOnProperty gates. `protean.mcp.debug.enabled` gates only execution.
+#    `protean.mcp.debug-enabled` (hyphenated) is a different key that does not bind, so the surface stays
+#    disabled (default false) and debug calls are rejected with "debug surface disabled".
+#    Use the nested debug.enabled (dotted) as shown below.
 #
 # Note: MCP is a deployment entry point (an RCE surface), and debug is an even more dangerous interactive surface,
 #       so both are off by default. This profile is for local demos with authorization unset (permissive) only —
