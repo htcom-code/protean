@@ -10,7 +10,7 @@
 // installed, via the Foojay Disco API. No-op when a matching JDK is present (no network call), so it just
 // smooths a fresh `git clone` → `./gradlew` build for contributors without JDK 21.
 plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
 rootProject.name = 'protean'
