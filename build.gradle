@@ -70,7 +70,7 @@ dependencies {
     // shipped to consumers: the core stays zero-dep and falls back to the built-in top-level guard when the validator
     // is absent. A consumer that opts into strict mode (e.g. to validate their own custom tools) adds it themselves.
     // Pinned to 1.5.x: 2.x rewrote the API, 3.x moved to Jackson 3 — both incompatible with this project's Jackson 2.
-    compileOnly 'com.networknt:json-schema-validator:1.5.9'
+    compileOnly 'com.networknt:json-schema-validator:3.0.6'
     runtimeOnly 'com.h2database:h2'
     // For a worker/container to connect to a real DB (scoped provisioning), the driver must be present in the bootJar.
     // But it must not be forced transitively onto consumers (data-access contract: the driver is host-bundled) →
@@ -91,7 +91,7 @@ dependencies {
     // guarantee, so this validator is NOT shipped to consumers (testImplementation, never implementation).
     // Pinned to the 1.5.x line: 2.x rewrote the API (no JsonSchemaFactory/ValidationMessage) and 3.x migrated to
     // Jackson 3 (tools.jackson); 1.5.x keeps the classic API on this project's Jackson 2.
-    testImplementation 'com.networknt:json-schema-validator:1.5.9'
+    testImplementation 'com.networknt:json-schema-validator:3.0.6'
 }
 
 // Library publishing. mavenLocal (~/.m2) for POM/consumability verification + a GitHub Packages remote (migration target).

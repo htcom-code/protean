@@ -51,7 +51,7 @@ dependencies {
     // Enables protean.mcp.strict-schema (full-schema tool I/O validation). The core keeps this validator
     // compileOnly (zero-dependency), so a consumer that wants strict mode must add it to the runtime
     // classpath — otherwise the flag silently no-ops (the core logs a warning). Version tracks the core.
-    runtimeOnly 'com.networknt:json-schema-validator:1.5.9'
+    runtimeOnly 'com.networknt:json-schema-validator:3.0.6'
 }
 
 // The container isolation runtime locates the host bootJar by its '-boot' classifier — it explodes
