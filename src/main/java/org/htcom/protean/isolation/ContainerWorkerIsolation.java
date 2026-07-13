@@ -386,6 +386,12 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
                 "--memory=" + c.getMemory(), "--read-only", "--tmpfs", "/tmp",
                 "--cap-drop=ALL", "--security-opt", "no-new-privileges",
                 "--pids-limit=" + c.getPidsLimit()));
+        if ("host.docker.internal".equals(c.getDbHost())) {
+            // On Linux Docker Engine host.docker.internal is not resolvable by default (Docker Desktop on
+            // macOS/Windows provides it automatically); map it to the host gateway so a container worker can
+            // reach a host-provisioned DB (worker.db.auto-provision). Harmless where it already resolves.
+            run.add("--add-host=host.docker.internal:host-gateway");
+        }
         if (!network.isBlank()) {
             run.add("--network=" + network);  // egress isolation: e.g. an internal network with internet blocked
         }
