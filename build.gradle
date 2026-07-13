@@ -70,7 +70,7 @@ dependencies {
     implementation 'org.junit.jupiter:junit-jupiter'
     implementation 'org.junit.platform:junit-platform-launcher'
     // Bytecode guardrail (promotion gate 2) — static scan of the compiled output.
-    implementation 'org.ow2.asm:asm:9.7'
+    implementation 'org.ow2.asm:asm:9.10.1'
     // Optional strict-schema validation of MCP tool I/O (protean.mcp.strict-schema=true). compileOnly, so it is NOT
     // shipped to consumers: the core stays zero-dep and falls back to the built-in top-level guard when the validator
     // is absent. A consumer that opts into strict mode (e.g. to validate their own custom tools) adds it themselves.
