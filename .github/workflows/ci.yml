@@ -44,7 +44,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
       - name: test
         run: ./gradlew clean test --console=plain
 
@@ -61,7 +61,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
       - name: bootJar
         run: ./gradlew bootJar --console=plain
 
@@ -81,7 +81,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
       - name: bootJar (isolation-test prerequisite)
         run: ./gradlew bootJar --console=plain
       - name: isolation + container tests
@@ -111,7 +111,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
       - name: publish to GitHub Packages
         run: ./gradlew publishLibraryPublicationToGitHubPackagesRepository --console=plain
         env:
