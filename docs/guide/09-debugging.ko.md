@@ -85,7 +85,7 @@ protean.mcp.debug.enabled=true   # debug.* 실행 게이트(기본 false = prod 
 // 2) 해당 엔드포인트를 HTTP 로 한 번 호출한 뒤, 정지를 대기
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
   "name":"debug.await_stop","arguments":{"sessionId":"dbg-1","timeoutMs":15000}}}
-// → {"stopped":true,"className":"...OrderController","method":"create","line":42}
+// → {"stopped":true,"className":"...OrderController","method":"create","line":42,"threadId":1}
 
 // 3) 스택과 로컬 변수 조사
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{

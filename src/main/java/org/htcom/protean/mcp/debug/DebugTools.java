@@ -378,6 +378,7 @@ public final class DebugTools {
             out.put("className", stop.className());
             out.put("method", stop.method());
             out.put("line", stop.line());
+            out.put("threadId", stop.threadId());
             return McpToolResult.ok(stop.className() + "." + stop.method() + ":" + stop.line(), out);
         }
     }
