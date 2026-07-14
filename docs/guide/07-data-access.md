@@ -180,7 +180,7 @@ To bind transactionally with host logic in worker/container mode, you must call 
 
 ## worker-only automatic DB provisioning
 
-In worker mode, an **isolated dedicated DB scope** can be auto-created per module. When on, `DbScopeProvisioner` uses an admin connection to create, per module, a dedicated DB/schema + a dedicated user/role + a `GRANT` scoped to its own area, and injects that scope's connection info (url/user/password) into the worker process as `spring.datasource.*`. The worker connects only with those credentials, so it cannot see other modules' DBs.
+In worker mode, an **isolated dedicated DB scope** can be auto-created per module. When on, `DbScopeProvisioner` uses an admin connection to create, per module, a dedicated DB/schema + a dedicated user/role + a `GRANT` scoped to its own area, and injects that scope's connection info (url/username/password) into the worker process as `spring.datasource.*`. The worker connects only with those credentials, so it cannot see other modules' DBs.
 
 ```yaml
 protean:

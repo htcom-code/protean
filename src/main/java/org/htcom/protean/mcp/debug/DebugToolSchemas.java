@@ -83,6 +83,7 @@ final class DebugToolSchemas {
         p.putObject("className").put("type", "string").put("description", "present only when stopped=true");
         p.putObject("method").put("type", "string").put("description", "present only when stopped=true");
         p.putObject("line").put("type", "integer").put("description", "present only when stopped=true");
+        p.putObject("threadId").put("type", "integer").put("description", "JDWP id of the thread that stopped; present only when stopped=true");
         s.putArray("required").add("stopped");
         return s;
     }

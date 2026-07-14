@@ -85,7 +85,7 @@ After opening session `dbg-1` with `debug.launch`:
 // 2) call that endpoint once over HTTP, then wait for the stop
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{
   "name":"debug.await_stop","arguments":{"sessionId":"dbg-1","timeoutMs":15000}}}
-// → {"stopped":true,"className":"...OrderController","method":"create","line":42}
+// → {"stopped":true,"className":"...OrderController","method":"create","line":42,"threadId":1}
 
 // 3) inspect the stack and locals
 {"jsonrpc":"2.0","id":4,"method":"tools/call","params":{
