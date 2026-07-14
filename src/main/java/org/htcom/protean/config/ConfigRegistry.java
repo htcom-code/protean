@@ -150,9 +150,9 @@ public class ConfigRegistry {
         // The worker/container/sidecar spawn + pool Tier 2 keys are now wired for live reads (the runtime reads them
         // at spawn/acquire time), so they apply to future instances — no longer pending.
         //
-        // worker.db.admin-url/username/password are now live too (POC): DbScopeProvisioner re-reads them via a supplier
-        // and rebuilds its admin JDBC connection when they change, so an admin-credential rotation applies to the next
-        // provision/deprovision without a restart (APPLIED_FUTURE — not retroactive to already-provisioned scopes).
+        // worker.db.admin-url/username/password are now live too: DbScopeProvisioner re-reads them via a supplier and
+        // rebuilds (and validates) its admin JDBC connection when they change, so an admin-credential rotation applies
+        // to the next provision/deprovision without a restart (APPLIED_FUTURE — not retroactive to provisioned scopes).
         // (protean.worker.db.deprovision-on-undeploy IS live — read per undeploy in DbScopeProvisioner.)
         //
         // Still pending: worker.db.dialect selects a strategy object, and existing scopes were created under the old

@@ -15,6 +15,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,6 +76,27 @@ class DbScopeProvisionerLiveCredsTest {
         // Deprovision also uses the rebuilt (rotated) admin connection.
         prov.deprovision("modB");
         assertEquals("jdbc:h2:mem:admin2", dialect.lastAdminUrl, "deprovision uses the current admin connection");
+    }
+
+    @Test
+    void badRotationIsRejectedAndPreviousConnectionRetained() {
+        AtomicReference<DbScopeProvisioner.AdminCreds> creds = new AtomicReference<>(
+                new DbScopeProvisioner.AdminCreds("jdbc:h2:mem:good", "sa", "pw"));
+        CapturingDialect dialect = new CapturingDialect();
+        DbScopeProvisioner prov = new DbScopeProvisioner(dialect, creds::get, () -> false);
+
+        prov.provision("m1");
+        assertEquals("jdbc:h2:mem:good", dialect.lastAdminUrl);
+
+        // Rotate to creds that cannot connect (no driver for this url) → validation rejects it before adoption.
+        creds.set(new DbScopeProvisioner.AdminCreds("jdbc:nosuchdb://nope", "x", "y"));
+        assertThrows(IllegalStateException.class, () -> prov.provision("m2"));
+        assertEquals("jdbc:h2:mem:good", dialect.lastAdminUrl, "failed rotation must not touch the live admin connection");
+
+        // Revert to good creds → recovers on the retained working connection.
+        creds.set(new DbScopeProvisioner.AdminCreds("jdbc:h2:mem:good", "sa", "pw"));
+        prov.provision("m3");
+        assertEquals("jdbc:h2:mem:good", dialect.lastAdminUrl);
     }
 
     @Test
