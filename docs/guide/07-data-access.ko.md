@@ -201,6 +201,7 @@ protean:
 - 모듈 id 는 DDL 식별자로 새니타이즈된다(`[a-z0-9_]` 화이트리스트, 글자로 시작, 벤더 최대 길이 초과 시 해시 축약). DDL 식별자는 바인드 파라미터로 넣을 수 없어 문자열로 박히므로 인젝션 방지에 이 새니타이즈가 필수다.
 - admin 접속 드라이버(mysql/postgres)는 **호스트(앱) 클래스패스**에 있어야 한다(위 optional 주의 참조). shared-lib CL 에 두면 안 된다.
 - 스코프 유저의 비밀번호는 24자 난수(`SecureRandom`)로 생성된다.
+- **admin 자격증명은 런타임 교체(rotation) 가능**(`admin-url` / `admin-username` / `admin-password`, `future` tier): 변경은 앱 재시작 없이 다음 provision/deprovision 에 반영된다 — provisioner 가 admin 연결을 다시 만들되, 채택 전 새 자격증명을 검증하고 실패하면 기존 연결을 유지한다. (`dialect` 는 라이브 아님 — 기존 스코프가 현재 dialect 형태로 만들어졌기 때문. [03. 설정 레퍼런스](03-configuration.ko.md) 참조.)
 
 ### 벤더 확장은 `DbDialect` 빈
 

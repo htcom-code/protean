@@ -172,10 +172,10 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 | 키 | 타입 | 기본값 | 반영 | 설명 |
 |----|------|--------|------|------|
 | `protean.worker.db.auto-provision` | `boolean` | `false` | `restart` | 모듈당 격리 DB 스코프 자동 프로비저닝 활성화. |
-| `protean.worker.db.dialect` | `String` | (없음) | `restart` | `mysql` \| `postgresql`. |
-| `protean.worker.db.admin-url` | `String` | (없음) | `restart` | 프로비저닝용 관리 접속 URL. |
-| `protean.worker.db.admin-username` | `String` | (없음) | `restart` | 관리 사용자명. |
-| `protean.worker.db.admin-password` | `String` | (없음) | `restart` | 관리 비밀번호. |
+| `protean.worker.db.dialect` | `String` | (없음) | `restart` | `mysql` \| `postgresql`. `restart`(라이브 아님): 기존 스코프가 현재 dialect 의 DDL/URL 형태로 만들어져 라이브 교체 시 관리 불능이 되므로. |
+| `protean.worker.db.admin-url` | `String` | (없음) | `future` | 프로비저닝용 관리 접속 URL. 런타임 교체(rotation) 가능 — 변경은 재시작 없이 다음 provision 에 반영되고, 채택 전 새 연결을 검증해 잘못된 값은 거부한다(기존 연결 유지). |
+| `protean.worker.db.admin-username` | `String` | (없음) | `future` | 관리 사용자명 (런타임 교체 가능; `admin-url` 참조). |
+| `protean.worker.db.admin-password` | `String` | (없음) | `future` | 관리 비밀번호 (재시작 없이 런타임 교체 가능; `admin-url` 참조). |
 | `protean.worker.db.deprovision-on-undeploy` | `boolean` | `false` | `라이브` | undeploy 시 프로비저닝된 스코프 제거 여부. |
 
 ### worker.sidecar — sidecar 워커 런타임(opt-in)

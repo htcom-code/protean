@@ -178,10 +178,10 @@ Defense-in-depth auth on mutating worker admin calls (chiefly for the container 
 | Key | Type | Default | Tier | Description |
 |----|------|--------|------|------|
 | `protean.worker.db.auto-provision` | `boolean` | `false` | `restart` | Enable per-module isolated DB-scope auto-provisioning. |
-| `protean.worker.db.dialect` | `String` | (none) | `restart` | `mysql` \| `postgresql`. |
-| `protean.worker.db.admin-url` | `String` | (none) | `restart` | Admin connection URL for provisioning. |
-| `protean.worker.db.admin-username` | `String` | (none) | `restart` | Admin username. |
-| `protean.worker.db.admin-password` | `String` | (none) | `restart` | Admin password. |
+| `protean.worker.db.dialect` | `String` | (none) | `restart` | `mysql` \| `postgresql`. `restart` (not live): existing scopes were created under the current dialect's DDL/URL shape, so a live swap would leave them unmanageable. |
+| `protean.worker.db.admin-url` | `String` | (none) | `future` | Admin connection URL for provisioning. Rotatable at runtime — a change applies to the next provision without a restart; the new connection is validated before adoption and a bad value is rejected (the previous connection is kept). |
+| `protean.worker.db.admin-username` | `String` | (none) | `future` | Admin username (rotatable at runtime; see `admin-url`). |
+| `protean.worker.db.admin-password` | `String` | (none) | `future` | Admin password (rotatable at runtime without a restart; see `admin-url`). |
 | `protean.worker.db.deprovision-on-undeploy` | `boolean` | `false` | `live` | Whether to remove the provisioned scope on undeploy. |
 
 ### worker.sidecar — sidecar worker runtime (opt-in)
