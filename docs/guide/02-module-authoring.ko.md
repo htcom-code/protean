@@ -17,21 +17,26 @@
 | `version` | `String` | 버전. 복구 시 동일 버전 재컴파일용 핀이자 히스토리/롤백 키. |
 | `trustTier` | `TrustTier` | 신뢰 등급 — `TRUSTED` \| `UNTRUSTED`. |
 | `desiredState` | `DesiredState` | 원하는 상태 — `ACTIVE` \| `INACTIVE` \| `PENDING_APPROVAL`. `ACTIVE` 만 기동 시 reconcile 대상. |
-| `controllerFqcn` | `String` | REST 매핑을 등록할 컨트롤러 FQCN. |
+| `controllerFqcn` | `String` | REST 매핑을 등록할 컨트롤러 FQCN. `LIBRARY` 모듈(라우트 없음)은 생략 가능. |
 | `componentFqcns` | `List<String>` | child 컨텍스트에 등록할 컴포넌트 FQCN 들(컨트롤러 포함). |
 | `sources` | `Map<String,String>` | `FQCN → Java 소스`. 런타임 컴파일 입력. |
 | `tests` | `Map<String,String>` | `FQCN → JUnit 테스트 소스`. 승격 게이트 ① 입력이며 **강제**된다. |
 | `needsSharedBeans` | `boolean` | 공유 in-process 빈 의존 여부(격리 모드 양립성 판단). |
 | `verification` | `VerificationPlan` | 승격 게이트 ③ 검증 계획. `null` = 검증 스킵. |
-| `isolationMode` | `String` | 이 모듈의 격리 모드 — `"in-process"` \| `"worker"`. `null` = 전역 기본(`protean.isolation.mode`). |
+| `isolationMode` | `String` | 이 모듈의 격리 모드 — `"in-process"` \| `"worker"` \| `"container"`. `null` = 전역 기본(`protean.isolation.mode`). |
 | `bridgedInterfaces` | `List<String>` | 워커 모드에서 메인 공유 빈을 RPC 로 호출할 인터페이스 FQCN 목록. `null`/빈 = 없음. |
 | `signerKeyId` | `String` | 서명 키 식별자(서명 검증 게이트용). `null` = 미서명. |
 | `signature` | `String` | 정규화 콘텐츠에 대한 Ed25519 서명(Base64). `null` = 미서명. |
 | `resources` | `Map<String,ModuleResource>` | `classpath 경로 → 비-Java 리소스`(mapper XML 등). `null` = 빈 맵으로 정규화. |
+| `kind` | `ModuleKind` | 배포 종류 — `NORMAL` \| `LIBRARY`. `NORMAL` 은 라우트 등록·요청 라이프사이클, `LIBRARY` 는 라우트 없이 parent tier 에 공유 타입을 발행. `null` = `NORMAL`. §8 참고. |
+| `exports` | `List<String>` | `kind == LIBRARY` 일 때 공유 타입으로 노출할 패키지(그 외 무시). 소비자 작성 → 서명 대상. `null` = 없음. |
+| `uses` | `List<String>` | 이 모듈이 컴파일·링크할 `LIBRARY` 모듈들의 id. 소비자 작성 → 서명 대상. `null` = 없음. |
+| `usedSharedLibs` | `List<UsedSharedLib>` | 이 버전 컴파일이 실제로 연 네이티브 shared-lib jar(`{name, sha256}`). **서버 관측이며 작성자가 넣는 값 아님**(서명 대상 제외) — 정밀 무효화용. `null` = 없음. |
 
-최소 필수는 `id`, `version`, `trustTier`, `desiredState`, `controllerFqcn`, `componentFqcns`, `sources`,
-`tests`, `needsSharedBeans` 다. 나머지(`verification`, `isolationMode`, `bridgedInterfaces`, `signerKeyId`,
-`signature`, `resources`)는 `null`/생략 가능하다.
+최소 필수는 `id`, `version`, `trustTier`, `desiredState`, `sources`, `tests`, `needsSharedBeans` 이고,
+`NORMAL` 모듈은 `controllerFqcn` 도 필수다(`LIBRARY` 모듈은 없음). 나머지(`verification`, `isolationMode`,
+`bridgedInterfaces`, `signerKeyId`, `signature`, `resources`, `kind`, `exports`, `uses`)는 `null`/생략
+가능하며, `usedSharedLibs` 는 서버가 채운다(작성자가 넣지 않음).
 
 ### `VerificationPlan` (게이트 ③)
 
@@ -172,9 +177,12 @@ JSON 대신 선언적 매니페스트로도 모듈을 정의할 수 있다. `Mod
 |----|------|-------------|
 | `id` | 필수 | 모듈 식별자. |
 | `version` | 필수 | 버전. |
-| `controller` | 필수 | 컨트롤러 FQCN. |
+| `controller` | 필수* | 컨트롤러 FQCN. *`kind: LIBRARY` 면 생략 가능(라이브러리는 라우트 없음). |
+| `kind` | 선택 | `NORMAL`(기본) \| `LIBRARY`. §8 참고. |
+| `exports` | 선택 | 공유 타입으로 노출할 패키지(`kind: LIBRARY` 전용). |
+| `uses` | 선택 | 이 모듈이 컴파일·링크할 `LIBRARY` 모듈들의 id. |
 | `trustTier` | 선택 | `TRUSTED`(기본) \| `UNTRUSTED`. |
-| `isolationMode` | 선택 | `null`(기본=전역 기본) \| `in-process` \| `worker`. |
+| `isolationMode` | 선택 | `null`(기본=전역 기본) \| `in-process` \| `worker` \| `container`. |
 | `needsSharedBeans` | 선택 | `false`(기본). |
 | `components` | 선택 | 컴포넌트 FQCN 리스트. 비면 `[controller]`. |
 | `bridgedInterfaces` | 선택 | RPC 브리지 인터페이스 FQCN 리스트. |
@@ -233,6 +241,39 @@ curl -i -X POST http://localhost:8080/platform/modules/from-manifest \
 소스를 갈아끼울 때 새 `version` 을 부여하면 버전 히스토리에 쌓이고, `POST /platform/modules/{id}/rollback?version=...`
 으로 특정 버전으로 되돌릴 수 있다(부분 파일만 보내는 `PATCH` 도 새 `version` 이 필수다). 자세한
 라이프사이클 엔드포인트는 [04. REST API 레퍼런스](04-rest-api.ko.md) 를 본다.
+
+## 8. `LIBRARY` 모듈 (shared-module 타입 공유)
+
+모듈의 `kind` 는 두 가지 배포 형태 중 하나를 고른다:
+
+- **`NORMAL`**(기본) — REST 라우트를 등록하고 요청 라이프사이클을 갖는다. 위 내용은 전부 이 종류를 전제한다.
+- **`LIBRARY`** — 라우트를 **등록하지 않는다**. 대신 "활성화"가 컴파일된 `exports` 패키지를 **parent-tier
+  generation** 으로 발행하여, 다른 모듈이 *단일 공유 타입 정체성*으로 컴파일·링크하게 한다. 의존자는
+  라이브러리의 노출 타입을 모듈별 사본이 아니라 **같은 `Class` 객체**로 본다.
+
+### 라이브러리 모듈 작성
+
+- `kind = LIBRARY` 로 둔다. 라이브러리는 컨트롤러가 없으므로 `controllerFqcn` 은 생략 가능하다(`NORMAL`
+  모듈은 여전히 필수).
+- 노출할 패키지를 `exports` 에 나열한다. 그 패키지의 타입만 의존자에게 보이고 나머지는 모듈-비공개로
+  남는다. `exports` 는 소비자 작성이며 서명 대상 정규화에 포함된다.
+- 라이브러리도 `tests` 를 동봉하고(게이트 ① 적용) `sources` 를 여느 모듈처럼 컴파일한다.
+
+### 라이브러리에 의존하기
+
+- 의존자(보통 `NORMAL`)는 라이브러리 모듈 id 들을 `uses` 에 나열한다. 컴파일 시 플랫폼이 이를 parent
+  tier 로 해석하므로, 의존자 소스가 라이브러리의 노출 타입을 공유 정체성으로 import·링크할 수 있다.
+- `uses` 는 소비자 작성이며 서명 대상이다.
+
+### 라이브 전파
+
+라이브러리가 새 generation 을 재발행하면, 그것을 `use` 하는 ACTIVE 의존자들이 **재배포 없이** 새
+generation 으로 rebind 된다. `protean.module.eager-shared-module-invalidation`(기본 `true`;
+[03. 설정 레퍼런스](03-configuration.ko.md))이 이를 제어한다. 바이너리 호환 변경은 빠르게 rebind 되고,
+비호환이면 무효화 정책대로 폴백한다. 이 전파는 in-process·worker·container 격리 모드 전부에 적용된다.
+
+> `usedSharedLibs` 와 혼동 금지: 그 필드는 컴파일이 실제로 연 **네이티브** shared-lib jar 를 기록한다
+> (서버 관측, 정밀 무효화용) — 여기서 설명한 `LIBRARY` 모듈 타입 공유와는 다른 메커니즘이다.
 
 ## 관련 문서
 
