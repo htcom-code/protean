@@ -25,7 +25,7 @@ import java.util.List;
  * the new sources to push. For each library change it asks {@link WorkerParentTierTarget#propagateLibraryUpdate} to
  * republish that library into every worker hosting it and rebind the co-located dependents; a no-op unless a worker
  * actually hosts the library (an initial install, or an in-process-only library with no worker dependents, touches no
- * worker). Gated by the same {@code protean.module.shared-lib.eager-shared-module-invalidation} flag.
+ * worker). Gated by the same {@code protean.module.eager-shared-module-invalidation} flag.
  */
 @Component
 @Profile("!worker")

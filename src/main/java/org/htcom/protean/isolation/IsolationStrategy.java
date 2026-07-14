@@ -22,7 +22,7 @@ import org.htcom.protean.module.ModuleDescriptor;
  */
 public interface IsolationStrategy {
 
-    /** Strategy identifier: "in-process" | "worker". */
+    /** Strategy identifier: "in-process" | "worker" | "container". */
     String mode();
 
     /** Whether this strategy can run the given module (capability compatibility). If not, deployment is rejected. */

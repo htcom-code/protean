@@ -37,8 +37,8 @@ import java.util.Set;
  * re-bind or isolate. A module that leaves ACTIVE (uninstalled, or reverted to PENDING/INACTIVE) is dropped.
  *
  * <p><b>Consumer boundary.</b> This is the reverse index only. The generation-change hook and the
- * Plan A (rebind) / Plan B (deactivate/isolate) execution belong to the generation
- * model, which is not yet implemented — that future hook computes its target set by calling {@link #modulesUsing}.
+ * Plan A (rebind) / Plan B (sticky on the prior generation) execution live in {@link SharedLibInvalidator},
+ * which computes its target set by calling {@link #modulesUsing}.
  */
 @Component
 @Profile("!worker")
