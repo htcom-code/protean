@@ -150,12 +150,15 @@ public class ConfigRegistry {
         // The worker/container/sidecar spawn + pool Tier 2 keys are now wired for live reads (the runtime reads them
         // at spawn/acquire time), so they apply to future instances — no longer pending.
         //
-        // Still pending: the DB-admin keys are captured by DbScopeProvisioner (dialect selection + a live JDBC admin
-        // connection built from the credentials). A live JDBC-admin reconfigure is a distinct, riskier follow-up, so
-        // a change to these is honestly reported REQUIRES_RESTART rather than a silent no-op APPLIED_FUTURE.
+        // worker.db.admin-url/username/password are now live too: DbScopeProvisioner re-reads them via a supplier and
+        // rebuilds (and validates) its admin JDBC connection when they change, so an admin-credential rotation applies
+        // to the next provision/deprovision without a restart (APPLIED_FUTURE — not retroactive to provisioned scopes).
         // (protean.worker.db.deprovision-on-undeploy IS live — read per undeploy in DbScopeProvisioner.)
-        markPending("worker.db.dialect", "worker.db.admin-url",
-                "worker.db.admin-username", "worker.db.admin-password");
+        //
+        // Still pending: worker.db.dialect selects a strategy object, and existing scopes were created under the old
+        // dialect's DDL/URL shape, so a live dialect swap is a distinct, riskier follow-up — honestly reported
+        // REQUIRES_RESTART rather than a silent no-op.
+        markPending("worker.db.dialect");
     }
 
     private void markPending(String... pendingKeys) {
