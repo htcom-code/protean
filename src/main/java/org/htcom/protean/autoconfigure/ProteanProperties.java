@@ -501,9 +501,10 @@ public class ProteanProperties {
         private boolean autoProvision = false;
         /** mysql | postgresql. */
         private String dialect;
-        private String adminUrl;
-        private String adminUsername;
-        private String adminPassword;
+        // volatile: read live off the provisioning thread after a runtime admin-credential rotation (see DbScopeProvisioner).
+        private volatile String adminUrl;
+        private volatile String adminUsername;
+        private volatile String adminPassword;
         /** Whether to remove the provisioned scope on undeploy. */
         private boolean deprovisionOnUndeploy = false;
 

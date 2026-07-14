@@ -58,9 +58,15 @@ public class DbProvisioningConfig {
             throw new IllegalStateException("unsupported db dialect: " + db.getDialect()
                     + " (available: " + registry.keySet() + " — register a DbDialect bean for a custom one)");
         }
-        // Admin creds + dialect are captured (a live JDBC-admin reconfigure is a separate follow-up), but
-        // deprovision-on-undeploy is read live (Tier 1) so a runtime toggle applies to the next undeploy.
-        return new DbScopeProvisioner(d, db.getAdminUrl(), db.getAdminUsername(),
-                db.getAdminPassword(), () -> props.getWorker().getDb().isDeprovisionOnUndeploy());
+        // Admin creds are read live (POC): DbScopeProvisioner rebuilds its admin connection when they change, so an
+        // admin-credential rotation applies to the next provision/deprovision without a restart. deprovision-on-undeploy
+        // is likewise read live (Tier 1). The dialect is still captured here (a live dialect swap is a separate,
+        // riskier follow-up — existing scopes were created under the old dialect's DDL/URL shape).
+        return new DbScopeProvisioner(d,
+                () -> new DbScopeProvisioner.AdminCreds(
+                        props.getWorker().getDb().getAdminUrl(),
+                        props.getWorker().getDb().getAdminUsername(),
+                        props.getWorker().getDb().getAdminPassword()),
+                () -> props.getWorker().getDb().isDeprovisionOnUndeploy());
     }
 }

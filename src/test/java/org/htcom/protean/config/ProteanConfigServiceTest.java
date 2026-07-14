@@ -122,6 +122,25 @@ class ProteanConfigServiceTest {
     }
 
     @Test
+    void promotedDbAdminCredsApplyAsFutureAndMutate() {
+        // POC: worker.db.admin-url/username/password are now live-wired (DbScopeProvisioner rebuilds its admin
+        // connection when they change) → APPLIED_FUTURE and the value is mutated. dialect stays pending (restart).
+        assertTrue(service.get("worker.db.admin-url").orElseThrow().liveApplicable());
+        assertTrue(service.get("worker.db.admin-username").orElseThrow().liveApplicable());
+        assertTrue(service.get("worker.db.admin-password").orElseThrow().liveApplicable());
+        assertFalse(service.get("worker.db.dialect").orElseThrow().liveApplicable(), "dialect stays pending");
+
+        ApplyResult r = service.apply(patch(
+                "worker.db.admin-url", "jdbc:mysql://newhost:3306/",
+                "worker.db.admin-password", "rotated-pw"));
+        assertTrue(r.applied());
+        assertEquals(Outcome.APPLIED_FUTURE, outcomeFor(r, "worker.db.admin-url").outcome());
+        assertEquals(Outcome.APPLIED_FUTURE, outcomeFor(r, "worker.db.admin-password").outcome());
+        assertEquals("jdbc:mysql://newhost:3306/", props.getWorker().getDb().getAdminUrl());
+        assertEquals("rotated-pw", props.getWorker().getDb().getAdminPassword());
+    }
+
+    @Test
     void wiredTier2KeyIsLiveApplicable() {
         // isolation.mode, trace.metrics.*, and the promoted spawn keys ARE wired for live reads → live-applicable.
         assertTrue(service.get("isolation.mode").orElseThrow().liveApplicable());
