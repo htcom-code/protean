@@ -450,4 +450,4 @@ claude mcp add --transport http protean http://localhost:8080/platform/mcp
 - [09. 디버깅](09-debugging.ko.md)
 - [10. SPI 확장](10-spi-extension.ko.md)
 - [12. 보안](12-security.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

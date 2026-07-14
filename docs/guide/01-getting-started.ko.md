@@ -154,4 +154,4 @@ curl -i -X DELETE http://localhost:8080/platform/modules/hello
 - [02. 모듈 작성](02-module-authoring.ko.md)
 - [03. 설정 레퍼런스](03-configuration.ko.md)
 - [04. REST API 레퍼런스](04-rest-api.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

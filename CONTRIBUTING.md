@@ -2,7 +2,7 @@
 
 Thanks for your interest in improving **Protean**. This guide covers the
 conventions this project follows. The operations guide
-([`docs/guide/11-operations.ko.md`](docs/guide/11-operations.ko.md)) is the source of
+([`docs/guide/11-operations.md`](docs/guide/11-operations.md)) is the source of
 truth for build/test/publish commands.
 
 ## Getting started

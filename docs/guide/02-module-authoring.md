@@ -17,21 +17,26 @@ REST `POST /platform/modules`, the JSON field names match these component names.
 | `version` | `String` | Version. Serves as the recompile pin for the same version on recovery, and as the history/rollback key. |
 | `trustTier` | `TrustTier` | Trust tier — `TRUSTED` \| `UNTRUSTED`. |
 | `desiredState` | `DesiredState` | Desired state — `ACTIVE` \| `INACTIVE` \| `PENDING_APPROVAL`. Only `ACTIVE` is reconciled at startup. |
-| `controllerFqcn` | `String` | FQCN of the controller whose REST mappings are registered. |
+| `controllerFqcn` | `String` | FQCN of the controller whose REST mappings are registered. Omittable for a `LIBRARY` module (which registers no routes). |
 | `componentFqcns` | `List<String>` | FQCNs of the components to register in the child context (including the controller). |
 | `sources` | `Map<String,String>` | `FQCN → Java source`. Runtime-compile input. |
 | `tests` | `Map<String,String>` | `FQCN → JUnit test source`. Input to promotion gate ①, and **enforced**. |
 | `needsSharedBeans` | `boolean` | Whether it depends on shared in-process beans (used to judge isolation-mode compatibility). |
 | `verification` | `VerificationPlan` | Promotion gate ③ verification plan. `null` = skip verification. |
-| `isolationMode` | `String` | This module's isolation mode — `"in-process"` \| `"worker"`. `null` = the global default (`protean.isolation.mode`). |
+| `isolationMode` | `String` | This module's isolation mode — `"in-process"` \| `"worker"` \| `"container"`. `null` = the global default (`protean.isolation.mode`). |
 | `bridgedInterfaces` | `List<String>` | FQCNs of interfaces a worker calls on the main's shared beans over RPC (worker mode). `null`/empty = none. |
 | `signerKeyId` | `String` | Signing key identifier (for the signature gate). `null` = unsigned. |
 | `signature` | `String` | Ed25519 signature (Base64) over the normalized content. `null` = unsigned. |
 | `resources` | `Map<String,ModuleResource>` | `classpath path → non-Java resource` (mapper XML, etc.). `null` = normalized to an empty map. |
+| `kind` | `ModuleKind` | Deployment kind — `NORMAL` \| `LIBRARY`. `NORMAL` registers routes and has a request lifecycle; `LIBRARY` registers no routes and instead publishes shared types on the parent tier. `null` = `NORMAL`. See §8. |
+| `exports` | `List<String>` | Packages this module exposes as shared types when `kind == LIBRARY` (ignored otherwise). Consumer-authored → part of the signing target. `null` = none. |
+| `uses` | `List<String>` | Ids of the `LIBRARY` modules whose exported types this module compiles and links against. Consumer-authored → part of the signing target. `null` = none. |
+| `usedSharedLibs` | `List<UsedSharedLib>` | The native shared-lib jars (`{name, sha256}`) this version's compile actually opened. **Server-observed, not author-set** (excluded from the signing target) — used for precise invalidation. `null` = none. |
 
-The minimum required fields are `id`, `version`, `trustTier`, `desiredState`, `controllerFqcn`,
-`componentFqcns`, `sources`, `tests`, and `needsSharedBeans`. The rest (`verification`, `isolationMode`,
-`bridgedInterfaces`, `signerKeyId`, `signature`, `resources`) are `null`/omittable.
+The minimum required fields are `id`, `version`, `trustTier`, `desiredState`, `sources`, `tests`, and
+`needsSharedBeans`, plus `controllerFqcn` for a `NORMAL` module (a `LIBRARY` module has none). The rest
+(`verification`, `isolationMode`, `bridgedInterfaces`, `signerKeyId`, `signature`, `resources`, `kind`,
+`exports`, `uses`) are `null`/omittable; `usedSharedLibs` is populated by the server (not author-set).
 
 ### `VerificationPlan` (gate ③)
 
@@ -177,9 +182,12 @@ following keys:
 |----|------|-------------|
 | `id` | required | Module identifier. |
 | `version` | required | Version. |
-| `controller` | required | Controller FQCN. |
+| `controller` | required* | Controller FQCN. *Omittable when `kind: LIBRARY` (a library registers no routes). |
+| `kind` | optional | `NORMAL` (default) \| `LIBRARY`. See §8. |
+| `exports` | optional | Packages to expose as shared types (`kind: LIBRARY` only). |
+| `uses` | optional | Ids of the `LIBRARY` modules this module compiles/links against. |
 | `trustTier` | optional | `TRUSTED` (default) \| `UNTRUSTED`. |
-| `isolationMode` | optional | `null` (default = global default) \| `in-process` \| `worker`. |
+| `isolationMode` | optional | `null` (default = global default) \| `in-process` \| `worker` \| `container`. |
 | `needsSharedBeans` | optional | `false` (default). |
 | `components` | optional | List of component FQCNs. If empty, `[controller]`. |
 | `bridgedInterfaces` | optional | List of RPC-bridge interface FQCNs. |
@@ -239,6 +247,42 @@ update (`PUT /platform/modules/{id}`), assigning a new `version` accrues it to t
 `POST /platform/modules/{id}/rollback?version=...` reverts to a specific version (a `PATCH` that sends only
 partial files also requires a new `version`). For the full lifecycle endpoints see
 [04. REST API Reference](04-rest-api.md).
+
+## 8. `LIBRARY` Modules (shared-module typed sharing)
+
+A module's `kind` selects one of two deployment shapes:
+
+- **`NORMAL`** (default) — registers REST routes and has a request lifecycle. Everything above assumes this kind.
+- **`LIBRARY`** — registers **no routes**. Its "activation" instead publishes the compiled `exports` packages
+  as a **parent-tier generation** that other modules compile and link against with a *single shared type
+  identity*. Dependents see the library's exported types as the same `Class` objects, not per-module copies.
+
+### Authoring a library module
+
+- Set `kind = LIBRARY`. A library has no controller, so `controllerFqcn` is omittable (a `NORMAL` module still
+  requires it).
+- List the packages to expose in `exports`. Only types in those packages are visible to dependents; everything
+  else stays module-private. `exports` is consumer-authored and part of the signing-target normalization.
+- A library still bundles `tests` (gate ① applies) and compiles its `sources` like any module.
+
+### Depending on a library
+
+- A dependent (usually `NORMAL`) lists the library module ids in `uses`. At compile time the platform resolves
+  those into the parent tier, so the dependent's sources can import and link the library's exported types with
+  the shared identity.
+- `uses` is consumer-authored and part of the signing target.
+
+### Live propagation
+
+When a library republishes a new generation, the ACTIVE dependents that `use` it are rebound to it **without a
+redeploy**, governed by `protean.module.eager-shared-module-invalidation` (default `true`;
+[03. Configuration](03-configuration.md)). A binary-compatible change rebinds fast; an incompatible one falls
+back per the invalidation policy. This propagation applies across the in-process, worker, and container
+isolation modes.
+
+> Not to be confused with `usedSharedLibs`: that field records the **native** shared-lib jars a compile opened
+> (server-observed, for precise invalidation) — a different mechanism from the `LIBRARY`-module typed sharing
+> described here.
 
 ## Related Docs
 

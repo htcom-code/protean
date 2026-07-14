@@ -250,4 +250,4 @@ new ModuleDescriptor(
 - [07. 데이터 접근](07-data-access.ko.md)
 - [08. MCP 연동](08-mcp-integration.ko.md)
 - [12. 보안](12-security.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

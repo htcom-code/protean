@@ -241,4 +241,4 @@ public class DrainOnUnload implements ModuleUnloadCallback {
 - [08. MCP 연동](08-mcp-integration.ko.md)
 - [10. SPI 확장](10-spi-extension.ko.md)
 - [11. 운영](11-operations.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)
