@@ -367,7 +367,9 @@ Notes:
   an exploded layout from `gradle bootJar` must exist first. Without Docker those
   tests skip.
 - Artifacts: a plain jar (consumable, no classifier) + `-boot.jar` (the embed-worker
-  runnable fat jar).
+  runnable fat jar) + `-worker.jar` (a flat shaded jar for the sidecar worker's
+  process track). The sidecar worker container image ships to `ghcr.io/<owner>/protean-worker`
+  via `./gradlew jib`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute and [SECURITY.md](SECURITY.md)
 to report a vulnerability.

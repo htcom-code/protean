@@ -141,10 +141,12 @@ protean:
 
 ### 산출물
 
-`build/libs` 에 두 종류가 나온다.
+`build/libs` 에 jar 세 종류가 나오고, 여기에 Jib 로 빌드하는 워커 컨테이너 이미지가 더해진다.
 
 - **plain jar**(classifier 없음, `protean-<ver>.jar`): 다른 프로젝트가 의존성으로 쓰는 일반 라이브러리 레이아웃(`BOOT-INF` 없음). 소비자가 의존하는 산출물.
 - **bootJar**(`-boot` classifier, `protean-<ver>-boot.jar`): embed 워커가 explode 해 쓰는 실행형 fat jar(`BOOT-INF/classes,lib`). `main()` 이 둘이라 `springBoot.mainClass` 를 `ProteanApplication` 으로 고정해 둔다.
+- **worker jar**(`-worker` classifier, `protean-<ver>-worker.jar`): **sidecar** 워커 런타임의 process 트랙용 평평한 shaded uber-jar(Shadow). 이 트랙은 bare `java -cp` 로 띄우는데 `-boot.jar` 의 중첩 `BOOT-INF` 레이아웃으론 안 되므로 평평한 jar 가 필요하다. shade 시 Spring auto-config imports·JDBC 드라이버 service 파일을 concatenate 해 워커 컨텍스트가 정상 기동한다.
+- **worker image**(`ghcr.io/<owner>/protean-worker:<ver>`, Jib 로 빌드 — `build/libs` 파일 아님): sidecar 워커 런타임의 container 트랙. worker jar 를 JDK 베이스 이미지의 `/app/` 에 담는다(워커가 런타임에 모듈 소스를 재컴파일하므로 `javac` 필요). [05. 격리 모드](05-isolation-modes.ko.md) 참고.
 
 ### bootJar 와 test 는 분리 실행(필수)
 
@@ -165,7 +167,8 @@ protean:
 ./gradlew publishToMavenLocal   # ~/.m2 로 발행(POM/소비성 검증용)
 ```
 
-- 발행 publication 은 `components.java`(plain jar) + sources jar + javadoc jar + 생성 POM.
+- 발행 publication 은 `components.java`(plain jar + Shadow 플러그인이 기여하는 **worker** shaded jar — `shadowed` bundling 속성으로 구분되어 일반 소비자는 여전히 plain jar 를 받음) + sources jar + javadoc jar + 생성 POM.
+- **worker 컨테이너 이미지**는 Jib 로 별도 발행한다: `GITHUB_OWNER`/`GITHUB_ACTOR`/`GITHUB_TOKEN` 이 설정되면 `./gradlew jib` 가 `ghcr.io/<owner>/protean-worker:<ver>` 로 push 하고(없으면 `jibDockerBuild`/`jibBuildTar` 로 로컬 빌드), CI 는 라이브러리 발행과 동일 gate 로 `main` push 시에만 실행한다.
 - JDBC 드라이버(`mysql-connector-j`, `postgresql`)는 protean 자기 bootJar·테스트엔 필요하지만 소비자에게 transitive 로 강제하지 않으려고 발행 POM 에서 `optional=true` 로 표시된다. 소비자가 worker DB 프로비저닝을 쓰면 자기 드라이버를 명시 추가해야 한다.
 - 원격 registry 는 **GitHub Packages**(이관 대상)로, URL·인증을 `build.gradle` 에 하드코딩하지 않고 `gradle.properties`/환경변수로 외부화한다. `githubOwner`/`githubRepo`/`githubActor`/`githubToken`(또는 `GITHUB_OWNER`/`GITHUB_REPO`/`GITHUB_ACTOR`/`GITHUB_TOKEN` env)이 **모두 주어졌을 때만** 원격 repository 가 등록되고(없으면 mavenLocal 만), 그때 `publishLibraryPublicationToGitHubPackagesRepository` 태스크로 발행한다. 자격 템플릿은 `gradle.properties.example` 참고.
 

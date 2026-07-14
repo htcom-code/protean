@@ -74,7 +74,9 @@
 
 ### 빌드 & 문서
 
-- plain jar(소비용, classifier 없음) + fat `-boot.jar`(embed 워커 런타임),
+- plain jar(소비용, classifier 없음) + fat `-boot.jar`(embed 워커 런타임)
+  + 평평한 shaded `-worker.jar`(Shadow; sidecar 워커 process 트랙, `worker`
+  classifier 발행) + sidecar 워커 컨테이너 이미지(Jib) `ghcr.io/<owner>/protean-worker`.
   `publishToMavenLocal`(POM/소비성 검증). **`test` 와 `bootJar` 는 분리 실행**
   (결합 시 `LeakDiagnosisTest` OOM 위험).
 - README(en/ko) 및 `docs/guide/` 사용자 가이드.
