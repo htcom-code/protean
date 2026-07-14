@@ -30,7 +30,7 @@ import java.util.Set;
  * to every worker (so even a pure addition reaches workers that will host a future module using it) and reports which
  * jars changed, so each worker can rebind exactly its affected modules (Plan A2 in-place recompile).
  *
- * <p>Gated by the same {@code protean.module.shared-lib.eager-invalidation} flag. Fresh workers are seeded separately
+ * <p>Gated by the same {@code protean.module.eager-shared-lib-invalidation} flag. Fresh workers are seeded separately
  * at spawn ({@code WorkerProcessIsolation.seedParentTier}), so this handles the already-running workers.
  */
 @Component
