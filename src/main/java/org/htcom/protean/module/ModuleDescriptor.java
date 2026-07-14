@@ -26,7 +26,7 @@ import java.util.Map;
  * @param tests          FQCN -> JUnit test source (promotion gate 1 input, mandatory)
  * @param needsSharedBeans whether it depends on shared in-process beans (used to decide isolation-mode compatibility)
  * @param verification   promotion gate 3 verification plan (null = skip verification)
- * @param isolationMode  this module's isolation mode ("in-process"|"worker", null = global default)
+ * @param isolationMode  this module's isolation mode ("in-process"|"worker"|"container", null = global default)
  * @param bridgedInterfaces list of interface FQCNs to call the main shared beans over RPC in worker mode (null/empty = none)
  * @param signerKeyId    signing key identifier (for promotion-gate signature verification, null = unsigned). Excluded from the signing-target normalization.
  * @param signature      Ed25519 signature over the normalized content (Base64, null = unsigned). Excluded from the signing-target normalization.
