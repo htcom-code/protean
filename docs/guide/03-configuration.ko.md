@@ -216,4 +216,4 @@ protean:
 - [05. 격리 모드](05-isolation-modes.ko.md)
 - [06. 승격 게이트](06-promotion-gates.ko.md)
 - [08. MCP 연동](08-mcp-integration.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

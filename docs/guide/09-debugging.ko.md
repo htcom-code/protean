@@ -200,4 +200,4 @@ protean.mcp.debug.session-idle-timeout=30m
 - [11. 운영](11-operations.ko.md)
 - [12. 보안](12-security.ko.md)
 - [13. 트러블슈팅](13-troubleshooting.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

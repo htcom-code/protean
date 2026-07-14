@@ -183,4 +183,4 @@ protean:
 - [07. 데이터 접근](07-data-access.ko.md)
 - [10. SPI 확장](10-spi-extension.ko.md)
 - [12. 보안](12-security.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

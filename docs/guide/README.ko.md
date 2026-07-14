@@ -37,4 +37,4 @@ Protean 을 의존성으로 쓰는 **Spring Boot 개발자**(라이브러리 소
 
 ## 관련 문서
 
-- [README](../../README.md) — 프로젝트 개요
+- [README](../../README.ko.md) — 프로젝트 개요

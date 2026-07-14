@@ -120,4 +120,4 @@ protean:
 - [06. 승격 게이트](06-promotion-gates.ko.md)
 - [09. 디버깅](09-debugging.ko.md)
 - [11. 운영](11-operations.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

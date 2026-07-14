@@ -445,4 +445,4 @@ curl -X POST http://localhost:8080/platform/shared-libs \
 - [08. MCP 연동](08-mcp-integration.ko.md)
 - [11. 운영](11-operations.ko.md)
 - [13. 트러블슈팅](13-troubleshooting.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)

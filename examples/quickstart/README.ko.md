@@ -230,4 +230,4 @@ curl -s localhost:8080/platform/mcp -H 'Content-Type: application/json' \
 ## 관련 문서
 
 - [사용자 가이드](../../docs/guide) — 01 시작하기 · 05 격리 모드 · 07 데이터 접근 · 08 MCP 연동
-- [README](../../README.md) — 프로젝트 개요
+- [README](../../README.ko.md) — 프로젝트 개요

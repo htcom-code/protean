@@ -241,4 +241,4 @@ curl -i -X POST http://localhost:8080/platform/modules/from-manifest \
 - [04. REST API 레퍼런스](04-rest-api.ko.md)
 - [06. 승격 게이트](06-promotion-gates.ko.md)
 - [07. 데이터 접근](07-data-access.ko.md)
-- [README](../../README.md)
+- [README](../../README.ko.md)
