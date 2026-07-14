@@ -120,6 +120,34 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Publish the sidecar worker container image (C28, container track) to GitHub Container Registry via Jib
+  # (daemon-less — no docker build/push step needed). Mirrors the `publish` job's gate: only on pushes to main
+  # (never PRs/forks), after both gates pass. build.gradle's jib `to.image` resolves to ghcr.io/<owner>/protean-worker
+  # only when GITHUB_OWNER is set (here from the Actions context); Jib authenticates with the actor + built-in
+  # GITHUB_TOKEN. `packages: write` is required to push to GHCR.
+  publish-worker-image:
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: build + push worker image (jib → ghcr.io)
+        run: ./gradlew jib --console=plain
+        env:
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Single always-run aggregation gate. Mark THIS as the required status check in
   # branch protection: it runs even when upstream jobs are skipped (so a required
   # check never gets stuck) and fails only if a needed job actually failed or was

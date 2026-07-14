@@ -160,17 +160,23 @@ protean:
 ```
 
 - **embed** (`EmbeddedWorkerRuntime`, default): worker = host artifact. The process track re-runs the host classpath (`java.class.path`), the container track re-runs an explode of the host bootJar. Because the worker runtime-compiles the sources, the key benefit is that classpath parity comes for free.
-- **sidecar** (`SidecarWorkerRuntime`, opt-in): worker = a dedicated slim jar/image published by Protean. Better for minimizing isolation/attack surface, but the shared types a module references must be injected separately as a shared-api jar.
+- **sidecar** (`SidecarWorkerRuntime`, opt-in): worker = a dedicated slim artifact published by Protean. Better for minimizing isolation/attack surface, but the shared types a module references must be injected separately as a shared-api jar.
 
 ```yaml
 protean:
   worker:
     runtime: sidecar
     sidecar:
-      jar: /opt/protean/worker.jar          # process track
-      image: registry/protean-worker:1.0     # container track
+      jar: /opt/protean/protean-worker.jar    # process track
+      image: ghcr.io/htcom-code/protean-worker:0.0.1  # container track
       shared-api: /opt/protean/shared-api.jar # shared types for worker compilation
 ```
+
+**Obtaining the published artifacts.** Protean's build emits both, so you do not build the worker yourself:
+- process track (`jar`) — the flat shaded uber-jar published to GitHub Packages under the `worker` classifier (`org.htcom:protean:<version>:worker`). Download it and point `jar` at the file. (A Spring Boot `-boot.jar` will **not** work here — the process track launches with a bare `java -cp`, which the nested `BOOT-INF` layout cannot satisfy; the `worker` jar is flat for exactly this reason.)
+- container track (`image`) — the OCI image published to GHCR at `ghcr.io/<owner>/protean-worker:<version>`. It bundles the worker at `/app/protean-worker.jar` and runs on the `/app/*` classpath; no host mount is needed.
+
+**`shared-api` is yours to curate**, not a Protean artifact: it holds the shared types your modules reference at compile time (your own domain types plus any bridged interfaces). Embed avoids this because it inherits the host classpath for free; supplying `shared-api` is sidecar's cost.
 
 If unset, it fails fast with a clear error (the process track needs `sidecar.jar`, the container track needs `sidecar.image`). For how to plug in your own custom runtime provider, see [10. SPI Extension](10-spi-extension.md).
 

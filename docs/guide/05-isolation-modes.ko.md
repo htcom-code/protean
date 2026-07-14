@@ -160,17 +160,23 @@ protean:
 ```
 
 - **embed**(`EmbeddedWorkerRuntime`, 기본): 워커 = 호스트 아티팩트. process 트랙은 호스트 classpath(`java.class.path`), container 트랙은 호스트 bootJar explode 를 재실행한다. 워커가 소스를 런타임 컴파일하므로 클래스패스 패리티가 공짜인 것이 핵심 이점이다.
-- **sidecar**(`SidecarWorkerRuntime`, 옵트인): 워커 = Protean 이 발행한 전용 슬림 jar/이미지. 격리·공격면 최소화에 유리하나 모듈이 참조하는 공유 타입을 shared-api jar 로 별도 주입해야 한다.
+- **sidecar**(`SidecarWorkerRuntime`, 옵트인): 워커 = Protean 이 발행한 전용 슬림 아티팩트. 격리·공격면 최소화에 유리하나 모듈이 참조하는 공유 타입을 shared-api jar 로 별도 주입해야 한다.
 
 ```yaml
 protean:
   worker:
     runtime: sidecar
     sidecar:
-      jar: /opt/protean/worker.jar          # process 트랙
-      image: registry/protean-worker:1.0     # container 트랙
+      jar: /opt/protean/protean-worker.jar    # process 트랙
+      image: ghcr.io/htcom-code/protean-worker:0.0.1  # container 트랙
       shared-api: /opt/protean/shared-api.jar # 워커 컴파일용 공유 타입
 ```
+
+**발행 아티팩트 획득.** 둘 다 Protean 빌드가 산출하므로 워커를 직접 빌드하지 않는다:
+- process 트랙(`jar`) — GitHub Packages 에 `worker` classifier 로 발행되는 평평한 shaded uber-jar(`org.htcom:protean:<version>:worker`). 내려받아 `jar` 가 그 파일을 가리키게 한다. (Spring Boot `-boot.jar` 는 여기서 **안 된다** — process 트랙은 `java -cp` 로 띄우는데 중첩 `BOOT-INF` 레이아웃은 이를 못 채운다. `worker` jar 가 평평한 이유가 이것이다.)
+- container 트랙(`image`) — GHCR 에 `ghcr.io/<owner>/protean-worker:<version>` 로 발행되는 OCI 이미지. 워커를 `/app/protean-worker.jar` 에 담아 `/app/*` classpath 로 실행하며, 호스트 마운트가 필요 없다.
+
+**`shared-api` 는 소비자가 큐레이션**하는 것이지 Protean 아티팩트가 아니다: 모듈이 컴파일 시점에 참조하는 공유 타입(자신의 도메인 타입 + 브리지 인터페이스)을 담는다. embed 는 호스트 classpath 를 공짜로 물려받아 이게 필요 없다 — shared-api 제공이 sidecar 의 비용이다.
 
 미설정 시 명확한 오류로 fail-fast 한다(process 는 `sidecar.jar`, container 는 `sidecar.image` 필요). 커스텀 런타임 제공자를 직접 꽂는 법은 [10. SPI 확장](10-spi-extension.ko.md).
 

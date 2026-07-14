@@ -11,6 +11,10 @@ plugins {
     id 'org.springframework.boot' version '3.5.16'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'maven-publish'
+    // Sidecar worker artifact build (C28): Shadow produces the flat uber-jar the process-track sidecar runtime
+    // launches via `java -cp`, and Jib builds the daemon-less container image for the container track.
+    id 'com.gradleup.shadow' version '8.3.6'
+    id 'com.google.cloud.tools.jib' version '3.4.4'
     // Retries flaky tests on CI. The JDI/debug integration tests (attach + breakpoint over JDWP) are
     // irreducibly timing-sensitive on loaded 2-vCPU GitHub runners — a breakpoint occasionally isn't hit
     // even within a generous timeout. Retry lets a flaky pass on a rerun; a genuinely broken test is
@@ -51,6 +55,77 @@ jar {
 bootJar {
     enabled = true
     archiveClassifier = 'boot'
+}
+
+// --- Sidecar worker artifact (C28) ---
+// The opt-in sidecar runtime (SidecarWorkerRuntime) runs the worker as a standalone JVM:
+//   - process track: `java -cp <jar> org.htcom.protean.boot.ProteanWorkerLauncher`
+//   - container track: a self-contained image with the classpath `/app/*`
+// A Spring Boot fat -boot.jar cannot be launched with a bare `-cp` (its nested BOOT-INF layout needs the boot
+// Launcher), so the sidecar needs a FLAT shaded uber-jar instead. "Slim" here = protean-only (no consumer app),
+// not fewer deps: the worker re-runs ProteanApplication under the 'worker' profile and recompiles module sources at
+// runtime (RuntimeCompiler → needs a JDK), so it needs the same runtime deps the embed worker inherits from the host.
+shadowJar {
+    // 'worker' classifier keeps it distinct from the plain library jar ('') and the embed bootJar ('-boot').
+    archiveClassifier = 'worker'
+    // Spring/JDBC metadata lives at fixed same-name paths in EVERY jar, so shading must CONCATENATE (not overwrite):
+    //  - mergeServiceFiles: META-INF/services/* (e.g. java.sql.Driver — else only one JDBC driver survives).
+    //  - the two appends: spring.factories + the auto-configuration imports (else spring-boot-autoconfigure's file
+    //    clobbers protean's own ProteanAutoConfiguration registration and the worker context comes up empty).
+    mergeServiceFiles()
+    append 'META-INF/spring.factories'
+    append 'META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports'
+    manifest {
+        attributes 'Multi-Release': 'true'   // some deps (asm, jackson) ship multi-release class trees
+    }
+}
+
+// Stage ONLY the worker uber-jar (not the plain/boot jars also in build/libs) under a dir Jib copies to the image
+// root, at a stable version-independent name → a clean /app/protean-worker.jar the `-cp /app/*` contract matches.
+tasks.register('stageWorkerImageApp', Copy) {
+    dependsOn tasks.named('shadowJar')
+    from tasks.named('shadowJar').flatMap { it.archiveFile }
+    into layout.buildDirectory.dir('jib-app/app')
+    rename { 'protean-worker.jar' }
+}
+
+// Worker container image (C28, container track). Jib builds an OCI image with no Docker daemon.
+//  - base = a JDK (not JRE): the worker recompiles module sources at runtime via javac (RuntimeCompiler).
+//  - the shaded worker jar is placed at /app/ so the sidecar contract `java -cp /app/*` stays a single, flat,
+//    build-tool-independent convention (a consumer's own worker image just needs its jars under /app).
+//  - entrypoint = INHERIT: Jib adds no entrypoint (the base has none), so the launch command SidecarWorkerRuntime
+//    hands docker (`... <image> java -cp /app/* <mainClass> <spring args>`) runs as-is.
+//  - to.image is property-gated exactly like the Maven publish below: a local tag when unset (so `jibDockerBuild`
+//    works offline), ghcr.io/<owner>/protean-worker when GITHUB_OWNER is set (CI). ghcr requires a lowercase path.
+jib {
+    from {
+        image = 'eclipse-temurin:21-jdk'
+    }
+    to {
+        def imgOwner = findProperty('githubOwner') ?: System.getenv('GITHUB_OWNER')
+        image = imgOwner ? "ghcr.io/${imgOwner.toString().toLowerCase()}/protean-worker" : 'protean-worker'
+        tags = [version.toString()]
+        auth {
+            username = (findProperty('githubActor') ?: System.getenv('GITHUB_ACTOR') ?: '').toString()
+            password = (findProperty('githubToken') ?: System.getenv('GITHUB_TOKEN') ?: '').toString()
+        }
+    }
+    container {
+        entrypoint = 'INHERIT'
+        // Only consulted if the entrypoint were Jib-generated; kept explicit so the image self-documents its main.
+        mainClass = 'org.htcom.protean.boot.ProteanWorkerLauncher'
+    }
+    extraDirectories {
+        paths {
+            path {
+                from = layout.buildDirectory.dir('jib-app').get().asFile
+                into = '/'
+            }
+        }
+    }
+}
+tasks.matching { it.name in ['jib', 'jibDockerBuild', 'jibBuildTar'] }.configureEach {
+    dependsOn 'stageWorkerImageApp'
 }
 
 repositories {
@@ -108,6 +183,11 @@ publishing {
             // group=org.htcom, artifactId=protean (settings.gradle rootProject.name), version=0.0.1-SNAPSHOT.
             // components.java = plain jar (for consumption) + sources + javadoc + generated POM.
             // implementation dependencies are written to the POM as runtime scope, api as compile, so consumers resolve them transitively.
+            // Sidecar worker artifact (C28, process track): the Shadow plugin already contributes the flat shaded
+            // uber-jar (classifier 'worker') to the java component, so `from components.java` publishes it alongside
+            // the plain/sources/javadoc jars — a consumer opting into sidecar mode resolves an official artifact for
+            // protean.worker.sidecar.jar (org.htcom:protean:<ver>:worker) instead of building their own. (The
+            // container image ships separately to GHCR via Jib.)
             from components.java
             // The JDBC drivers (mysql/postgres) are needed for protean's own bootJar and tests, but must not be forced
             // transitively onto consumers (version conflicts, dead weight; data-access contract = the driver is host-bundled).
