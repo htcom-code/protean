@@ -1,3 +1,5 @@
+**English** | [한국어](ROADMAP.ko.md)
+
 # Protean Roadmap
 
 Forward-looking items for the Protean platform. Because Protean is a **library** —
@@ -56,7 +58,7 @@ explicit; the design is deferred to that track.
 ## Observability
 
 Runtime request tracing and per-module metrics. See the operations guide
-([docs/guide/11-operations.ko.md](docs/guide/11-operations.ko.md#요청-트레이스--모니터링))
+([docs/guide/11-operations.md](docs/guide/11-operations.md#request-traces--monitoring))
 for the current surface.
 
 ### ✅ Shipped

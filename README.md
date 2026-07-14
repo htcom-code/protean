@@ -20,6 +20,12 @@ hot-swap) → observe traces & metrics → roll back. This surface is powerful (
 so authenticate it outside local use — see [08. MCP Integration](docs/guide/08-mcp-integration.md).
 Coordinate: `org.htcom:protean` (Spring Boot 3.5.x / Java 21).
 
+**Compatibility:** Protean currently targets **Spring Boot 3.5.x on Java 21**. It runs
+inside your app and manipulates Spring MVC/context internals, so the supported line is a
+contract — a consumer on Spring Boot 4.x is **not yet supported** (you may hit runtime
+linkage errors). 4.x support is a committed, planned track — see the
+[roadmap](ROADMAP.md#platform-compatibility-spring-boot--java).
+
 ## Features
 
 - **Dynamic loading engine** — compile Java source at runtime → load under a dedicated
