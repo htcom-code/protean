@@ -26,6 +26,7 @@ Each gate failure throws `PromotionPipeline.GateFailedException`. If it fails at
 | `protean.gate.review-enabled` | `true` | ② review (code check) gate |
 | `protean.gate.signature.required` | `false` | Signature gate (opt-in) |
 | `protean.gate.signature.keys.<keyId>` | (none) | trust store: keyId → Base64(X.509 Ed25519 public key) |
+| `protean.gate.signature.shared-lib-required` | `false` | Shared-lib signature gate (opt-in) — gates `POST /platform/shared-libs`, not the module pipeline |
 | `protean.gate.approval.required` | `false` | Approval gate (opt-in) |
 | `protean.mcp.capture-test-output` | `false` | On ① failure, include test stdout/stderr in the diagnostic message |
 
@@ -144,6 +145,29 @@ Rejection cases (all `GateFailedException`, module not saved):
 - No signature (`signerKeyId`/`signature` missing)
 - An untrusted `keyId` not in the trust store
 - Content tampering after signing (signature mismatch)
+
+## Shared-lib signature gate
+
+Unlike the gates above, this one is **not** part of the module `PromotionPipeline` — it guards a separate surface: the live shared-lib put-jar store (`POST /platform/shared-libs`, and the equivalent `protean.deploy_shared_lib` MCP tool). Shared libs have no tests/review/verify gates; signature is the only gate on this surface.
+
+By default nothing is enforced (the trusted-developer model). When `protean.gate.signature.shared-lib-required=true`, every uploaded jar must carry a valid Ed25519 signature **over the raw jar bytes** from a key in the **same trust store** the module [Signature gate](#signature-gate) uses (`protean.gate.signature.keys`). The toggle and trust store are read live, so a change takes effect without a restart.
+
+> Note the differing signing target: the module gate signs the canonicalized `ModuleDescriptor`; this gate signs the jar's raw bytes directly.
+
+The deploy request carries the signature as optional parallel arrays alongside `name`/`version`/`file`:
+
+| Field | Required | Meaning |
+|---|---|---|
+| `signerKeyId` | no | trust-store key id used to sign the jar |
+| `signature` | no | Ed25519 signature (Base64) over the jar's raw bytes |
+
+Rejection cases (all reported with the gate identifier `shared-lib-signature`, the upload not stored):
+
+- No signature (`signerKeyId`/`signature` missing)
+- An untrusted `keyId` not in the trust store
+- Content tampering after signing (signature mismatch)
+
+For example: `promotion gate shared-lib-signature failed: signature mismatch (tampered or wrong key) keyId=ci-key — shared lib acme`.
 
 ## Approval gate
 

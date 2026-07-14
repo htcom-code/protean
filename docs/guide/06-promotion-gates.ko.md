@@ -26,6 +26,7 @@
 | `protean.gate.review-enabled` | `true` | ② 리뷰(코드 체크) 게이트 |
 | `protean.gate.signature.required` | `false` | 서명 게이트(opt-in) |
 | `protean.gate.signature.keys.<keyId>` | (없음) | trust store: keyId → Base64(X.509 Ed25519 공개키) |
+| `protean.gate.signature.shared-lib-required` | `false` | shared-lib 서명 게이트(opt-in) — 모듈 파이프라인이 아니라 `POST /platform/shared-libs` 를 가둠 |
 | `protean.gate.approval.required` | `false` | 승인 게이트(opt-in) |
 | `protean.mcp.capture-test-output` | `false` | ① 실패 시 테스트 stdout/stderr 를 진단 메시지에 포함 |
 
@@ -144,6 +145,29 @@ platform.install(signed);
 - 서명 없음(`signerKeyId`/`signature` 누락)
 - trust store 에 없는 미신뢰 `keyId`
 - 서명 후 내용 변조(서명 불일치)
+
+## shared-lib 서명 게이트
+
+위 게이트들과 달리 이 게이트는 모듈 `PromotionPipeline` 의 일부가 **아니다** — 별도 surface, 즉 라이브 shared-lib put-jar 스토어(`POST /platform/shared-libs` 및 그에 대응하는 `protean.deploy_shared_lib` MCP 툴)를 가둔다. shared-lib 에는 tests/review/verify 게이트가 없다; 이 surface 의 유일한 게이트가 서명이다.
+
+기본적으로는 아무것도 강제하지 않는다(신뢰 개발자 모델). `protean.gate.signature.shared-lib-required=true` 면, 업로드되는 모든 jar 는 모듈 [서명 게이트](#서명-게이트)와 **같은 trust store**(`protean.gate.signature.keys`)의 키로 만든 유효한 Ed25519 서명을 **원본 jar 바이트에 대해** 지녀야 한다. 토글과 trust store 는 라이브로 읽혀 재시작 없이 반영된다.
+
+> 서명 대상이 다르다: 모듈 게이트는 정규화된 `ModuleDescriptor` 를, 이 게이트는 jar 의 원본 바이트를 직접 서명한다.
+
+deploy 요청은 서명을 `name`/`version`/`file` 과 평행한 선택 배열로 싣는다:
+
+| 필드 | 필수 | 의미 |
+|---|---|---|
+| `signerKeyId` | 아니오 | jar 서명에 쓴 trust-store 키 id |
+| `signature` | 아니오 | jar 원본 바이트에 대한 Ed25519 서명(Base64) |
+
+거부 케이스(모두 게이트 식별자 `shared-lib-signature` 로 보고, 업로드 미저장):
+
+- 서명 없음(`signerKeyId`/`signature` 누락)
+- trust store 에 없는 미신뢰 `keyId`
+- 서명 후 내용 변조(서명 불일치)
+
+예: `promotion gate shared-lib-signature failed: signature mismatch (tampered or wrong key) keyId=ci-key — shared lib acme`.
 
 ## 승인 게이트
 
