@@ -20,7 +20,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'org.springframework.boot:spring-boot-gradle-plugin:3.5.16'
+        classpath 'org.springframework.boot:spring-boot-gradle-plugin:4.1.0'
         classpath 'io.spring.gradle:dependency-management-plugin:1.1.7'
     }
 }
