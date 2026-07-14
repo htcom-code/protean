@@ -141,10 +141,12 @@ This project is built with Gradle. It calls gradle tasks directly rather than ru
 
 ### Artifacts
 
-Two kinds come out in `build/libs`.
+Three jars come out in `build/libs`, plus a worker container image built by Jib.
 
 - **plain jar** (no classifier, `protean-<ver>.jar`): the ordinary library layout that other projects depend on (no `BOOT-INF`). The artifact consumers depend on.
 - **bootJar** (`-boot` classifier, `protean-<ver>-boot.jar`): the runnable fat jar (`BOOT-INF/classes,lib`) that the embed worker explodes and uses. Because there are two `main()`s, `springBoot.mainClass` is fixed to `ProteanApplication`.
+- **worker jar** (`-worker` classifier, `protean-<ver>-worker.jar`): a flat shaded uber-jar (Shadow) for the **sidecar** worker runtime's process track. That track launches with a bare `java -cp`, which a `-boot.jar`'s nested `BOOT-INF` layout cannot satisfy — hence a flat jar. Spring auto-configuration imports and JDBC driver service files are concatenated during shading so the worker context still comes up.
+- **worker image** (`ghcr.io/<owner>/protean-worker:<ver>`, built by Jib — no `build/libs` file): the sidecar worker runtime's container track. Bundles the worker jar at `/app/` on a JDK base image (the worker recompiles module sources at runtime, so it needs `javac`). See [05. Isolation Modes](05-isolation-modes.md).
 
 ### bootJar and test must run separately (required)
 
@@ -165,7 +167,8 @@ The `test` task limits the heap to `maxHeapSize=512m` to forcibly clear soft ref
 ./gradlew publishToMavenLocal   # publish to ~/.m2 (for POM / consumability verification)
 ```
 
-- The publication comprises `components.java` (plain jar) + sources jar + javadoc jar + the generated POM.
+- The publication comprises `components.java` (plain jar + the **worker** shaded jar the Shadow plugin contributes, distinguished by the `shadowed` bundling attribute so default consumers still resolve the plain jar) + sources jar + javadoc jar + the generated POM.
+- The **worker container image** publishes separately via Jib: `./gradlew jib` pushes `ghcr.io/<owner>/protean-worker:<ver>` when `GITHUB_OWNER`/`GITHUB_ACTOR`/`GITHUB_TOKEN` are set (otherwise `jibDockerBuild`/`jibBuildTar` build it locally). CI runs this on pushes to `main` only, gated exactly like the library publish.
 - The JDBC drivers (`mysql-connector-j`, `postgresql`) are needed for protean's own bootJar/tests but are marked `optional=true` in the published POM so as not to force them transitively on consumers. A consumer using worker DB provisioning must add its own driver explicitly.
 - The remote registry is **GitHub Packages** (migration target); the URL/credentials are not hardcoded in `build.gradle` but externalized via `gradle.properties`/environment variables. The remote repository is registered **only when all of** `githubOwner`/`githubRepo`/`githubActor`/`githubToken` (or the `GITHUB_OWNER`/`GITHUB_REPO`/`GITHUB_ACTOR`/`GITHUB_TOKEN` env vars) are provided (otherwise mavenLocal only), and it is then published via the `publishLibraryPublicationToGitHubPackagesRepository` task. For the credential template see `gradle.properties.example`.
 

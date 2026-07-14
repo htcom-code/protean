@@ -86,6 +86,9 @@ follows the migration.
 ### Build & docs
 
 - Plain jar (consumable, no classifier) + fat `-boot.jar` (embed worker
-  runtime); `publishToMavenLocal` for POM/consumability checks. **`test` and
-  `bootJar` run separately** (combined runs can OOM `LeakDiagnosisTest`).
+  runtime) + flat shaded `-worker.jar` (Shadow; the sidecar worker's process
+  track, published under the `worker` classifier) + a sidecar worker container
+  image (Jib) at `ghcr.io/<owner>/protean-worker`. `publishToMavenLocal` for
+  POM/consumability checks. **`test` and `bootJar` run separately** (combined
+  runs can OOM `LeakDiagnosisTest`).
 - README (en/ko) and user guides under `docs/guide/`.
