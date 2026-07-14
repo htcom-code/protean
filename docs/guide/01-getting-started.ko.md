@@ -113,7 +113,7 @@ Location: /platform/modules/hello
  "needsSharedBeans":false,"bridgedInterfaces":null}
 ```
 
-테스트를 빼고 보내면 게이트 ①이 거부해 `422 Unprocessable Entity` + `{"error": ...}` 가 온다.
+테스트를 빼고 보내면 게이트 ①이 거부해 RFC 9457 problem detail 형태의 `422 Unprocessable Entity`(`code: "GATE_FAILED"`)가 온다.
 
 ### 서빙 확인 (GET → 200)
 

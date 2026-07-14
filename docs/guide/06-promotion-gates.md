@@ -36,7 +36,7 @@ Turning a gate off is treated not as a bypass but as an **explicit omission**, l
 Bundling JUnit tests is **mandatory** for a module. If `ModuleDescriptor.tests()` is empty, it is rejected immediately.
 
 ```
-Gate ① failure: no unit tests (test bundling is mandatory).
+promotion gate tests failed: unit tests are required (tests must be bundled)
 ```
 
 Behavior:
@@ -62,7 +62,7 @@ Statically inspects the compiled bytecode with every registered `CodeRule` bean.
 Violation example:
 
 ```
-Gate ② failure: code check violation [runtime.x.Foo#bar forbidden call: java.lang.System.exit]
+promotion gate review failed: code check violations: [runtime.x.Foo#bar forbidden call: java.lang.System.exit]
 ```
 
 This rule is **not a security sandbox.** Being an ASM bytecode scan, reflection bypass is out of scope; it is a guardrail against a trusted developer's mistakes (for the security model, see [12. Security](12-security.md)). If you need extra rules, register a `CodeRule` bean and `RuleSystem` auto-collects and enforces it — see [10. SPI Extension](10-spi-extension.md).

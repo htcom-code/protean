@@ -35,7 +35,7 @@
 
 ## 승격 게이트 실패
 
-`install`/`update` 가 게이트에서 막히면 REST 응답은 `422`(`{"error": ...}`)다.
+`install`/`update` 가 게이트에서 막히면 REST 응답은 RFC 9457 problem detail 형태의 `422`(`code: "GATE_FAILED"`, 실패한 게이트를 지목하는 `gate` 멤버 포함)다.
 
 ### 게이트 ① — 테스트 없음/실패
 

@@ -111,7 +111,7 @@ Location: /platform/modules/hello
  "needsSharedBeans":false,"bridgedInterfaces":null}
 ```
 
-Send it without tests and gate ① rejects it with `422 Unprocessable Entity` + `{"error": ...}`.
+Send it without tests and gate ① rejects it with `422 Unprocessable Entity` as an RFC 9457 problem detail (`code: "GATE_FAILED"`).
 
 ### Verify serving (GET → 200)
 

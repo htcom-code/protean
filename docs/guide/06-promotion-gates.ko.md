@@ -36,7 +36,7 @@
 모듈은 JUnit 테스트 동봉이 **강제**된다. `ModuleDescriptor.tests()` 가 비어 있으면 즉시 거부된다.
 
 ```
-게이트 ① 실패: 단위 테스트가 없습니다(테스트 동봉 강제).
+promotion gate tests failed: unit tests are required (tests must be bundled)
 ```
 
 동작:
@@ -62,7 +62,7 @@
 위반 예:
 
 ```
-게이트 ② 실패: 코드 체크 위반 [runtime.x.Foo#bar 금지 호출: java.lang.System.exit]
+promotion gate review failed: code check violations: [runtime.x.Foo#bar forbidden call: java.lang.System.exit]
 ```
 
 이 룰은 **보안 샌드박스가 아니다.** ASM 바이트코드 스캔이라 리플렉션 우회는 범위 밖이며, 신뢰된 개발자의 실수를 막는 레일이다(보안 모델은 [12. 보안](12-security.ko.md) 참고). 추가 룰이 필요하면 `CodeRule` 빈을 등록하면 `RuleSystem` 이 자동 수집해 강제한다 — [10. SPI 확장](10-spi-extension.ko.md) 참고.

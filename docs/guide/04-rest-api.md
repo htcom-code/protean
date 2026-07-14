@@ -16,17 +16,20 @@ This library does not implement authentication/authorization. The admin surface 
 ## Common notes
 
 - All request/response bodies are JSON (the only exception is `from-manifest` — YAML text).
-- Error responses take the form `{"error": "<message>"}` (the 400/409/422 cases the exception handler maps). Some 404/400 responses follow Spring's default `ResponseStatusException` format.
+- Error responses are [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details (`application/problem+json`): `{ "type", "title", "status", "detail", "code", ... }`. `code` is the stable machine key (see [Status-code mapping](#status-code-mapping)), `type` is a `urn:protean:error:<code>` URN, and gate failures add a `gate` extension member naming the failed gate. When a request-scoped trace id is present it is echoed as `traceId`.
 
 ### Status-code mapping
 
-| Exception | Status code | Situation |
+Every error is dispatched through `ProteanException` (carrying a stable `ErrorCode` whose `httpStatus` sets the response code) or one of the two fallback handlers below.
+
+| Exception (code) | Status code | Situation |
 |---|---|---|
-| `GateFailedException` | `422 Unprocessable Entity` | Promotion gate ① (tests) / ② (review) rejection |
-| `IllegalStateException` | `409 Conflict` | Isolation mode unsupported / unknown mode / state conflict |
-| `IllegalArgumentException` | `400 Bad Request` | Invalid manifest/input (missing required field, etc.) |
-| `ResponseStatusException(NOT_FOUND)` | `404 Not Found` | Target module not found |
-| `ResponseStatusException(BAD_REQUEST)` | `400 Bad Request` | Path id ↔ body id mismatch, non-resource file in reload |
+| `GateFailedException` (`GATE_FAILED`) | `422 Unprocessable Entity` | Any promotion gate rejection (signature / tests / review / verification / shared-lib-signature) |
+| `CompilationException` (`COMPILATION_FAILED`) | `422 Unprocessable Entity` | Module or test sources fail to compile |
+| `ProteanException` (`MODULE_NOT_FOUND` / `SHARED_LIB_NOT_FOUND`) | `404 Not Found` | Target module or shared lib not found |
+| `ProteanException` (`INVALID_ARGUMENT`) | `400 Bad Request` | Path id ↔ body id mismatch, non-resource file in reload |
+| `IllegalArgumentException` (`INVALID_ARGUMENT`) | `400 Bad Request` | Invalid manifest/input (missing required field, etc.) |
+| `IllegalStateException` (`STATE_CONFLICT`) | `409 Conflict` | Isolation mode unsupported / unknown mode / state conflict |
 
 ---
 
@@ -378,7 +381,7 @@ Apply a `{ "key": value }` patch atomically. If any key is unknown or invalid, t
 - Request body: JSON object mapping key → new value
 - Response `200`: `ApplyResult` when committed
 - Response `400`: `ApplyResult` when aborted (unknown/invalid key); nothing applied
-- `ApplyResult`: `{ "applied": <bool>, "outcomes": [ { "key", "tier", "outcome", "reason" } ] }`. `outcome` is one of `APPLIED_LIVE`, `APPLIED_FUTURE`, `REJECTED_UNKNOWN`, `REJECTED_INVALID`.
+- `ApplyResult`: `{ "applied": <bool>, "outcomes": [ { "key", "tier", "outcome", "reason" } ] }`. `outcome` is one of `APPLIED_LIVE`, `APPLIED_FUTURE`, `REQUIRES_RESTART`, `REJECTED_UNKNOWN`, `REJECTED_INVALID`, `NOT_APPLIED_BATCH_ABORTED`.
 
 ```json
 {
