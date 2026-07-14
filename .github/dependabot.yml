@@ -9,8 +9,14 @@ updates:
     ignore:
       # Spring Boot 3.5.x is the supported baseline (see ROADMAP → Platform compatibility).
       # 4.x is a deliberate migration track, not an automated bump — keep receiving 3.5.x
-      # patches/minors, but do not propose major jumps.
-      - dependency-name: "org.springframework.boot"
+      # patches/minors, but do not propose major jumps. Every explicitly-versioned Spring
+      # Boot coordinate in the repo is listed by exact name (no wildcard, to avoid ignoring
+      # anything unintended). Starters are BOM-managed (no explicit version) so Dependabot
+      # never bumps them and they need no entry. If a new explicitly-versioned Spring Boot
+      # coordinate is added, add it here too.
+      - dependency-name: "org.springframework.boot"                       # root plugins DSL (build.gradle)
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.springframework.boot:spring-boot-gradle-plugin"  # examples buildscript classpath
         update-types: ["version-update:semver-major"]
 
   # GitHub Actions used in .github/workflows/.
