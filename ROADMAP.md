@@ -13,8 +13,43 @@ items today and grows as new ones arise. It is not a release schedule.
 | Status | Meaning |
 |---|---|
 | ✅ Shipped | Implemented and on `main`. Listed for context. |
+| 🛠 Planned | Committed to ship, not yet scheduled or implemented. |
 | 🔎 Candidate | Under evaluation — **support not yet decided**. Captured so the trade-off is on the record. |
 | 🚫 Not planned | Considered and deliberately declined (with the reason). |
+
+---
+
+## Platform compatibility (Spring Boot / Java)
+
+Protean runs as a library *inside* the consumer's Spring Boot application, and it
+manipulates Spring MVC/context internals (dynamic mapping registration, child
+application contexts, handler-adapter cache purging). Those internal touch-points
+make the supported Spring Boot line an explicit contract, not an incidental detail.
+
+### ✅ Current baseline
+
+- **Spring Boot 3.5.x on Java 21.** The supported and tested line — Protean is
+  compiled against it and CI runs the full suite on it.
+
+### 🛠 Planned — Spring Boot 4.x support
+
+Because Protean is a library (completeness over ROI — consumers cannot patch
+internals at use-time), **supporting Spring Boot 4.x is a commitment, not an open
+question.** It is simply not implemented yet: Boot 4 (Spring Framework 7) is a major
+release with breaking changes, and Protean's deep MVC/context coupling means a
+consumer on 4.x *today* would hit runtime linkage failures (e.g. `NoSuchMethodError`),
+possibly latent (surfacing only when a specific path such as module unload runs).
+Until the migration lands, Protean is **pinned to 3.5.x**.
+
+The migration will be designed and discussed as its own track — a compatibility
+surface audit, and likely a startup version guard so an unsupported line fails fast
+with a clear message instead of a cryptic crash. Recorded here so the intent is
+explicit; the design is deferred to that track.
+
+### 🚫 Not planned
+
+- Auto-accepting Dependabot **major** Spring Boot bumps. A major-version move is a
+  deliberate migration (see above), not an automated dependency bump.
 
 ---
 
