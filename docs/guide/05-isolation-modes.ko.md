@@ -33,7 +33,7 @@ protean:
     mode: worker   # in-process | worker | container
 ```
 
-개별 모듈은 `ModuleDescriptor.isolationMode` 로 전역 기본을 덮어쓸 수 있다(`"in-process"` | `"worker"`, `null` 이면 전역 기본을 따른다).
+개별 모듈은 `ModuleDescriptor.isolationMode` 로 전역 기본을 덮어쓸 수 있다(`"in-process"` | `"worker"` | `"container"`, `null` 이면 전역 기본을 따른다).
 
 ```java
 new ModuleDescriptor(

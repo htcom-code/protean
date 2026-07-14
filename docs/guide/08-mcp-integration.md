@@ -116,7 +116,7 @@ Example MCP-client (agent) configuration:
 
 ## Tool catalog
 
-All built-in tools use the `protean.` prefix. `tools/list` returns each tool's name, description, input schema, and (when configured) title, output schema, and behavior hints ([Tool-object metadata](#tool-object-metadata-title--outputschema--annotations)). When a consumer registers its own `McpTool` beans, they are exposed alongside (open-core).
+Most built-in tools use the `protean.` prefix; the configuration tools are the exception, using the `config.` prefix (`config.get` / `config.list` / `config.set`). `tools/list` returns each tool's name, description, input schema, and (when configured) title, output schema, and behavior hints ([Tool-object metadata](#tool-object-metadata-title--outputschema--annotations)). When a consumer registers its own `McpTool` beans, they are exposed alongside (open-core).
 
 ### Query tools
 

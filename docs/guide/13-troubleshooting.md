@@ -35,7 +35,7 @@ Common problems with their causes and fixes, plus an FAQ. Each item is grounded 
 
 ## Promotion gate failure
 
-When `install`/`update` is blocked at a gate, the REST response is `422` (`{"error": ...}`).
+When `install`/`update` is blocked at a gate, the REST response is `422` as an RFC 9457 problem detail (`code: "GATE_FAILED"`, plus a `gate` member naming the failed gate).
 
 ### Gate ① — no tests / test failure
 

@@ -16,17 +16,20 @@ Protean 컨트롤 플레인 HTTP API 전체 레퍼런스다. `/platform` 아래 
 ## 공통 사항
 
 - 모든 요청/응답 바디는 JSON(`from-manifest` 만 예외 — YAML 텍스트).
-- 에러 응답은 `{"error": "<메시지>"}` 형태(예외 핸들러가 매핑하는 400/409/422 케이스). 404/400 일부는 Spring 기본 `ResponseStatusException` 응답 포맷을 따른다.
+- 에러 응답은 [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details(`application/problem+json`)다: `{ "type", "title", "status", "detail", "code", ... }`. `code` 는 안정적인 기계 키(아래 [상태코드 매핑](#상태코드-매핑) 참고), `type` 은 `urn:protean:error:<code>` URN 이며, 게이트 실패는 실패한 게이트를 지목하는 `gate` 확장 멤버를 덧붙인다. 요청 스코프 trace id 가 있으면 `traceId` 로 함께 실린다.
 
 ### 상태코드 매핑
 
-| 예외 | 상태코드 | 상황 |
+모든 에러는 `ProteanException`(안정적인 `ErrorCode` 를 지니며 그 `httpStatus` 가 응답 코드를 정함)을 거치거나, 아래 두 폴백 핸들러 중 하나로 처리된다.
+
+| 예외 (code) | 상태코드 | 상황 |
 |---|---|---|
-| `GateFailedException` | `422 Unprocessable Entity` | 승격 게이트 ①(테스트)·②(리뷰) 거부 |
-| `IllegalStateException` | `409 Conflict` | 격리 모드 미지원/알 수 없는 모드/상태 충돌 |
-| `IllegalArgumentException` | `400 Bad Request` | 잘못된 매니페스트/입력(필수 필드 누락 등) |
-| `ResponseStatusException(NOT_FOUND)` | `404 Not Found` | 대상 모듈 없음 |
-| `ResponseStatusException(BAD_REQUEST)` | `400 Bad Request` | 경로 id ↔ 본문 id 불일치, reload 비-리소스 파일 |
+| `GateFailedException` (`GATE_FAILED`) | `422 Unprocessable Entity` | 모든 승격 게이트 거부(signature / tests / review / verification / shared-lib-signature) |
+| `CompilationException` (`COMPILATION_FAILED`) | `422 Unprocessable Entity` | 모듈/테스트 소스 컴파일 실패 |
+| `ProteanException` (`MODULE_NOT_FOUND` / `SHARED_LIB_NOT_FOUND`) | `404 Not Found` | 대상 모듈/공유 lib 없음 |
+| `ProteanException` (`INVALID_ARGUMENT`) | `400 Bad Request` | 경로 id ↔ 본문 id 불일치, reload 비-리소스 파일 |
+| `IllegalArgumentException` (`INVALID_ARGUMENT`) | `400 Bad Request` | 잘못된 매니페스트/입력(필수 필드 누락 등) |
+| `IllegalStateException` (`STATE_CONFLICT`) | `409 Conflict` | 격리 모드 미지원/알 수 없는 모드/상태 충돌 |
 
 ---
 
@@ -378,7 +381,7 @@ data: {"seq":13,"method":"GET","uri":"/cp/ping","status":200,"latencyMs":2,"modu
 - 요청 본문: 키 → 새 값 매핑 JSON 객체
 - 응답 `200`: 커밋 시 `ApplyResult`
 - 응답 `400`: 중단 시(알 수 없는/유효하지 않은 키) `ApplyResult`, 미적용
-- `ApplyResult`: `{ "applied": <bool>, "outcomes": [ { "key", "tier", "outcome", "reason" } ] }`. `outcome` 은 `APPLIED_LIVE`, `APPLIED_FUTURE`, `REJECTED_UNKNOWN`, `REJECTED_INVALID` 중 하나.
+- `ApplyResult`: `{ "applied": <bool>, "outcomes": [ { "key", "tier", "outcome", "reason" } ] }`. `outcome` 은 `APPLIED_LIVE`, `APPLIED_FUTURE`, `REQUIRES_RESTART`, `REJECTED_UNKNOWN`, `REJECTED_INVALID`, `NOT_APPLIED_BATCH_ABORTED` 중 하나.
 
 ```json
 {

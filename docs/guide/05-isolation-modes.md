@@ -33,7 +33,7 @@ protean:
     mode: worker   # in-process | worker | container
 ```
 
-An individual module can override the global default with `ModuleDescriptor.isolationMode` (`"in-process"` | `"worker"`; `null` follows the global default).
+An individual module can override the global default with `ModuleDescriptor.isolationMode` (`"in-process"` | `"worker"` | `"container"`; `null` follows the global default).
 
 ```java
 new ModuleDescriptor(

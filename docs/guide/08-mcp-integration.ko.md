@@ -116,7 +116,7 @@ MCP 클라이언트(에이전트) 설정 예:
 
 ## 툴 카탈로그
 
-기본 툴은 모두 `protean.` 접두사를 쓴다. `tools/list` 가 각 툴의 이름·설명·입력 스키마와 (설정된 경우) 표시명·출력 스키마·동작 힌트를 반환한다([툴 객체 메타데이터](#툴-객체-메타데이터-title--outputschema--annotations)). 소비자가 자기 `McpTool` 빈을 등록하면 함께 노출된다(열린 코어).
+기본 툴은 대부분 `protean.` 접두사를 쓴다. 예외는 설정 툴로, `config.` 접두사를 쓴다(`config.get` / `config.list` / `config.set`). `tools/list` 가 각 툴의 이름·설명·입력 스키마와 (설정된 경우) 표시명·출력 스키마·동작 힌트를 반환한다([툴 객체 메타데이터](#툴-객체-메타데이터-title--outputschema--annotations)). 소비자가 자기 `McpTool` 빈을 등록하면 함께 노출된다(열린 코어).
 
 ### 조회 툴
 
