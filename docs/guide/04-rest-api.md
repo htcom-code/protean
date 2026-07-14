@@ -51,12 +51,29 @@ List of ACTIVE module statuses.
     "controllerFqcn": "runtime.cp.CpController",
     "mode": "in-process",
     "needsSharedBeans": false,
-    "bridgedInterfaces": null
+    "bridgedInterfaces": null,
+    "kind": "NORMAL",
+    "exports": [],
+    "uses": [],
+    "boundGeneration": 3,
+    "boundLibraryGenerations": [],
+    "libraryGeneration": null
   }
 ]
 ```
 
-`ModuleStatus` fields: `id`, `version`, `trustTier` (`TRUSTED`|`UNTRUSTED`), `desiredState` (`ACTIVE`|`INACTIVE`|`PENDING_APPROVAL`), `controllerFqcn`, `mode` (the actually applied isolation mode), `needsSharedBeans`, `bridgedInterfaces`. Heavy fields such as source/test/verification plan are excluded from the response.
+`ModuleStatus` fields: `id`, `version`, `trustTier` (`TRUSTED`|`UNTRUSTED`), `desiredState` (`ACTIVE`|`INACTIVE`|`PENDING_APPROVAL`), `controllerFqcn`, `mode` (the actually applied isolation mode), `needsSharedBeans`, `bridgedInterfaces`, and the shared-module typed-sharing / generation fields below. Heavy fields such as source/test/verification plan are excluded from the response.
+
+| Field | Meaning |
+|---|---|
+| `kind` | `NORMAL` \| `LIBRARY` — echoes the descriptor (always present). A `LIBRARY` registers no routes; it publishes `exports` as a parent-tier generation |
+| `exports` | Packages this module publishes as shared types (non-empty only for a `LIBRARY`) |
+| `uses` | Ids of the `LIBRARY` modules whose exported types this module links against |
+| `boundGeneration` | The shared-lib (native-jar) generation id the live ClassLoader is bound to (`null` when not loaded) |
+| `boundLibraryGenerations` | The library-generation ids this module is actually bound to via `uses` (can lag a library's current generation under a sticky fallback; empty when none/not loaded) |
+| `libraryGeneration` | For a `LIBRARY` only: the id of its own currently-published generation (`null` otherwise) |
+
+`kind`/`exports`/`uses` echo the descriptor and are always present. `boundGeneration`/`boundLibraryGenerations`/`libraryGeneration` are live runtime-observability fields: populated on `GET /platform/modules` and `GET /platform/modules/{id}`, but `null`/empty on deploy/update/rollback/approve responses (which report the descriptor before it is loaded). See [02. Module Authoring §8](02-module-authoring.md#8-library-modules-shared-module-typed-sharing) for the typed-sharing model.
 
 ### GET `/platform/modules/{id}`
 
@@ -116,6 +133,10 @@ Key `ModuleDescriptor` fields:
 | `bridgedInterfaces` | FQCNs of interfaces the worker mode calls over RPC (`null`/empty = none) |
 | `signerKeyId`, `signature` | For the signature gate (`null` = unsigned) |
 | `resources` | `classpath path → ModuleResource` (mapper XML, etc.; `null` = none) |
+| `kind` | Deployment kind — `NORMAL` \| `LIBRARY` (`null` = `NORMAL`). A `LIBRARY` registers no routes; it publishes `exports` as a parent-tier generation. See [02. Module Authoring §8](02-module-authoring.md#8-library-modules-shared-module-typed-sharing) |
+| `exports` | Packages exposed as shared types when `kind == LIBRARY` (ignored otherwise). Consumer-authored → part of the signing target. `null` = none |
+| `uses` | Ids of the `LIBRARY` modules this module compiles/links against. Consumer-authored → part of the signing target. `null` = none |
+| `usedSharedLibs` | `{name, sha256}` of the native shared-lib jars this compile actually opened. **Server-observed** (not author-set, excluded from the signing target) — drives precise shared-lib invalidation. `null` = none |
 
 Supplying `verification` (`VerificationPlan`) makes gate ③ verify the live endpoint. Each item is skipped if `null`.
 
@@ -428,6 +449,8 @@ Upload a bundle of jars as one new generation. Content type `multipart/form-data
 - File parts: `file` (repeated) — one per jar
 - Response `201`: `SharedLibsView` (the resulting store view)
 - `400`: name/version/file counts do not match, or an optional field is not parallel to `file`
+
+On publishing a new generation, `SharedLibInvalidator` diffs the previous and current generation's jars and — via a jar→module reverse index — eagerly rebinds **only** the ACTIVE modules that reference a changed or removed jar onto the new generation; unaffected modules are left untouched. This is governed by `protean.module.eager-shared-lib-invalidation` (default `true`; see [03. Configuration](03-configuration.md)). If a module's rebind fails it stays on its prior generation (logged loudly, never silently deactivated) — zero-downtime holds either way, since the rebind is attempted before any live swap. See [07. Data Access](07-data-access.md).
 
 ```
 curl -X POST http://localhost:8080/platform/shared-libs \

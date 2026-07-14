@@ -45,6 +45,25 @@ protean:
 - **플랫폼 자신이 쓰는 클래스는 shared-lib 에 두면 안 된다.** 앱 CL 은 이 자식 CL 을 볼 수 없다. 특히 worker DB 프로비저닝(6절)의 admin 접속 드라이버는 플랫폼(앱) 클래스패스에 있어야 한다.
 - 대상은 in-process 모드다. worker 모드도 같은 호스트 FS 를 공유하면 워커 프로세스가 자기 `shared-lib-dir` 로 같은 jar 를 읽는다(`--protean.module.shared-lib-dir` 전달).
 
+## 재시작 없이 라이브 jar 갱신: shared-lib 스토어
+
+위의 `shared-lib-dir` 는 **정적 부팅 시점** seed 로, jar 가 앱 수명 내내 고정이다. 네이티브 jar 를 **런타임에** 추가·교체하려면 shared-lib **스토어**를 쓴다: `POST /platform/shared-libs`(또는 `protean.deploy_shared_lib` MCP 툴)로 업로드한 jar 는 `protean.module.shared-lib-store-dir`(비우면 `${java.io.tmpdir}/protean-shared-libs`)에 영속화되어 seed 위에 얹힌다. 한 **generation** 의 활성 jar 집합은 `seed ∪ store` 이고, 스토어는 재시작을 견딘다(영속 업로드가 ACTIVE 모듈 바인딩 전에 현재 generation 으로 재발행됨).
+
+스토어를 바꾸는 deploy/remove 는 매번 **새 generation** 을 발행한다. deploy 는 `name+version+sha256` 에 대해 멱등이고(일치하는 jar 는 no-op; 모든 jar 가 no-op 인 묶음은 새 generation 을 발행하지 않음), 같은 `name+version` 에 다른 바이트는 좌표 충돌로 거부된다. remove 는 **향후 generation 에만** 영향을 준다 — 사용 중인 generation 은 그 jar 를 유지한다.
+
+### 정밀 무효화
+
+새 generation 발행이 모든 모듈을 무작정 재빌드하지 않는다. jar→module 역인덱스(`SharedLibUsageIndex`, `{name, sha256}` 키라 같은 파일명의 다른 내용이 섞이지 않음)가 어느 ACTIVE 모듈의 컴파일이 실제로 각 jar 를 열었는지 기록한다. generation 변경 시 `SharedLibInvalidator` 가 이전·현재 generation 을 jar 이름/sha 로 diff 하고, 바뀌거나 제거된 jar 를 참조하는 모듈**만** rebind 한다 — 순수 추가는 아무에게도 영향이 없고, 영향 없는 모듈은 그대로 둔다:
+
+- **Plan A** — 모듈을 새 generation 으로 rebind.
+- **Plan B** — rebind 가 실패하면 그 모듈은 이전 generation 에 *sticky* 로 남고 크게 로깅된다; 조용히 비활성화하지 않으며(무중단 위반), sticky 모듈이 물고 있는 한 옛 generation 도 살려둔다.
+
+이는 `protean.module.eager-shared-lib-invalidation`(기본 `true`; [03. 설정](03-configuration.ko.md) 참고)로 제어된다. 끄면 모듈은 다음 재배포 전까지 바인딩된 generation 에 머문다.
+
+이 네이티브-jar 메커니즘은 [02. 모듈 작성 §8](02-module-authoring.ko.md)의 `LIBRARY` 모듈 **라이브 전파**의 거울상이다: 거기선 트리거가 "어느 의존 모듈이 이 라이브러리를 `use` 하나"이고, 여기선 "어느 모듈의 컴파일이 이 jar 를 열었나"(역인덱스)다. 둘은 별개 메커니즘이며 — 네이티브-jar 쪽은 `usedSharedLibs` 로 추적된다.
+
+worker/container 모드에서는 같은 이벤트가 `WorkerSharedLibPropagator` 를 구동해, 전체 스토어 묶음과 바뀐 jar 이름을 각 워커에 push 한다(`POST /__admin/shared-libs`); 각 워커는 이를 자기 seed 위에 병합해 자기 generation 을 재발행하고, 자기 정밀 rebind 대상을 로컬에서 계산한다.
+
 ## 리소스 채널: mapper XML·SQL 등 비-Java 파일 싣기
 
 mapper XML, `persistence.xml`, 마이그레이션 SQL, `.properties`, keystore 처럼 컴파일 대상이 아닌 파일은 **리소스 채널**로 모듈에 실어 보낸다. `ModuleDescriptor.resources` 는 `classpath 경로 → ModuleResource` 맵이고, 각 `ModuleResource` 는 평문 텍스트 또는 base64 바이너리다.

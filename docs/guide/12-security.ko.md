@@ -73,12 +73,24 @@ public class RoleBasedAuthorizer implements ModuleActionAuthorizer {
 
 관리 surface(`/platform/*`, `protean.admin.enabled=true` 기본)는 **기본 무인증**이다. install/update/approve/uninstall 이 모두 여기로 노출되므로, 프로덕션에서는 소비자가 Spring Security 로 이 경로를 반드시 보호해야 한다. 노출이 불필요하면 `protean.admin.enabled=false` 로 컨트롤러 등록 자체를 끈다.
 
+### 워커 관리 플레인 인증 (`/__admin/*`, opt-in)
+
+`worker`/`container` 격리 모드의 각 워커는 자기 컨트롤 플레인을 `/__admin/*` 에 노출한다(deploy/redeploy/undeploy/shared-libs; readiness 폴링용 `/__admin/health` 만 열려 있음). **기본 off** — 메인 관리 surface 와 같은 신뢰 개발자 모델 — 이지만, 특히 **컨테이너 트랙**에서 중요하다. 컨테이너 워커는 내부 포트를 호스트 포트로 게시(`-p 0:8080`, [05. 격리 모드](05-isolation-modes.ko.md) 참고)하므로, 그 호스트 포트에 닿는 네트워크 공격자가 시크릿 없이 deploy/redeploy/undeploy 를 할 수 있게 된다. 심층 방어로 `protean.worker.admin-auth.enabled=true` 로 켠다.
+
+`protean.worker.admin-auth.mode` 로 두 방식 중 선택:
+
+- `hmac`(기본) — 요청마다 timestamp + nonce + body 에 대한 HMAC-SHA256(메인↔워커 RPC 브리지의 `BridgeHmac` 프리미티브 재사용, 자체 토글/시크릿). 시계 오차 창(`protean.worker.admin-auth.hmac-window-ms`, 기본 30000ms) 밖 요청과 재사용된 nonce(워커별 in-memory 추적, 창 만료 시 정리)를 거부한다.
+- `token` — 정적 `Authorization: Bearer <secret>` 토큰.
+
+두 방식 모두 상수시간 비교(`MessageDigest.isEqual`)라 시크릿이 타이밍으로 새지 않는다. 시크릿(`protean.worker.admin-auth.secret`)은 명시적으로 고정(외부 관리)하거나, 비워두면 메인에서 JVM 수명당 한 번 랜덤 256-bit 토큰으로 자동 생성해 spawn 되는 각 워커/컨테이너에 주입한다. 전송 기밀성(TLS)은 범위 밖이다 — 이 플레인은 localhost/호스트 범위로 가정한다. 전체 키 표는 [03. 설정](03-configuration.ko.md) 참고.
+
 ## 프로덕션 배포 권고
 
 - **운영계는 in-process + 신뢰 소스**를 기본으로 두고, MCP 어댑터는 필요할 때만 켠다.
 - 게이트를 **필수화**한다: `protean.gate.signature.required=true`(서명 강제), 필요 시 `protean.gate.approval.required=true`(사람 승인). 테스트·리뷰 게이트는 기본 on 을 유지한다.
 - 관리 REST 와 MCP 표면을 Spring Security 로 인증하고, `ModuleActionAuthorizer` 로 동작별 인가를 강제한다.
 - 서명 개인키는 서버 밖(CI/서명 발급자)에서만 보관하고, 서버에는 trust store 공개키만 둔다.
+- `worker`/`container` 격리 트랙 — 특히 워커 컨트롤 플레인이 게시된 호스트 포트로 닿는 `container` — 에서는 `protean.worker.admin-auth.enabled=true` 를 심층 방어로 켠다.
 
 ## 관련 문서
 

@@ -45,6 +45,25 @@ Two cautions:
 - **Classes the platform itself uses must not go in shared-lib.** The app CL cannot see this child CL. In particular, the admin-connection driver for worker DB provisioning (section 6) must be on the platform (app) classpath.
 - The target is in-process mode. If a worker-mode setup shares the same host FS, the worker process reads the same jars from its own `shared-lib-dir` (`--protean.module.shared-lib-dir` is passed through).
 
+## Live jar updates without a restart: the shared-lib store
+
+`shared-lib-dir` above is a **static, boot-time** seed — its jars are fixed for the app's lifetime. To add or replace a native jar **at runtime**, use the shared-lib **store**: jars uploaded via `POST /platform/shared-libs` (or the `protean.deploy_shared_lib` MCP tool) are persisted under `protean.module.shared-lib-store-dir` (empty = `${java.io.tmpdir}/protean-shared-libs`) and layered on top of the seed. The active jar set of a **generation** is `seed ∪ store`, and the store survives restarts (persisted uploads are republished as the current generation before ACTIVE modules bind).
+
+Each store-changing deploy or remove publishes a **new generation**. A deploy is idempotent on `name+version+sha256` (a matching jar is a no-op; a bundle whose every jar is a no-op publishes no new generation), and the same `name+version` with different bytes is rejected as a coordinate conflict. A remove affects **future generations only** — generations still in use keep the jar.
+
+### Precise invalidation
+
+Publishing a new generation does not blindly rebuild every module. A jar→module reverse index (`SharedLibUsageIndex`, keyed by `{name, sha256}` so different content under the same file name is never conflated) records which ACTIVE modules' compiles actually opened each jar. On a generation change, `SharedLibInvalidator` diffs the previous and current generation by jar name/sha, then rebinds **only** the modules that reference a changed or removed jar — a pure addition affects nobody, and unaffected modules are left untouched:
+
+- **Plan A** — the module is rebound onto the new generation.
+- **Plan B** — if a rebind fails, the module stays *sticky* on its prior generation, logged loudly; it is never silently deactivated (that would break zero-downtime), and the old generation is kept alive as long as a sticky module holds it.
+
+This is governed by `protean.module.eager-shared-lib-invalidation` (default `true`; see [03. Configuration](03-configuration.md)). With it off, modules stay on their bound generation until they are next redeployed.
+
+This native-jar mechanism is the mirror image of the `LIBRARY`-module **Live propagation** in [02. Module Authoring §8](02-module-authoring.md#8-library-modules-shared-module-typed-sharing): there the trigger is "which dependents `use` this library"; here it is "which modules' compile opened this jar" (the reverse index). The two are distinct mechanisms — the native-jar side is tracked by `usedSharedLibs`.
+
+In worker/container modes the same event drives `WorkerSharedLibPropagator`, which pushes the full store bundle plus the changed-jar names to each worker (via `POST /__admin/shared-libs`); each worker merges them over its own seed, republishes its own generation, and computes its own precise rebind set locally.
+
 ## Resource channel: shipping non-Java files such as mapper XML and SQL
 
 Files that are not compilation targets — mapper XML, `persistence.xml`, migration SQL, `.properties`, keystore — are shipped to the module over the **resource channel**. `ModuleDescriptor.resources` is a `classpath path → ModuleResource` map, and each `ModuleResource` is either plain text or base64 binary.

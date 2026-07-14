@@ -51,12 +51,29 @@ ACTIVE 모듈 상태 목록.
     "controllerFqcn": "runtime.cp.CpController",
     "mode": "in-process",
     "needsSharedBeans": false,
-    "bridgedInterfaces": null
+    "bridgedInterfaces": null,
+    "kind": "NORMAL",
+    "exports": [],
+    "uses": [],
+    "boundGeneration": 3,
+    "boundLibraryGenerations": [],
+    "libraryGeneration": null
   }
 ]
 ```
 
-`ModuleStatus` 필드: `id`, `version`, `trustTier`(`TRUSTED`|`UNTRUSTED`), `desiredState`(`ACTIVE`|`INACTIVE`|`PENDING_APPROVAL`), `controllerFqcn`, `mode`(실제 적용 격리 모드), `needsSharedBeans`, `bridgedInterfaces`. 소스/테스트/검증계획 같은 무거운 필드는 응답에서 제외된다.
+`ModuleStatus` 필드: `id`, `version`, `trustTier`(`TRUSTED`|`UNTRUSTED`), `desiredState`(`ACTIVE`|`INACTIVE`|`PENDING_APPROVAL`), `controllerFqcn`, `mode`(실제 적용 격리 모드), `needsSharedBeans`, `bridgedInterfaces`, 그리고 아래의 shared-module 타입 공유 / generation 필드. 소스/테스트/검증계획 같은 무거운 필드는 응답에서 제외된다.
+
+| 필드 | 의미 |
+|---|---|
+| `kind` | `NORMAL` \| `LIBRARY` — descriptor 를 그대로 반영(항상 존재). `LIBRARY` 는 라우트를 등록하지 않고 `exports` 를 parent-tier generation 으로 발행 |
+| `exports` | 이 모듈이 공유 타입으로 발행하는 패키지(`LIBRARY` 일 때만 비어있지 않음) |
+| `uses` | 이 모듈이 링크하는 `LIBRARY` 모듈들의 id |
+| `boundGeneration` | 라이브 ClassLoader 가 바인딩된 shared-lib(네이티브 jar) generation id(로드 안 됐으면 `null`) |
+| `boundLibraryGenerations` | `uses` 를 통해 실제 바인딩된 라이브러리 generation id들(sticky fallback 시 라이브러리 현재 generation 보다 뒤처질 수 있음; 없거나 미로드면 빈 배열) |
+| `libraryGeneration` | `LIBRARY` 전용: 자신이 현재 발행 중인 generation id(그 외 `null`) |
+
+`kind`/`exports`/`uses` 는 descriptor 반영이라 항상 존재한다. `boundGeneration`/`boundLibraryGenerations`/`libraryGeneration` 은 라이브 런타임 관측 필드로, `GET /platform/modules` 와 `GET /platform/modules/{id}` 에서는 채워지지만 deploy/update/rollback/approve 응답(로드 이전의 descriptor 를 보고)에서는 `null`/빈 값이다. 타입 공유 모델은 [02. 모듈 작성 §8](02-module-authoring.ko.md) 참고.
 
 ### GET `/platform/modules/{id}`
 
@@ -116,6 +133,10 @@ ACTIVE 모듈 상태 목록.
 | `bridgedInterfaces` | 워커 모드에서 RPC 로 호출할 인터페이스 FQCN(`null`/빈=없음) |
 | `signerKeyId`, `signature` | 서명 게이트용(`null`=미서명) |
 | `resources` | `classpath 경로 → ModuleResource`(mapper XML 등, `null`=없음) |
+| `kind` | 배포 종류 — `NORMAL` \| `LIBRARY`(`null`=`NORMAL`). `LIBRARY` 는 라우트를 등록하지 않고 `exports` 를 parent-tier generation 으로 발행. [02. 모듈 작성 §8](02-module-authoring.ko.md) 참고 |
+| `exports` | `kind == LIBRARY` 일 때 공유 타입으로 노출할 패키지(그 외 무시). 작성자 지정 → 서명 대상. `null`=없음 |
+| `uses` | 이 모듈이 컴파일/링크하는 `LIBRARY` 모듈들의 id. 작성자 지정 → 서명 대상. `null`=없음 |
+| `usedSharedLibs` | 이 컴파일이 실제 연 네이티브 shared-lib jar 의 `{name, sha256}`. **서버 관측**(작성자 지정 아님, 서명 대상 제외) — 정밀 shared-lib 무효화에 사용. `null`=없음 |
 
 `verification`(`VerificationPlan`)을 넣으면 게이트 ③ 이 살아있는 엔드포인트를 검증한다. 각 항목 `null`이면 건너뛴다.
 
@@ -428,6 +449,8 @@ jar 묶음을 하나의 새 generation 으로 업로드한다. 콘텐츠 타입 
 - 파일 파트: `file`(반복) — jar 당 하나
 - 응답 `201`: `SharedLibsView`(결과 스토어 뷰)
 - `400`: name/version/file 개수 불일치, 또는 선택 필드가 `file` 과 평행하지 않음
+
+새 generation 을 발행하면 `SharedLibInvalidator` 가 이전·현재 generation 의 jar 를 diff 하고 — jar→module 역인덱스를 통해 — 바뀌거나 제거된 jar 를 참조하는 ACTIVE 모듈**만** 새 generation 으로 즉시 rebind 한다; 영향 없는 모듈은 그대로 둔다. 이는 `protean.module.eager-shared-lib-invalidation`(기본 `true`; [03. 설정](03-configuration.ko.md) 참고)로 제어된다. 어떤 모듈의 rebind 가 실패하면 그 모듈은 이전 generation 에 머무르며(크게 로깅, 조용히 비활성화하지 않음) — rebind 는 라이브 스왑 이전에 시도되므로 어느 쪽이든 무중단이 유지된다. [07. 데이터 접근](07-data-access.ko.md) 참고.
 
 ```
 curl -X POST http://localhost:8080/platform/shared-libs \

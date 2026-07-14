@@ -125,6 +125,7 @@ Most built-in tools use the `protean.` prefix; the configuration tools are the e
 | `protean.list_modules` | all optional: `query`·`mode`·`trustTier`·`limit`·`cursor` | Status list of deployed (ACTIVE) modules (id·version·state·isolation mode). Called with no arguments, returns all. See [below](#list_modules-search--paging) for search & paging |
 | `protean.get_module` | `id` (required) | Look up a single module's status by id |
 | `protean.module_versions` | `id` (required) | Version history (newest-first, for identifying a rollback target) |
+| `protean.get_module_source` | `id` (required)·`className`·`version`·`includeTests` | Read a deployed module's stored source (FQCN→text) — one class or the full map, a history `version`, optionally merging test sources |
 
 #### `list_modules` search & paging
 
@@ -149,6 +150,15 @@ When there are many modules, browsing the list by id is hard, so `list_modules` 
 // next page: add "cursor":"Mg" to arguments
 ```
 
+### Observability tools
+
+Incident-triage read tools over the [request-trace ring buffer](11-operations.md) and the per-module metrics aggregator. Both are read-only. `protean.module_metrics` requires `protean.trace.metrics.enabled`; when it is off the tool still succeeds, returning `enabled: false` and an empty list (so an agent can detect the toggle rather than getting an error).
+
+| Tool name | Input | Purpose |
+|---|---|---|
+| `protean.query_traces` | all optional: `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` | Recent request traces, newest-first (filters AND-combine). `limit` default 50, max 500; `beforeSeq` is a cursor paging into the past. Same filters as `GET /platform/traces` |
+| `protean.module_metrics` | `moduleId` (optional) | Per-module request metrics (count, error rate, latency p50/p95/p99, max, last-seen). All tracked modules if omitted |
+
 ### Deploy & modify tools
 
 | Tool name | Input | Purpose |
@@ -170,6 +180,29 @@ When the approval gate (`protean.gate.approval.required=true`) is on, a module t
 | `protean.reject_module` | `id` (required)·`approver` (required) | Reject a pending module and remove it |
 
 For the promotion gates overall, see [06. Promotion Gates](06-promotion-gates.md).
+
+### Configuration tools
+
+Live control-plane configuration over MCP — the tool-call analog of the [config REST API](04-rest-api.md). These are the only built-in tools **not** under the `protean.` prefix.
+
+| Tool name | Input | Purpose |
+|---|---|---|
+| `config.list` | (none) | Every known `protean.*` key with its current value, mutability tier, and `liveApplicable` |
+| `config.get` | `key` (required) | One key's value, tier, and `liveApplicable` (the `protean.` prefix is optional) |
+| `config.set` | `changes` (required) | Apply a `{key: value}` batch atomically — an unknown/invalid key aborts the whole batch (nothing applied). LIVE keys apply now, FUTURE keys to instances created afterward, restart-tier keys report `REQUIRES_RESTART` without being applied |
+
+For the tier model and per-key semantics, see [03. Configuration](03-configuration.md).
+
+### Shared-lib tools
+
+Manage the live native-jar [shared-lib store](07-data-access.md) — the MCP analog of the `/platform/shared-libs` [REST endpoints](04-rest-api.md). A deploy or remove publishes a new parent-tier generation; for large jars prefer the REST multipart endpoint.
+
+| Tool name | Input | Purpose |
+|---|---|---|
+| `protean.list_shared_libs` | (none) | The current parent-tier generation id and every stored lib |
+| `protean.get_shared_lib` | `name` (required) | One stored lib's metadata (version, sha256, size, signer) |
+| `protean.deploy_shared_lib` | `name`·`version`·`bytesBase64` (required); `signerKeyId`·`signature` (optional) | Upload a Base64 jar and publish a new generation. Runs the [shared-lib signature gate](06-promotion-gates.md#shared-lib-signature-gate) |
+| `protean.remove_shared_lib` | `name` (required) | Drop a lib from future generations (in-use generations keep it) |
 
 ### Deploy input formats — `files[]` and `manifest`
 
@@ -203,6 +236,8 @@ For the promotion gates overall, see [06. Promotion Gates](06-promotion-gates.md
 
 `isolationMode` is `in-process` | `worker` | `container` — see [05. Isolation Modes](05-isolation-modes.md).
 
+To deploy a **LIBRARY** module (shared-module typed sharing) instead of a normal one, add `kind: "LIBRARY"` and `exports` (the packages to publish) at the top level and omit `controller`; a module that consumes a library adds `uses` (the library module ids). These sit alongside `id`/`version`, the same as `controller`. See [02. Module Authoring §8](02-module-authoring.md).
+
 Domain failures such as a gate rejection or compile failure are not mapped to a JSON-RPC error but to a tool result with `isError: true` (+ diagnostic text). Only protocol-level errors (unknown tool, missing required argument, etc.) go out as JSON-RPC errors.
 
 ## Authentication & authorization
@@ -210,7 +245,7 @@ Domain failures such as a gate rejection or compile failure are not mapped to a 
 **The library implements no authentication.** It splits into two axes.
 
 - **Authentication (who)**: the consumer's Spring Security responsibility. The `Principal` of a request arriving at `POST /platform/mcp` is passed straight through as the authorization context (`McpCallContext.caller`). With no security it is `null`. stdio is a **local trust boundary**, so the spawning subject is the authorization subject and `caller=null` always.
-- **Authorization (what can be done)**: the `ModuleActionAuthorizer` SPI. Every tool call (core tools + consumer custom tools) passes through this single choke point. Each tool is classified with a `ModuleAction` (`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`), so policy can branch per action.
+- **Authorization (what can be done)**: the `ModuleActionAuthorizer` SPI. Every tool call (core tools + consumer custom tools) passes through this single choke point. Each tool is classified with a `ModuleAction` (`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`), so policy can branch per action. Note that the configuration and shared-lib write tools (`config.set`, `protean.deploy_shared_lib`, `protean.remove_shared_lib`) are classified `CUSTOM` — a policy that must gate them branches on tool name within the `CUSTOM` case (they are not `DEPLOY`/`DELETE`).
 
 The default implementation is `PermissiveModuleActionAuthorizer` (allow everything). When a consumer registers a `ModuleActionAuthorizer` bean, `@ConditionalOnMissingBean` replaces the default.
 

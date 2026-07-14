@@ -113,6 +113,12 @@ protean:
 
 모듈당 전용 격리 DB 를 자동 프로비저닝하려면 `protean.worker.db.auto-provision=true`. 이때는 격리 보장을 위해 워커당 1모듈(`capacity=1`)·워밍 재사용 없음(`min-warm=0`)으로 강제되며, 프로비저닝된 스코프 creds 로 전용 워커를 띄운다. 벤더별 프로비저닝은 [07. 데이터 접근](07-data-access.ko.md), dialect 확장은 [10. SPI 확장](10-spi-extension.ko.md).
 
+### 격리 모드 간 타입 공유(LIBRARY 모듈)
+
+`LIBRARY` 모듈의 타입 공유(`uses`/`exports`, [02. 모듈 작성 §8](02-module-authoring.ko.md) 참고)는 in-process 뿐 아니라 세 격리 모드 모두에서 동작한다. 워커는 그 자체가 Protean 앱이다: 메인이 의존 모듈의 `uses` 폐포(라이브러리 descriptor 와 소스)를 워커에 push 하면, 워커는 그 라이브러리들을 **자기 `SharedModuleRegistry` 에 독립적으로 컴파일·발행**하고 의존 모듈을 그에 링크한다 — 바이트를 중계하는 게 아니라 공유 타입 정체성을 로컬에서 재도출한다. (`SharedModuleRegistry` 가 `worker` 를 포함한 모든 프로파일에 존재하는 이유가 바로 이것이다; eager 전파 빈 `SharedModuleInvalidator`/`SharedModuleUsageIndex` 는 메인 전용이다 — 메인이 워커 rebind 를 구동하므로.)
+
+라이브러리 업데이트 시 메인 쪽 `WorkerSharedModulePropagator` 가 반응해(스토어 커밋 이후라 새 소스가 준비됨), 라이브러리를 호스팅하는 각 워커에 `POST /__admin/redeploy` 로 그 라이브러리를 재발행하고, 이어서 그것을 transitively `uses` 하는 같은 워커의 각 의존 모듈에 `POST /__admin/redeploy`(새 generation 에 재컴파일)한다. 이는 범용 모듈 redeploy 엔드포인트를 재사용한다 — 자체 `POST /__admin/shared-libs` push 를 갖는 네이티브 shared-lib jar([07. 데이터 접근](07-data-access.ko.md) 참고)와 다르다. `protean.module.eager-shared-module-invalidation`(기본 `true`)로 제어된다. 컨테이너 트랙도 같은 `WorkerParentTierTarget` 계약으로 동일 프로토콜을 따른다.
+
 ## container (Docker 컨테이너 워커)
 
 `ContainerWorkerIsolation` 이 워커를 Docker 컨테이너로 띄워 cgroup·read-only·cap-drop·seccomp 로 가둔다. 워커 프로세스만으론 못 막는 호스트 자원·파일·시스템콜 침해를 OS 레벨에서 차단하는 미신뢰 tier 기준선이다. 풀은 두지 않는다 — "모듈당 1컨테이너"가 OS 격리의 본질이라 패킹은 격리를 약화한다. RPC 브리지는 미지원(`supports()` 가 `needsSharedBeans` 모듈을 거부).

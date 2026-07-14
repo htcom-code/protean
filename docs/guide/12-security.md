@@ -73,12 +73,24 @@ For the SPI implementation details see [10. SPI Extension](10-spi-extension.md);
 
 The admin surface (`/platform/*`, `protean.admin.enabled=true` by default) is **unauthenticated by default**. Since install/update/approve/uninstall are all exposed here, in production the consumer must protect these paths with Spring Security. If the exposure is unnecessary, set `protean.admin.enabled=false` to turn off controller registration entirely.
 
+### Worker admin-plane authentication (`/__admin/*`, opt-in)
+
+Each `worker`/`container` isolation-mode worker exposes its own control plane at `/__admin/*` (deploy/redeploy/undeploy/shared-libs; only `/__admin/health` stays open, for readiness polling). It is **off by default** — same trusted-developer model as the main admin surface — but matters especially for the **container track**, whose worker publishes its internal port to a host port (`-p 0:8080`, see [05. Isolation Modes](05-isolation-modes.md)): a network-reachable attacker who reaches that host port could otherwise deploy/redeploy/undeploy without holding any secret. Turn it on with `protean.worker.admin-auth.enabled=true` as defense-in-depth.
+
+Two schemes, selected by `protean.worker.admin-auth.mode`:
+
+- `hmac` (default) — per-request HMAC-SHA256 over timestamp + nonce + body (reuses the `BridgeHmac` primitive from the main↔worker RPC bridge, on its own toggle/secret). Rejects requests outside the clock-skew window (`protean.worker.admin-auth.hmac-window-ms`, default 30000ms) and rejects a replayed nonce (tracked in-memory per worker, pruned as the window expires).
+- `token` — a static `Authorization: Bearer <secret>` token.
+
+Both modes compare in constant time (`MessageDigest.isEqual`), so the secret cannot leak via timing. The secret (`protean.worker.admin-auth.secret`) is either pinned explicitly (externally managed) or, left blank, auto-generated as a random 256-bit token once per JVM lifetime on the main and injected into each spawned worker/container at launch. Transport confidentiality (TLS) is out of scope — the plane is assumed localhost/host-scoped. See [03. Configuration](03-configuration.md) for the full key table.
+
 ## Production deployment recommendations
 
 - **Keep production on in-process + trusted source** by default, and turn on the MCP adapter only when needed.
 - **Make gates mandatory**: `protean.gate.signature.required=true` (enforce signing), and if needed `protean.gate.approval.required=true` (human approval). Keep the tests and review gates at their default on.
 - Authenticate the admin REST and MCP surfaces with Spring Security, and enforce per-action authorization with `ModuleActionAuthorizer`.
 - Keep the signing private key only outside the server (in CI / the signing issuer), and keep only the trust store public key on the server.
+- For the `worker`/`container` isolation tracks — chiefly `container`, whose worker control plane is reachable via a published host port — turn on `protean.worker.admin-auth.enabled=true` as defense-in-depth.
 
 ## Related docs
 

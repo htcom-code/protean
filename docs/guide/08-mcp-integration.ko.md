@@ -125,6 +125,7 @@ MCP 클라이언트(에이전트) 설정 예:
 | `protean.list_modules` | 모두 선택: `query`·`mode`·`trustTier`·`limit`·`cursor` | 배포된(ACTIVE) 모듈 상태 목록(id·version·상태·격리모드). 인자 없이 부르면 전량. 검색·페이징은 [아래](#list_modules-검색·페이징) 참고 |
 | `protean.get_module` | `id`(필수) | id 로 단일 모듈 상태 조회 |
 | `protean.module_versions` | `id`(필수) | 버전 히스토리(최신순, 롤백 대상 확인용) |
+| `protean.get_module_source` | `id`(필수)·`className`·`version`·`includeTests` | 배포된 모듈의 저장 소스 조회(FQCN→텍스트) — 한 클래스 또는 전체 맵, 히스토리 `version`, 선택적으로 테스트 소스 병합 |
 
 #### `list_modules` 검색·페이징
 
@@ -149,6 +150,15 @@ MCP 클라이언트(에이전트) 설정 예:
 // 다음 페이지: arguments 에 "cursor":"Mg" 추가
 ```
 
+### 관측 툴
+
+[요청 트레이스 링버퍼](11-operations.ko.md)와 모듈별 메트릭 집계 위의 인시던트 트리아지 조회 툴. 둘 다 read-only. `protean.module_metrics` 는 `protean.trace.metrics.enabled` 가 필요하며, 꺼져 있으면 오류 대신 `enabled: false` 와 빈 목록을 반환해 성공한다(에이전트가 토글 상태를 오류 없이 감지할 수 있게).
+
+| 툴 이름 | 입력 | 용도 |
+|---|---|---|
+| `protean.query_traces` | 모두 선택: `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` | 최근 요청 트레이스(최신순, 필터 AND 결합). `limit` 기본 50·최대 500; `beforeSeq` 는 과거로 페이징하는 커서. `GET /platform/traces` 와 동일 필터 |
+| `protean.module_metrics` | `moduleId`(선택) | 모듈별 요청 메트릭(건수·에러율·지연 p50/p95/p99·최댓값·마지막 관측). 생략 시 추적 중인 전 모듈 |
+
 ### 배포·수정 툴
 
 | 툴 이름 | 입력 | 용도 |
@@ -170,6 +180,29 @@ MCP 클라이언트(에이전트) 설정 예:
 | `protean.reject_module` | `id`(필수)·`approver`(필수) | 승인 대기 모듈을 거부해 제거 |
 
 승격 게이트 전반은 [06. 승격 게이트](06-promotion-gates.ko.md) 참고.
+
+### 설정 툴
+
+MCP 로 하는 라이브 컨트롤 플레인 설정 — [설정 REST API](04-rest-api.ko.md)의 툴 호출 대응물. 기본 툴 중 유일하게 `protean.` 접두사가 **없는** 툴들이다.
+
+| 툴 이름 | 입력 | 용도 |
+|---|---|---|
+| `config.list` | (없음) | 알려진 모든 `protean.*` 키와 현재 값·변경 tier·`liveApplicable` |
+| `config.get` | `key`(필수) | 한 키의 값·tier·`liveApplicable`(`protean.` 접두사는 생략 가능) |
+| `config.set` | `changes`(필수) | `{key: value}` 배치를 원자적으로 적용 — 알 수 없는/유효하지 않은 키 하나라도 있으면 배치 전체 중단(아무것도 미적용). LIVE 키는 즉시, FUTURE 키는 이후 생성 인스턴스에, restart-tier 키는 미적용 상태로 `REQUIRES_RESTART` 보고 |
+
+tier 모델과 키별 의미는 [03. 설정](03-configuration.ko.md) 참고.
+
+### 공유 라이브러리 툴
+
+라이브 네이티브 jar [shared-lib 스토어](07-data-access.ko.md) 관리 — `/platform/shared-libs` [REST 엔드포인트](04-rest-api.ko.md)의 MCP 대응물. deploy/remove 는 새 parent-tier 세대를 발행한다; 큰 jar 는 REST multipart 엔드포인트를 권장.
+
+| 툴 이름 | 입력 | 용도 |
+|---|---|---|
+| `protean.list_shared_libs` | (없음) | 현재 parent-tier 세대 id 와 저장된 모든 lib |
+| `protean.get_shared_lib` | `name`(필수) | 저장된 lib 하나의 메타데이터(version·sha256·size·signer) |
+| `protean.deploy_shared_lib` | `name`·`version`·`bytesBase64`(필수); `signerKeyId`·`signature`(선택) | Base64 jar 업로드 후 새 세대 발행. [shared-lib 서명 게이트](06-promotion-gates.ko.md) 를 거침 |
+| `protean.remove_shared_lib` | `name`(필수) | 향후 세대에서 lib 제거(사용 중인 세대는 유지) |
 
 ### 배포 입력 형식 — `files[]` 와 `manifest`
 
@@ -203,6 +236,8 @@ MCP 클라이언트(에이전트) 설정 예:
 
 `isolationMode` 는 `in-process` | `worker` | `container` — [05. 격리 모드](05-isolation-modes.ko.md) 참고.
 
+일반 모듈 대신 **LIBRARY** 모듈(shared-module 타입 공유)을 배포하려면 top-level 에 `kind: "LIBRARY"` 와 `exports`(발행할 패키지)를 주고 `controller` 는 생략한다; 라이브러리를 소비하는 모듈은 `uses`(라이브러리 모듈 id)를 추가한다. `controller` 처럼 `id`/`version` 과 같은 레벨에 둔다. [02. 모듈 작성 §8](02-module-authoring.ko.md) 참고.
+
 게이트 거부·컴파일 실패 같은 도메인 실패는 JSON-RPC error 가 아니라 tool result 의 `isError: true`(+진단 텍스트)로 매핑된다. 프로토콜 수준 오류(알 수 없는 툴·필수 인자 누락 등)만 JSON-RPC error 로 나간다.
 
 ## 인증·인가
@@ -210,7 +245,7 @@ MCP 클라이언트(에이전트) 설정 예:
 **라이브러리는 인증을 구현하지 않는다.** 두 축으로 나뉜다.
 
 - **인증(누구인가)**: 소비자의 Spring Security 몫. `POST /platform/mcp` 로 들어온 요청의 `Principal` 을 그대로 인가 컨텍스트(`McpCallContext.caller`)로 흘려보낸다. 무보안이면 `null`. stdio 는 **로컬 신뢰 경계**라 spawn 주체가 곧 인가 주체이므로 항상 `caller=null` 이다.
-- **인가(무엇을 할 수 있나)**: `ModuleActionAuthorizer` SPI. 모든 툴 호출(코어 툴 + 소비자 커스텀 툴)이 이 하나의 choke point 를 거친다. 툴마다 `ModuleAction`(`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`)이 분류되어 있어, 동작별로 정책을 분기할 수 있다.
+- **인가(무엇을 할 수 있나)**: `ModuleActionAuthorizer` SPI. 모든 툴 호출(코어 툴 + 소비자 커스텀 툴)이 이 하나의 choke point 를 거친다. 툴마다 `ModuleAction`(`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`)이 분류되어 있어, 동작별로 정책을 분기할 수 있다. 단, 설정·shared-lib 쓰기 툴(`config.set`·`protean.deploy_shared_lib`·`protean.remove_shared_lib`)은 `CUSTOM` 으로 분류된다 — 이들을 가둬야 하는 정책은 `CUSTOM` 케이스 안에서 툴 이름으로 분기한다(`DEPLOY`/`DELETE` 가 아니다).
 
 기본 구현은 `PermissiveModuleActionAuthorizer`(전부 allow)다. 소비자가 `ModuleActionAuthorizer` 빈을 등록하면 `@ConditionalOnMissingBean` 으로 기본이 대체된다.
 
