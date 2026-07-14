@@ -6,6 +6,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Spring Boot 3.5.x is the supported baseline (see ROADMAP → Platform compatibility).
+      # 4.x is a deliberate migration track, not an automated bump — keep receiving 3.5.x
+      # patches/minors, but do not propose major jumps.
+      - dependency-name: "org.springframework.boot"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions used in .github/workflows/.
   - package-ecosystem: github-actions
