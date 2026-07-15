@@ -15,10 +15,14 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.dynamic.DynamicEndpointRegistrar;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModulePlatform;
+import org.htcom.protean.proxy.ReverseProxy;
 import org.htcom.protean.runtime.TraceStore;
 import org.htcom.protean.web.ModuleStatus;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * MCP resources (read-only exposure) — lets an agent inspect state before and after deployment:
@@ -32,13 +36,15 @@ public class McpResources {
     private final ModulePlatform platform;
     private final TraceStore traceStore;
     private final DynamicEndpointRegistrar registrar;
+    private final ReverseProxy reverseProxy;
 
     public McpResources(ObjectMapper mapper, ModulePlatform platform, TraceStore traceStore,
-                        DynamicEndpointRegistrar registrar) {
+                        DynamicEndpointRegistrar registrar, ReverseProxy reverseProxy) {
         this.mapper = mapper;
         this.platform = platform;
         this.traceStore = traceStore;
         this.registrar = registrar;
+        this.reverseProxy = reverseProxy;
     }
 
     /** resources/list — the two fixed resources (module list and traces). Per-module source/versions are read via the URI convention. */
@@ -105,8 +111,11 @@ public class McpResources {
 
     private Object resolve(String uri) {
         if (uri.equals("protean://modules")) {
+            // Full status including generation bindings, matching the REST /platform/modules list and the
+            // list_modules tool (the 2-arg form left boundGeneration/boundLibraryGenerations/libraryGeneration null).
             return platform.list().stream()
-                    .map(d -> ModuleStatus.from(d, platform.effectiveMode(d)))
+                    .map(d -> ModuleStatus.from(d, platform.effectiveMode(d), platform.boundGeneration(d.id()),
+                            platform.boundLibraryGenerations(d.id()), platform.libraryGeneration(d.id())))
                     .toList();
         }
         if (uri.equals("protean://traces")) {
@@ -132,8 +141,17 @@ public class McpResources {
                     if (platform.find(id).isEmpty()) {
                         throw McpException.invalidParams("module not found: " + id);
                     }
-                    // The module exists but has no routes (registration failed or none registered): an empty list is itself a diagnostic signal.
-                    return registrar.routesOf(id);
+                    // Aggregate across isolation modes, mirroring REST GET /platform/modules/{id}/routes: in-process
+                    // routes (HTTP methods + path patterns) come from the registrar, while worker/container routes are
+                    // served through the ReverseProxy, which does not track the forwarded method (GET-only PoC), so
+                    // their methods set is empty. A module is served by exactly one of the two, so no de-duplication is
+                    // needed. An empty list means none were registered (for example, a compile failure) — itself a
+                    // diagnostic signal. Reading only the registrar would drop every worker/container module's routes.
+                    List<DynamicEndpointRegistrar.RouteInfo> routes = new ArrayList<>(registrar.routesOf(id));
+                    for (String path : reverseProxy.pathsForModule(id)) {
+                        routes.add(new DynamicEndpointRegistrar.RouteInfo(Set.of(), List.of(path)));
+                    }
+                    return routes;
                 }
             }
         }
