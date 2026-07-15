@@ -11,6 +11,7 @@ package org.htcom.protean.isolation;
 import org.htcom.protean.autoconfigure.ProteanProperties;
 import org.htcom.protean.db.DbScope;
 import org.htcom.protean.db.DbScopeProvisioner;
+import org.htcom.protean.dynamic.DynamicEndpointRegistrar.RouteInfo;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.SharedLibStore;
 import org.htcom.protean.proxy.ReverseProxy;
@@ -78,16 +79,24 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     private static final class Container {
         final String name;
         final int hostPort;
+        /** Registered routes (HTTP method set + patterns) reported by the container worker. */
+        final List<RouteInfo> routes;
+        /** Path patterns flattened from {@link #routes}, for repoint/unregister bookkeeping. */
         final List<String> paths;
         final ModuleDescriptor descriptor;
         /** Library-module ids published into this container's parent tier (the module's {@code uses} closure). */
         final Set<String> libraries = ConcurrentHashMap.newKeySet();
         volatile boolean retiring;
 
-        Container(String name, int hostPort, List<String> paths, ModuleDescriptor descriptor) {
+        Container(String name, int hostPort, List<RouteInfo> routes, ModuleDescriptor descriptor) {
             this.name = name;
             this.hostPort = hostPort;
-            this.paths = paths;
+            this.routes = routes;
+            List<String> flat = new ArrayList<>();
+            for (RouteInfo r : routes) {
+                flat.addAll(r.patterns());
+            }
+            this.paths = flat;
             this.descriptor = descriptor;
         }
     }
@@ -163,8 +172,10 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             moduleScopes.computeIfAbsent(descriptor.id(), provisioner::provision);
         }
         Container c = startContainer(descriptor);
-        for (String path : c.paths) {
-            proxy.register(path, c.hostPort, descriptor.id());
+        for (RouteInfo route : c.routes) {
+            for (String path : route.patterns()) {
+                proxy.register(path, route.methods(), c.hostPort, descriptor.id());
+            }
         }
         containers.put(descriptor.id(), c);
         startWatcher(c);
@@ -184,8 +195,10 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             return;
         }
         Container fresh = startContainer(descriptor);
-        for (String path : fresh.paths) {
-            proxy.repoint(path, fresh.hostPort);  // keep the route, switch to the new port immediately
+        for (RouteInfo route : fresh.routes) {
+            for (String path : route.patterns()) {
+                proxy.repoint(path, route.methods(), fresh.hostPort);  // atomic switch + refresh methods (version may change them)
+            }
         }
         containers.put(descriptor.id(), fresh);
         startWatcher(fresh);
@@ -450,8 +463,8 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
                 admin.deploy(hostPort, library);   // publishes the library generation inside the container (no routes)
                 libraryIds.add(library.id());
             }
-            List<String> paths = deployToWorker(hostPort, descriptor);
-            Container container = new Container(name, hostPort, paths, descriptor);
+            List<RouteInfo> routes = deployToWorker(hostPort, descriptor);
+            Container container = new Container(name, hostPort, routes, descriptor);
             container.libraries.addAll(libraryIds);
             return container;
         } catch (RuntimeException e) {
@@ -500,8 +513,10 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         log.warn("container crash detected: {} (port {}) — restarting", dead.name, dead.hostPort);
         try {
             Container fresh = startContainer(dead.descriptor);
-            for (String path : fresh.paths) {
-                proxy.repoint(path, fresh.hostPort);
+            for (RouteInfo route : fresh.routes) {
+                for (String path : route.patterns()) {
+                    proxy.repoint(path, route.methods(), fresh.hostPort);  // methods unchanged — same descriptor
+                }
             }
             containers.put(dead.descriptor.id(), fresh);
             startWatcher(fresh);
@@ -544,9 +559,9 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         throw new IllegalStateException("container worker health timeout: port " + port);
     }
 
-    private List<String> deployToWorker(int port, ModuleDescriptor descriptor) {
+    private List<RouteInfo> deployToWorker(int port, ModuleDescriptor descriptor) {
         // Routed through WorkerAdminClient so the outgoing /__admin/deploy carries admin-auth when enabled (single
-        // signing point), identical POST /__admin/deploy → registered-paths call as the inline version.
+        // signing point), identical POST /__admin/deploy → registered-routes call as the inline version.
         return admin.deploy(port, descriptor);
     }
 
