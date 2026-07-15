@@ -22,7 +22,6 @@ import org.htcom.protean.web.ModuleStatus;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * MCP resources (read-only exposure) — lets an agent inspect state before and after deployment:
@@ -142,15 +141,12 @@ public class McpResources {
                         throw McpException.invalidParams("module not found: " + id);
                     }
                     // Aggregate across isolation modes, mirroring REST GET /platform/modules/{id}/routes: in-process
-                    // routes (HTTP methods + path patterns) come from the registrar, while worker/container routes are
-                    // served through the ReverseProxy, which does not track the forwarded method (GET-only PoC), so
-                    // their methods set is empty. A module is served by exactly one of the two, so no de-duplication is
-                    // needed. An empty list means none were registered (for example, a compile failure) — itself a
+                    // routes come from the registrar, worker/container routes from the ReverseProxy, both carrying the
+                    // HTTP method set + path patterns. A module is served by exactly one of the two, so no de-duplication
+                    // is needed. An empty list means none were registered (for example, a compile failure) — itself a
                     // diagnostic signal. Reading only the registrar would drop every worker/container module's routes.
                     List<DynamicEndpointRegistrar.RouteInfo> routes = new ArrayList<>(registrar.routesOf(id));
-                    for (String path : reverseProxy.pathsForModule(id)) {
-                        routes.add(new DynamicEndpointRegistrar.RouteInfo(Set.of(), List.of(path)));
-                    }
+                    routes.addAll(reverseProxy.routesForModule(id));
                     return routes;
                 }
             }

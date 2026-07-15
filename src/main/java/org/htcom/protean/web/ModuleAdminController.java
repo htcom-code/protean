@@ -36,7 +36,6 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Control-plane REST API — MCP/external callers deploy, update, uninstall, and query modules over
@@ -181,11 +180,10 @@ public class ModuleAdminController {
     /**
      * Routes the module <b>actually registered on the live mapping</b> (404 if the module is not
      * found). This reflects the measured runtime registration, not the store's desiredState, so it
-     * surfaces "ACTIVE but 404" mismatches as an empty list. Aggregates across isolation modes:
-     * in-process routes carry both HTTP methods and path patterns (from {@link DynamicEndpointRegistrar}),
-     * while worker/container routes are served through {@link ReverseProxy} which does not track the
-     * forwarded method (GET-only PoC), so their {@code methods} set is empty. A module is served by
-     * exactly one of the two, so no de-duplication is needed.
+     * surfaces "ACTIVE but 404" mismatches as an empty list. Aggregates across isolation modes
+     * identically: in-process routes come from {@link DynamicEndpointRegistrar} and worker/container
+     * routes from {@link ReverseProxy}, both carrying the HTTP method set + path patterns. A module is
+     * served by exactly one of the two, so no de-duplication is needed.
      */
     @GetMapping("/{id}/routes")
     public List<DynamicEndpointRegistrar.RouteInfo> routes(@PathVariable String id) {
@@ -193,9 +191,7 @@ public class ModuleAdminController {
             throw new ProteanException(ErrorCode.MODULE_NOT_FOUND, id).with("moduleId", id);
         }
         List<DynamicEndpointRegistrar.RouteInfo> routes = new ArrayList<>(registrar.routesOf(id));
-        for (String path : reverseProxy.pathsForModule(id)) {
-            routes.add(new DynamicEndpointRegistrar.RouteInfo(Set.of(), List.of(path)));
-        }
+        routes.addAll(reverseProxy.routesForModule(id));
         return routes;
     }
 

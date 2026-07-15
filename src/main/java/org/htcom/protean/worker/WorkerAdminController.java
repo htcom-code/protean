@@ -55,9 +55,9 @@ public class WorkerAdminController {
         return "ok";
     }
 
-    /** After deploying a module, return the list of registered path patterns. */
+    /** After deploying a module, return the registered routes (HTTP method set + path patterns). */
     @PostMapping("/__admin/deploy")
-    public List<String> deploy(@RequestBody ModuleDescriptor descriptor) {
+    public List<DynamicEndpointRegistrar.RouteInfo> deploy(@RequestBody ModuleDescriptor descriptor) {
         // Register bridge interface proxies before deployment (so the module child context can inject them)
         if (descriptor.bridgedInterfaces() != null && !descriptor.bridgedInterfaces().isEmpty()) {
             WorkerBridgeRegistrar reg = bridgeRegistrar.getIfAvailable();
@@ -69,7 +69,7 @@ public class WorkerAdminController {
             }
         }
         isolation.deploy(descriptor);
-        return registrar.pathsOf(descriptor.id());
+        return registrar.routesOf(descriptor.id());
     }
 
     @PostMapping("/__admin/undeploy/{id}")
@@ -90,10 +90,10 @@ public class WorkerAdminController {
     /**
      * Rebinds an already-deployed module in place by recompiling it against this worker's current parent tier and
      * hot-swapping it (no new JVM, same port). Used by the main to move a module onto a freshly pushed generation.
-     * Returns the (unchanged) registered path patterns.
+     * Returns the (unchanged) registered routes (HTTP method set + path patterns).
      */
     @PostMapping("/__admin/redeploy")
-    public List<String> redeploy(@RequestBody ModuleDescriptor descriptor) {
+    public List<DynamicEndpointRegistrar.RouteInfo> redeploy(@RequestBody ModuleDescriptor descriptor) {
         // Gate the dependent against THIS worker's just-republished parent tier before the in-place recompile+swap
         // (shared-module-a1-gate-drift, worker/container arm). A binary-compatible library impl change that alters
         // a NORMAL dependent's asserted behavior fails its test gate here and throws → HTTP 500 → the main-side
@@ -103,6 +103,6 @@ public class WorkerAdminController {
             promotionPipeline.enforceTestGate(descriptor);
         }
         isolation.hotSwap(descriptor);
-        return registrar.pathsOf(descriptor.id());
+        return registrar.routesOf(descriptor.id());
     }
 }

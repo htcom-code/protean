@@ -102,11 +102,20 @@ class McpWorkerRoutesParityTest {
         assertTrue(routes.isArray() && !routes.isEmpty(),
                 "worker module routes must be visible via MCP (was empty before the ReverseProxy aggregation fix): " + routes);
 
+        boolean found = false;
         List<String> patterns = new ArrayList<>();
         for (JsonNode route : routes) {
+            List<String> methods = new ArrayList<>();
+            route.path("methods").forEach(m -> methods.add(m.asText()));
             route.path("patterns").forEach(p -> patterns.add(p.asText()));
+            if (route.path("patterns").toString().contains("/wrp/ping")) {
+                // Parity with in-process: the proxied worker route must carry its real method, not an empty set.
+                assertTrue(methods.contains("GET"),
+                        "worker route /wrp/ping must report methods:[GET] via MCP (was empty before the fix): " + methods);
+                found = true;
+            }
         }
-        assertTrue(patterns.contains("/wrp/ping"),
+        assertTrue(found && patterns.contains("/wrp/ping"),
                 "proxied worker route /wrp/ping must appear in the MCP routes resource: " + patterns);
     }
 

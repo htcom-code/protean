@@ -12,6 +12,7 @@ import org.htcom.protean.autoconfigure.ProteanProperties;
 import org.htcom.protean.bridge.BridgeSecretHolder;
 import org.htcom.protean.db.DbScope;
 import org.htcom.protean.db.DbScopeProvisioner;
+import org.htcom.protean.dynamic.DynamicEndpointRegistrar.RouteInfo;
 import org.htcom.protean.gate.ServerPortHolder;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.SharedLibStore;
@@ -190,10 +191,13 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         }
         WorkerHandle handle = acquireWorkerFor(descriptor.id(), null);
         ensureUsesClosure(handle, descriptor);   // publish the module's library `uses` closure into this worker first
-        List<String> paths = deployToWorker(handle.port, descriptor);
-        for (String path : paths) {
-            proxy.register(path, handle.port, descriptor.id());
+        List<RouteInfo> routes = deployToWorker(handle.port, descriptor);
+        for (RouteInfo route : routes) {
+            for (String path : route.patterns()) {
+                proxy.register(path, route.methods(), handle.port, descriptor.id());
+            }
         }
+        List<String> paths = pathsOf(routes);
         handle.modules.add(descriptor.id());
         moduleToWorker.put(descriptor.id(), handle);
         modulePaths.put(descriptor.id(), paths);
@@ -213,10 +217,13 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         WorkerHandle newHandle = acquireWorkerFor(descriptor.id(), descriptor.id());  // a worker that does not already have this module
         try {
             ensureUsesClosure(newHandle, descriptor);   // the fresh worker needs the library `uses` closure too
-            List<String> newPaths = deployToWorker(newHandle.port, descriptor);
-            for (String path : newPaths) {
-                proxy.repoint(path, newHandle.port);             // atomic switch (zero-downtime)
+            List<RouteInfo> newRoutes = deployToWorker(newHandle.port, descriptor);
+            for (RouteInfo route : newRoutes) {
+                for (String path : route.patterns()) {
+                    proxy.repoint(path, route.methods(), newHandle.port);   // atomic switch + refresh methods (version may change them)
+                }
             }
+            List<String> newPaths = pathsOf(newRoutes);
             if (oldPaths != null) {
                 for (String oldPath : oldPaths) {
                     if (!newPaths.contains(oldPath)) {
@@ -395,9 +402,9 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         }
         WorkerHandle handle = acquireWorkerFor(moduleId, null);
         ensureUsesClosure(handle, descriptor);   // restore the library `uses` closure on the recovery worker first
-        List<String> paths = deployToWorker(handle.port, descriptor);
+        List<String> paths = pathsOf(deployToWorker(handle.port, descriptor));
         for (String path : paths) {
-            proxy.repoint(path, handle.port);  // keep the route, switch to the new port
+            proxy.repoint(path, handle.port);  // keep the route (methods unchanged — same module), switch to the new port
         }
         handle.modules.add(moduleId);
         moduleToWorker.put(moduleId, handle);
@@ -516,10 +523,19 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         throw new IllegalStateException("worker health timeout: port " + port);
     }
 
-    private List<String> deployToWorker(int port, ModuleDescriptor descriptor) {
+    private List<RouteInfo> deployToWorker(int port, ModuleDescriptor descriptor) {
         // Routed through WorkerAdminClient so the outgoing /__admin/deploy carries admin-auth when enabled (single
-        // signing point); WorkerAdminClient.deploy performs the same POST /__admin/deploy → registered-paths call.
+        // signing point); WorkerAdminClient.deploy performs the same POST /__admin/deploy → registered-routes call.
         return admin.deploy(port, descriptor);
+    }
+
+    /** Flattens the worker's returned routes to their path patterns (bookkeeping for repoint/unregister). */
+    private static List<String> pathsOf(List<RouteInfo> routes) {
+        List<String> paths = new ArrayList<>();
+        for (RouteInfo r : routes) {
+            paths.addAll(r.patterns());
+        }
+        return paths;
     }
 
     private void postUndeploy(int port, String moduleId) {
@@ -681,7 +697,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             waitHealthy(workerPort, 30);
             seedParentTier(workerPort);                        // live shared-lib generation, not just the stale boot seed
             ensureUsesClosureByPort(workerPort, descriptor);   // publish the module's uses-closure libraries before it compiles
-            List<String> paths = deployToWorker(workerPort, descriptor);
+            List<String> paths = pathsOf(deployToWorker(workerPort, descriptor));
             Map<String, Integer> priorPorts = new LinkedHashMap<>();
             for (String path : paths) {
                 Integer prior = proxy.portOf(path);

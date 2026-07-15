@@ -11,6 +11,7 @@ package org.htcom.protean.isolation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.htcom.protean.autoconfigure.ProteanProperties;
 import org.htcom.protean.bridge.BridgeHmac;
+import org.htcom.protean.dynamic.DynamicEndpointRegistrar;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModuleStore;
 import org.htcom.protean.module.SharedLibStore;
@@ -108,14 +109,14 @@ public class WorkerAdminClient {
 
     // --- module / library deploy + in-place rebind ---
 
-    /** POST {@code /__admin/deploy}: deploy a module (or publish a library) in the worker; returns registered paths. */
-    public List<String> deploy(int port, ModuleDescriptor descriptor) {
-        return postForPaths(port, "/__admin/deploy", descriptor);
+    /** POST {@code /__admin/deploy}: deploy a module (or publish a library) in the worker; returns registered routes. */
+    public List<DynamicEndpointRegistrar.RouteInfo> deploy(int port, ModuleDescriptor descriptor) {
+        return postForRoutes(port, "/__admin/deploy", descriptor);
     }
 
     /** POST {@code /__admin/redeploy}: recompile+hot-swap a module in place against the worker's current generation. */
-    public List<String> redeploy(int port, ModuleDescriptor descriptor) {
-        return postForPaths(port, "/__admin/redeploy", descriptor);
+    public List<DynamicEndpointRegistrar.RouteInfo> redeploy(int port, ModuleDescriptor descriptor) {
+        return postForRoutes(port, "/__admin/redeploy", descriptor);
     }
 
     /** POST {@code /__admin/undeploy/{id}} (no body): release a single module in the worker. */
@@ -207,14 +208,14 @@ public class WorkerAdminClient {
         }
     }
 
-    private List<String> postForPaths(int port, String path, Object body) {
+    private List<DynamicEndpointRegistrar.RouteInfo> postForRoutes(int port, String path, Object body) {
         try {
             HttpResponse<String> resp = send(port, path, body);
             if (resp.statusCode() / 100 != 2) {
                 throw new IllegalStateException("worker " + path + " response " + resp.statusCode() + ": " + resp.body());
             }
             return mapper.readValue(resp.body(), mapper.getTypeFactory()
-                    .constructCollectionType(List.class, String.class));
+                    .constructCollectionType(List.class, DynamicEndpointRegistrar.RouteInfo.class));
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
