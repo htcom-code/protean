@@ -116,8 +116,9 @@ public class McpConfiguration {
 
     @Bean
     McpResources mcpResources(ObjectMapper mapper, ModulePlatform platform, TraceStore traceStore,
-                              org.htcom.protean.dynamic.DynamicEndpointRegistrar registrar) {
-        return new McpResources(mapper, platform, traceStore, registrar);
+                              org.htcom.protean.dynamic.DynamicEndpointRegistrar registrar,
+                              org.htcom.protean.proxy.ReverseProxy reverseProxy) {
+        return new McpResources(mapper, platform, traceStore, registrar, reverseProxy);
     }
 
     /** Bridge that turns module changes into resources/updated notifications. */
