@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import jakarta.annotation.PreDestroy;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -389,6 +390,11 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     /** Starts the container and returns a handle after health + module deploy are complete (no proxy/map side effects). */
     private Container startContainer(ModuleDescriptor descriptor) {
         String name = NAME_PREFIX + descriptor.id() + "-" + seq.incrementAndGet();
+        // A main that exited uncleanly (crash/kill -9) leaves detached containers running; the seq counter
+        // resets on restart, so reconcile re-derives this exact name and `docker run --name` would fail with a
+        // 125 name conflict — skipping the module and 404-ing its route. Remove any stale same-name container
+        // first. No-op for a fresh name; hot-swap spawns with a new seq, so a draining old container is never hit.
+        dockerRemoveQuiet(name);
         // Spawn settings read live (Tier 2 — apply to the next container spawn, not running ones).
         ProteanProperties.Container c = containerCfg();
         String network = c.getNetwork();
@@ -477,6 +483,20 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     private void retire(Container c) {
         c.retiring = true;
         dockerRemoveQuiet(c.name);
+    }
+
+    /**
+     * On graceful main shutdown, retire every container this instance owns. Detached containers (`docker run -d`)
+     * outlive the main otherwise, and the next start's reconcile would collide on their names (see
+     * {@link #startContainer}). This closes the normal-restart path cleanly; the {@code startContainer} same-name
+     * removal remains the safety net for an unclean exit where this hook never runs.
+     */
+    @PreDestroy
+    synchronized void shutdown() {
+        for (Container c : containers.values()) {
+            retire(c);
+        }
+        containers.clear();
     }
 
     /** Watches for container exit; whether a crash triggers a redeploy is decided live in {@link #onContainerExit}. */
