@@ -17,6 +17,35 @@ with no restart. Coordinate `org.htcom:protean`; Spring Boot 3.5.x / Java 21.
 Currently published to `mavenLocal` only; remote publishing (GitHub Packages)
 follows the migration.
 
+### Added
+
+- Worker DB admin credentials (`protean.worker.db.admin-url` / `username` /
+  `password`) are now runtime-rotatable without a restart: `DbScopeProvisioner`
+  reads an `AdminCreds` snapshot per provision/deprovision and rebuilds the admin
+  `JdbcTemplate` only when the creds change (`REQUIRES_RESTART` → `APPLIED_FUTURE`).
+  A rotation is validated first — one connection with the candidate creds must
+  pass `Connection.isValid` before the swap; a bad rotation fails clearly and
+  retains the previous connection. (Dialect stays restart-only.)
+
+### Fixed
+
+- Worker/container-isolated modules now forward all HTTP methods and request
+  bodies. The reverse proxy previously hardcoded bodyless GET, so a
+  `@PostMapping` that worked in-process returned 405 once isolated; route
+  listings also reported empty methods for proxied routes. The proxy now forwards
+  the request verbatim and records per-path methods, so REST and MCP route
+  listings report the real methods across isolation modes.
+- Container reconcile no longer fails on a restart name collision. A detached
+  container outliving the JVM plus a per-run seq counter that resets on restart
+  made reconcile re-derive an existing container name, so `docker run --name` hit
+  a 125 conflict and the module's route 404'd. Stale same-name containers are
+  removed before respawn, and a `@PreDestroy` retires this instance's containers
+  on graceful shutdown.
+- MCP resource surface restored to REST parity. `protean://modules/{id}/routes`
+  returned an empty list for worker/container modules (misreading a healthy
+  module as route-less) and `protean://modules` left the shared-lib generation
+  fields null. Both now mirror the REST admin surface.
+
 ### Dynamic loading engine
 
 - Runtime JSR-199 in-memory compile (`RuntimeCompiler`), per-module

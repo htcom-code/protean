@@ -15,6 +15,33 @@
 무중단 교체·롤백·해제까지 한다. 좌표 `org.htcom:protean`, Spring Boot 3.5.x / Java 21.
 현재는 `mavenLocal` 로만 발행하며, 원격 발행(GitHub Packages)은 이관 이후다.
 
+### 추가
+
+- worker DB admin 자격증명(`protean.worker.db.admin-url` / `username` /
+  `password`)을 재기동 없이 런타임 rotation 가능. `DbScopeProvisioner` 가
+  provision/deprovision 마다 `AdminCreds` 스냅샷을 읽어 자격증명이 바뀔 때만 admin
+  `JdbcTemplate` 을 재구성한다(`REQUIRES_RESTART` → `APPLIED_FUTURE`). rotation 은
+  먼저 검증한다 — 후보 자격증명으로 커넥션 1개를 열어 `Connection.isValid` 를 통과해야
+  swap 하며, 잘못된 rotation 은 명확히 실패하고 기존 커넥션을 유지한다. (dialect 는
+  재기동 필요 유지.)
+
+### 수정
+
+- worker/container 격리 모듈에 모든 HTTP method·요청 body 포워딩. 기존 ReverseProxy
+  가 body 없는 GET 으로 하드코딩돼 있어 in-process 에선 되던 `@PostMapping` 이
+  격리되면 405 였고, route 목록도 프록시 라우트의 method 를 비워 보고했다. 이제 요청을
+  그대로 포워딩하고 경로별 method 를 기록해, REST·MCP route 목록이 모든 격리 모드에서
+  실제 method 를 보고한다.
+- container reconcile 이 재기동 이름 충돌로 실패하던 것 수정. detached 컨테이너가 JVM
+  보다 오래 살고 per-run seq 카운터가 재기동 시 리셋돼 reconcile 이 기존 컨테이너 이름을
+  재생성 → `docker run --name` 이 125 충돌 → 모듈 route 404. respawn 전에 같은 이름의
+  stale 컨테이너를 제거하고, `@PreDestroy` 로 정상 종료 시 이 인스턴스의 컨테이너를
+  정리한다.
+- MCP 리소스 surface 를 REST parity 로 복원. `protean://modules/{id}/routes` 가
+  worker/container 모듈에서 빈 리스트(정상 모듈을 라우트 없음으로 오독)였고
+  `protean://modules` 는 shared-lib generation 필드가 null 이었다. 둘 다 이제 REST 관리
+  surface 와 일치한다.
+
 ### 동적 로딩 엔진
 
 - 런타임 JSR-199 인메모리 컴파일(`RuntimeCompiler`), 모듈별 `ModuleClassLoader`,
