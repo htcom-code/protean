@@ -21,6 +21,7 @@ import org.htcom.protean.proxy.ReverseProxy;
 import org.htcom.protean.runtime.DebugRouteRegistry;
 import org.htcom.protean.worker.WorkerPortAnnouncer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -63,6 +64,9 @@ import java.util.regex.Pattern;
 public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTierTarget {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerProcessIsolation.class);
+
+    /** Per-worker grace period for a SIGTERM (graceful Spring shutdown) before force-kill, during main {@code @PreDestroy}. */
+    private static final int SHUTDOWN_GRACE_SEC = 5;
 
     /** JDWP agentlib injected into a debug-launch worker (ephemeral port, localhost, suspend=n → the worker starts normally; breakpoints after attach). */
     private static final String JDWP_ARG =
@@ -280,6 +284,59 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
 
     public synchronized int workerCount() {
         return pool.size();
+    }
+
+    /** For tests: a snapshot of the current pool worker JVM {@link Process} handles, for liveness assertions. */
+    public synchronized List<Process> workerProcesses() {
+        return pool.stream().map(h -> h.process).toList();
+    }
+
+    /**
+     * On graceful main shutdown, terminate every worker JVM this instance spawned (the pool + any debug workers).
+     * {@code ProcessBuilder} children are not killed when the parent JVM exits, so without this hook the workers would
+     * survive as orphan JVMs (holding their random ports and heap) — the process-track counterpart to
+     * {@link ContainerWorkerIsolation#shutdown()} (PR #34). Each worker is sent SIGTERM ({@link Process#destroy()}) for
+     * a graceful Spring shutdown, then force-killed if it does not exit within {@link #SHUTDOWN_GRACE_SEC}. The snapshot
+     * is taken under the monitor and the blocking teardown runs lock-free in parallel (a slow worker must not serialize
+     * the others), mirroring {@link #fanOut}. The {@code retiring} flag is set first so the crash-restart callback
+     * ({@link #onWorkerExit}) does not respawn the workers this hook is killing.
+     */
+    @PreDestroy
+    public void shutdown() {
+        List<Process> processes = new ArrayList<>();
+        synchronized (this) {
+            for (WorkerHandle h : pool) {
+                h.retiring = true;   // intentional shutdown — suppress auto-restart on the exit callback
+                processes.add(h.process);
+            }
+            pool.clear();
+            for (DebugWorkerHandle h : debugWorkers) {
+                processes.add(h.process());
+            }
+            debugWorkers.clear();
+        }
+        if (processes.isEmpty()) {
+            return;
+        }
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (Process p : processes) {
+                executor.execute(() -> terminateGracefully(p));
+            }
+        }
+        log.info("worker isolation shutdown: terminated {} worker JVM(s)", processes.size());
+    }
+
+    /** SIGTERM, then force-kill if the worker does not exit within the grace period. */
+    private void terminateGracefully(Process p) {
+        p.destroy();
+        try {
+            if (!p.waitFor(SHUTDOWN_GRACE_SEC, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            p.destroyForcibly();
+            Thread.currentThread().interrupt();
+        }
     }
 
     // --- worker pool ---
