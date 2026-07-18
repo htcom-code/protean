@@ -48,7 +48,12 @@ follows the migration.
   down in parallel — SIGTERM, then force-kill — the process-track counterpart to
   the container fix above. The grace period is configurable via
   `protean.worker.shutdown-grace-ms` (default `5000`; `0` = force immediately).
-  Unclean exits (`kill -9` / crash) are not yet reaped — a follow-up.
+  Unclean exits (`kill -9` / crash), where `@PreDestroy` never runs, are now
+  reaped on the next startup: each worker carries a per-spawn uuid on its command
+  line (`-Dprotean.worker.id`) plus a marker file under `<module-store>/workers`,
+  and startup force-kills any leftover-marked JVM found in the process table.
+  Matching by uuid (not PID) avoids killing an unrelated or another instance's
+  process.
 - MCP resource surface restored to REST parity. `protean://modules/{id}/routes`
   returned an empty list for worker/container modules (misreading a healthy
   module as route-less) and `protean://modules` left the shared-lib generation
