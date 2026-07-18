@@ -37,6 +37,12 @@
   재생성 → `docker run --name` 이 125 충돌 → 모듈 route 404. respawn 전에 같은 이름의
   stale 컨테이너를 제거하고, `@PreDestroy` 로 정상 종료 시 이 인스턴스의 컨테이너를
   정리한다.
+- process 트랙 워커 JVM 을 정상 종료 시 종료하도록 수정. `WorkerProcessIsolation` 에
+  `@PreDestroy` 가 없어, `ProcessBuilder` 로 띄운 워커 JVM(부모 JVM 이 종료돼도 OS 가
+  죽이지 않음)이 랜덤 포트·힙을 문 채 orphan 으로 살아남았다. 이제 `@PreDestroy` 가
+  병렬로(SIGTERM → 강제 종료) 정리한다 — 위 container 수정의 process 트랙 짝. 유예는
+  `protean.worker.shutdown-grace-ms`(기본 `5000`; `0`=즉시 강제)로 설정 가능. unclean
+  exit(`kill -9`·크래시)은 아직 회수 안 함 — 후속.
 - MCP 리소스 surface 를 REST parity 로 복원. `protean://modules/{id}/routes` 가
   worker/container 모듈에서 빈 리스트(정상 모듈을 라우트 없음으로 오독)였고
   `protean://modules` 는 shared-lib generation 필드가 null 이었다. 둘 다 이제 REST 관리

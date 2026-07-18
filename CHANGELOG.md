@@ -41,6 +41,14 @@ follows the migration.
   a 125 conflict and the module's route 404'd. Stale same-name containers are
   removed before respawn, and a `@PreDestroy` retires this instance's containers
   on graceful shutdown.
+- Process-track worker JVMs are now terminated on graceful shutdown.
+  `WorkerProcessIsolation` had no `@PreDestroy`, so `ProcessBuilder`-spawned
+  worker JVMs (which the OS does not kill when the parent JVM exits) survived as
+  orphans holding their random ports and heap. A `@PreDestroy` now tears them
+  down in parallel — SIGTERM, then force-kill — the process-track counterpart to
+  the container fix above. The grace period is configurable via
+  `protean.worker.shutdown-grace-ms` (default `5000`; `0` = force immediately).
+  Unclean exits (`kill -9` / crash) are not yet reaped — a follow-up.
 - MCP resource surface restored to REST parity. `protean://modules/{id}/routes`
   returned an empty list for worker/container modules (misreading a healthy
   module as route-less) and `protean://modules` left the shared-lib generation
