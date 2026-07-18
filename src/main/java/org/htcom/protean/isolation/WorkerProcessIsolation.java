@@ -21,6 +21,7 @@ import org.htcom.protean.proxy.ReverseProxy;
 import org.htcom.protean.runtime.DebugRouteRegistry;
 import org.htcom.protean.worker.WorkerPortAnnouncer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,11 +36,13 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -76,11 +79,14 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
      * pool ({@link #pool}) (not subject to crash-restart or warm reuse). {@code priorPorts} holds the original ports
      * before the route was taken over (for restoration; since null values are not allowed, unrecorded paths are omitted).
      */
-    public record DebugWorkerHandle(Process process, int workerPort, int jdwpPort,
+    public record DebugWorkerHandle(UUID id, Process process, int workerPort, int jdwpPort,
                                     List<String> paths, Map<String, Integer> priorPorts) {
     }
 
     static final class WorkerHandle {
+        /** Per-spawn identity, carried on the worker's command line ({@code -Dprotean.worker.id}) so an orphaned JVM
+         * can be recognized and reaped after an unclean main exit (see {@link OrphanWorkerReaper}). */
+        final UUID id;
         final Process process;
         final int port;
         final Set<String> modules = ConcurrentHashMap.newKeySet();
@@ -88,7 +94,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         final Set<String> libraries = ConcurrentHashMap.newKeySet();
         volatile boolean retiring;   // intentional-shutdown flag (distinguished from a crash — prevents auto-restart)
 
-        WorkerHandle(Process process, int port) {
+        WorkerHandle(UUID id, Process process, int port) {
+            this.id = id;
             this.process = process;
             this.port = port;
         }
@@ -132,6 +139,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     private final DebugRouteRegistry debugRoutes;
     /** The main-side worker parent-tier control-plane client (shared with the container strategy). */
     private final WorkerAdminClient admin;
+    /** Reaps worker JVMs orphaned by a prior unclean main exit (graceful exits are handled by {@link #shutdown()}). */
+    private final OrphanWorkerReaper reaper;
 
     public WorkerProcessIsolation(HttpClient client, ReverseProxy proxy, ObjectMapper mapper, ServerPortHolder portHolder,
                                   WorkerRuntimeProvider runtimeProvider,
@@ -159,6 +168,24 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         this.props = props;
         this.rpcBridge = props.getWorker().isRpcBridge();
         this.sharedLibDir = props.getModule().getSharedLibDir();
+        this.reaper = new OrphanWorkerReaper(Path.of(props.getModuleStore().getDir(), "workers"));
+    }
+
+    /**
+     * On startup, reap any worker JVMs orphaned by a prior <b>unclean</b> exit (SIGKILL/crash/OOM), which the graceful
+     * {@link #shutdown()} hook could not clean. Runs before any worker spawns, so it only ever touches markers from a
+     * previous run. Best-effort — a failure here must not block startup.
+     */
+    @PostConstruct
+    void reapOrphansOnStartup() {
+        try {
+            int reaped = reaper.reapOrphans();
+            if (reaped > 0) {
+                log.warn("startup: reaped {} orphan worker JVM(s) left by a previous unclean exit", reaped);
+            }
+        } catch (RuntimeException e) {
+            log.warn("startup orphan-worker reap failed (ignored): {}", e.toString());
+        }
     }
 
     /**
@@ -306,10 +333,12 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             for (WorkerHandle h : pool) {
                 h.retiring = true;   // intentional shutdown — suppress auto-restart on the exit callback
                 processes.add(h.process);
+                reaper.forget(h.id);   // graceful teardown → drop the orphan marker (no reap needed next start)
             }
             pool.clear();
             for (DebugWorkerHandle h : debugWorkers) {
                 processes.add(h.process());
+                reaper.forget(h.id());   // debug workers have no onExit hook — forget here
             }
             debugWorkers.clear();
         }
@@ -425,18 +454,20 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     // --- worker process/communication ---
 
     private WorkerHandle spawnAndReady(DbScope scope) {
-        Process process = spawnWorker(scope, false);
+        UUID id = UUID.randomUUID();
+        Process process = spawnWorker(scope, false, id);
         try {
             int port = awaitPort(process, 60);
             waitHealthy(port, 30);
             seedParentTier(port);   // fold the current live shared-lib generation in before any module deploys
-            WorkerHandle handle = new WorkerHandle(process, port);
+            WorkerHandle handle = new WorkerHandle(id, process, port);
             // Always observe exit; whether a crash triggers a restart is decided live in onWorkerExit
             // (protean.worker.auto-restart, Tier 1) so a runtime toggle applies to every worker immediately.
             process.onExit().thenAccept(p -> onWorkerExit(handle));
             return handle;
         } catch (RuntimeException e) {
             process.destroyForcibly();
+            reaper.forget(id);   // never became a tracked worker — drop its marker
             throw e;
         }
     }
@@ -444,6 +475,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     /** Worker-process exit callback. Ignored on an intentional shutdown (retiring); on a crash, restart the modules. */
     private synchronized void onWorkerExit(WorkerHandle dead) {
         pool.remove(dead);
+        reaper.forget(dead.id);   // the process is gone — drop its orphan marker (covers retire/drain/crash alike)
         if (dead.retiring) {
             return;  // intentional shutdown
         }
@@ -482,10 +514,13 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         log.info("worker crash recovery: {} → port {}", moduleId, handle.port);
     }
 
-    private Process spawnWorker(DbScope scope, boolean debug) {
+    private Process spawnWorker(DbScope scope, boolean debug, UUID id) {
         // The JVM launch prefix (embed = host classpath / sidecar = dedicated jar) is decided by the runtime provider.
         // The common --spring.* arguments are appended here.
         List<String> command = new ArrayList<>(runtimeProvider.processLaunchPrefix());
+        // Identity marker in the JVM-option area (before the main class; prefix index 0 = java binary → insert at 1) so
+        // an orphaned worker JVM can be recognized on its command line and reaped after an unclean main exit.
+        command.add(1, OrphanWorkerReaper.markerArg(id));
         if (debug) {
             // The JDWP agentlib must go in the JVM-option area (before the main class). Prefix index 0 = java binary → insert right after it (1).
             command.add(1, JDWP_ARG);
@@ -536,7 +571,9 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
         try {
-            return pb.start();
+            Process process = pb.start();
+            reaper.record(id, process.pid());   // durable marker so an unclean main exit can be cleaned up next start
+            return process;
         } catch (Exception e) {
             throw new IllegalStateException("failed to create worker process", e);
         }
@@ -759,7 +796,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
      * {@link #terminateDebugWorker} must be called when the session ends so the worker and route are cleaned up (leak prevention).
      */
     public synchronized DebugWorkerHandle launchDebugWorker(ModuleDescriptor descriptor) {
-        Process process = spawnWorker(null, true);
+        UUID id = UUID.randomUUID();
+        Process process = spawnWorker(null, true, id);
         try {
             int[] ports = awaitPortsDebug(process, 60);
             int workerPort = ports[0];
@@ -776,7 +814,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
                 }
                 proxy.repoint(path, workerPort);   // atomic takeover if present, otherwise a new registration
             }
-            DebugWorkerHandle handle = new DebugWorkerHandle(process, workerPort, jdwpPort, paths, priorPorts);
+            DebugWorkerHandle handle = new DebugWorkerHandle(id, process, workerPort, jdwpPort, paths, priorPorts);
             debugWorkers.add(handle);
             if (debugRoutes != null) {
                 debugRoutes.add(paths);   // the main ModuleTimeoutFilter skips the watchdog for these paths (allowing breakpoint pauses)
@@ -786,6 +824,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             return handle;
         } catch (RuntimeException e) {
             process.destroyForcibly();
+            reaper.forget(id);   // never became a tracked debug worker — drop its marker
             throw e;
         }
     }
@@ -795,6 +834,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         if (handle == null || !debugWorkers.remove(handle)) {
             return;  // already cleaned up (prevents double dispose)
         }
+        reaper.forget(handle.id());   // debug workers have no onExit hook — drop the orphan marker on teardown
         if (debugRoutes != null) {
             debugRoutes.remove(handle.paths());   // clear the debug-path exception → the watchdog returns to normal
         }
