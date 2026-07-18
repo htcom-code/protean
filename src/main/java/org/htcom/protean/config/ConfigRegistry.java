@@ -61,10 +61,14 @@ public class ConfigRegistry {
                 p -> p.getTrace().isEnabled(), (p, v) -> p.getTrace().setEnabled(v));
         intNum("trace.capacity", ConfigTier.LIVE, 1,
                 p -> p.getTrace().getCapacity(), (p, v) -> p.getTrace().setCapacity(v));
+        longNum("trace.summary-window-ms", ConfigTier.LIVE, 1000,
+                p -> p.getTrace().getSummaryWindowMs(), (p, v) -> p.getTrace().setSummaryWindowMs(v));
         bool("trace.metrics.enabled", ConfigTier.LIVE,
                 p -> p.getTrace().getMetrics().isEnabled(), (p, v) -> p.getTrace().getMetrics().setEnabled(v));
         bool("worker.auto-restart", ConfigTier.LIVE,
                 p -> p.getWorker().isAutoRestart(), (p, v) -> p.getWorker().setAutoRestart(v));
+        longNum("worker.shutdown-grace-ms", ConfigTier.LIVE, 0,
+                p -> p.getWorker().getShutdownGraceMs(), (p, v) -> p.getWorker().setShutdownGraceMs(v));
         bool("worker.container.auto-restart", ConfigTier.LIVE,
                 p -> p.getWorker().getContainer().isAutoRestart(), (p, v) -> p.getWorker().getContainer().setAutoRestart(v));
         bool("worker.db.deprovision-on-undeploy", ConfigTier.LIVE,
