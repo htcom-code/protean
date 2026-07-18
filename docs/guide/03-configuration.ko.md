@@ -114,6 +114,7 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 |----|------|--------|------|------|
 | `protean.trace.enabled` | `boolean` | `true` | `라이브` | trace 기록 활성화. |
 | `protean.trace.capacity` | `int` | `200` | `라이브` | 링 버퍼 용량(최근 N개 요청). |
+| `protean.trace.summary-window-ms` | `long` | `60000` | `라이브` | 콘솔 `summary` SSE 이벤트의 롤링 윈도(ms): 현재 윈도 `(now-windowMs, now]` 와 이전 동일 윈도 대비 trend. `metrics.enabled` 와 무관(링버퍼서 계산), 정확도는 `capacity` 에 종속. |
 
 ### trace.metrics — 모듈별 집계 메트릭(opt-in)
 

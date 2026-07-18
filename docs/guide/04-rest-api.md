@@ -358,16 +358,32 @@ Query per-module aggregate metrics (request count, error rate, latency percentil
 
 ### GET `/platform/traces/stream`
 
-Live server-sent-events (SSE) push stream — the console uses it in place of 5-second polling. One connection multiplexes three named event types; a freshly opened connection first receives an initial snapshot of all three, then incremental pushes.
+Live server-sent-events (SSE) push stream — the console uses it in place of 5-second polling. One connection multiplexes four named event types; a freshly opened connection first receives an initial snapshot of all four, then incremental pushes (roughly once per second).
 
 - Produces: `text/event-stream`
-- Named events: `trace` (a new `RequestTrace`), `metrics` (a `ModuleMetricsSnapshot` update), `modules` (a module-list change)
+- Named events:
+  - `trace` — new `RequestTrace` deltas
+  - `metrics` — a `ModuleMetricsSnapshot[]` update (per-module cumulative aggregate; populated only when `protean.trace.metrics.enabled=true`)
+  - `modules` — the current `ModuleStatus[]`
+  - `summary` — a `TraceSummary`: a **windowed** aggregate for the console header (see below)
 - Like `/platform/traces`, the stream connection itself is excluded from trace recording (no self-observation).
 
 ```
 event: trace
 data: {"seq":13,"method":"GET","uri":"/cp/ping","status":200,"latencyMs":2,"moduleId":"cp-mod"}
 ```
+
+The `summary` event carries `TraceSummary` — a rolling-window aggregate computed each tick from the trace ring buffer (independent of `protean.trace.metrics.enabled`), plus a trend versus the previous equal window:
+
+```
+event: summary
+data: {"windowMs":60000,"count":35,"errorCount":0,"errorRate":0.0,
+       "p50LatencyMs":0,"p95LatencyMs":259,"p99LatencyMs":1471,"maxLatencyMs":1471,
+       "requestsDeltaPct":null,"errorRateDeltaPp":null,"p95DeltaMs":null,
+       "activeModules":3,"modulesByMode":{"in-process":2,"worker":1}}
+```
+
+`TraceSummary` fields: `windowMs` (the rolling window length); `count`/`errorCount`/`errorRate` and `p50/p95/p99/maxLatencyMs` for the current window `(now-windowMs, now]`; `requestsDeltaPct` (fractional request-count change vs the previous equal window, e.g. `0.12` = +12%), `errorRateDeltaPp` (error-rate change in percentage points), `p95DeltaMs` (p95 change in ms) — the three trend fields are **`null` when the previous window has no samples** (no baseline, no fabricated delta); `activeModules` and `modulesByMode` (a point-in-time count of `ACTIVE` modules grouped by isolation mode). The window length is set by `protean.trace.summary-window-ms` (default 60s); accuracy is bounded by `protean.trace.capacity`.
 
 ---
 

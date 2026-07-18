@@ -162,7 +162,7 @@ curl -X POST localhost:8080/platform/modules \
 |--------|------|------|
 | `GET` | `/platform/traces` | 요청 트레이스(최신순). 필터 `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` |
 | `GET` | `/platform/traces/metrics` | 모듈별 집계 메트릭(요청수·에러율·지연 p50/p95/p99). `protean.trace.metrics.enabled` 필요 |
-| `GET` | `/platform/traces/stream` | 라이브 SSE 푸시(`trace`/`metrics`/`modules` 이벤트) |
+| `GET` | `/platform/traces/stream` | 라이브 SSE 푸시(`trace`/`metrics`/`modules`/`summary` 이벤트) |
 
 ### 설정 REST — `/platform/config` (`ConfigAdminController`, `protean.admin.enabled`)
 | 메서드 | 경로 | 동작 |

@@ -24,6 +24,12 @@
   먼저 검증한다 — 후보 자격증명으로 커넥션 1개를 열어 `Connection.isValid` 를 통과해야
   swap 하며, 잘못된 rotation 은 명확히 실패하고 기존 커넥션을 유지한다. (dialect 는
   재기동 필요 유지.)
+- trace SSE 스트림(`GET /platform/traces/stream`)이 관측성 콘솔 헤더용 네 번째
+  `summary` 이벤트를 push 한다: 윈도 `TraceSummary` 집계(`protean.trace.summary-window-ms`,
+  기본 60s)로 현재 윈도의 요청 수·에러율·p50~p99 지연, 이전 동일 윈도 대비 trend
+  (baseline 없으면 null — 가짜 delta 안 만듦), 그리고 활성 모듈을 isolation mode 별로
+  센 point-in-time 카운트를 담는다. trace 링버퍼에서 out-of-band 로 계산(기록 핫패스
+  무손상)하며 `protean.trace.metrics.enabled` 와 무관하다.
 
 ### 수정
 
