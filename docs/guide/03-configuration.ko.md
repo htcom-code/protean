@@ -134,6 +134,7 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 | `protean.worker.modules-per-worker` | `int` | `4` | `future` | 워커당 최대 모듈 수(`1`=모듈당 전용 JVM). |
 | `protean.worker.min-warm` | `int` | `0` | `future` | 빈 워커를 따뜻하게 유지할 수(재사용). |
 | `protean.worker.auto-restart` | `boolean` | `false` | `라이브` | 크래시한 워커의 모듈 자동 재기동(process track). |
+| `protean.worker.shutdown-grace-ms` | `long` | `5000` | `라이브` | 메인 종료 시 각 워커 JVM에 graceful 종료(SIGTERM)를 위해 주는 유예(ms). 이후 강제 종료. `0`=즉시 강제 종료; 음수→`0`으로 처리. |
 | `protean.worker.rpc-bridge` | `boolean` | `false` | `restart` | 워커가 메인 공유 빈을 RPC 브리지로 호출 허용. |
 | `protean.worker.runtime` | `String` | `embed` | `restart` | 워커 런타임 배포 모델: `embed` \| `sidecar`. |
 

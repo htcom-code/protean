@@ -65,9 +65,6 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
 
     private static final Logger log = LoggerFactory.getLogger(WorkerProcessIsolation.class);
 
-    /** Per-worker grace period for a SIGTERM (graceful Spring shutdown) before force-kill, during main {@code @PreDestroy}. */
-    private static final int SHUTDOWN_GRACE_SEC = 5;
-
     /** JDWP agentlib injected into a debug-launch worker (ephemeral port, localhost, suspend=n → the worker starts normally; breakpoints after attach). */
     private static final String JDWP_ARG =
             "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:0";
@@ -296,9 +293,10 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
      * {@code ProcessBuilder} children are not killed when the parent JVM exits, so without this hook the workers would
      * survive as orphan JVMs (holding their random ports and heap) — the process-track counterpart to
      * {@link ContainerWorkerIsolation#shutdown()} (PR #34). Each worker is sent SIGTERM ({@link Process#destroy()}) for
-     * a graceful Spring shutdown, then force-killed if it does not exit within {@link #SHUTDOWN_GRACE_SEC}. The snapshot
-     * is taken under the monitor and the blocking teardown runs lock-free in parallel (a slow worker must not serialize
-     * the others), mirroring {@link #fanOut}. The {@code retiring} flag is set first so the crash-restart callback
+     * a graceful Spring shutdown, then force-killed if it does not exit within {@code protean.worker.shutdown-grace-ms}
+     * (read live; default 5000, {@code 0} = force-kill immediately, negative → treated as 0). The snapshot is taken
+     * under the monitor and the blocking teardown runs lock-free in parallel (a slow worker must not serialize the
+     * others), mirroring {@link #fanOut}. The {@code retiring} flag is set first so the crash-restart callback
      * ({@link #onWorkerExit}) does not respawn the workers this hook is killing.
      */
     @PreDestroy
@@ -318,21 +316,36 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         if (processes.isEmpty()) {
             return;
         }
+        long graceMs = props.getWorker().getShutdownGraceMs();   // read live (default 5000, 0 = immediate force)
+        if (graceMs < 0) {
+            log.warn("protean.worker.shutdown-grace-ms is negative ({}) — treating as 0 (immediate force-kill)", graceMs);
+            graceMs = 0;
+        }
+        final long grace = graceMs;
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
             for (Process p : processes) {
-                executor.execute(() -> terminateGracefully(p));
+                executor.execute(() -> terminateGracefully(p, grace));
             }
         }
-        log.info("worker isolation shutdown: terminated {} worker JVM(s)", processes.size());
+        log.info("worker isolation shutdown: terminated {} worker JVM(s) (grace {}ms)", processes.size(), grace);
     }
 
-    /** SIGTERM, then force-kill if the worker does not exit within the grace period. */
-    private void terminateGracefully(Process p) {
-        p.destroy();
+    /**
+     * SIGTERM ({@link Process#destroy()}) for a graceful exit, then SIGKILL ({@link Process#destroyForcibly()}) if it
+     * does not exit within {@code graceMs} ({@code <= 0} skips straight to force). Always waits for the force-kill to
+     * actually reap the process — the teardown must guarantee no orphan is left behind, and {@code destroyForcibly()}
+     * only sends the signal (it does not wait).
+     */
+    private void terminateGracefully(Process p, long graceMs) {
         try {
-            if (!p.waitFor(SHUTDOWN_GRACE_SEC, TimeUnit.SECONDS)) {
-                p.destroyForcibly();
+            if (graceMs > 0) {
+                p.destroy();
+                if (p.waitFor(graceMs, TimeUnit.MILLISECONDS)) {
+                    return;   // exited gracefully within the grace period
+                }
             }
+            p.destroyForcibly();
+            p.waitFor();   // confirm the SIGKILL actually reaped it (no orphan)
         } catch (InterruptedException e) {
             p.destroyForcibly();
             Thread.currentThread().interrupt();
