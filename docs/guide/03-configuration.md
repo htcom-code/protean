@@ -118,6 +118,7 @@ On boot the platform recompiles and redeploys every `ACTIVE` module from source.
 |----|------|--------|------|------|
 | `protean.trace.enabled` | `boolean` | `true` | `live` | Enable trace recording. |
 | `protean.trace.capacity` | `int` | `200` | `live` | Ring-buffer capacity (last N requests). |
+| `protean.trace.summary-window-ms` | `long` | `60000` | `live` | Rolling window (ms) for the console `summary` SSE event: the current window `(now-windowMs, now]` and its trend vs the previous equal window. Independent of `metrics.enabled` (computed from the ring buffer); window accuracy is bounded by `capacity`. |
 
 ### trace.metrics — per-module aggregate metrics (opt-in)
 

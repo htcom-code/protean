@@ -26,6 +26,14 @@ follows the migration.
   A rotation is validated first — one connection with the candidate creds must
   pass `Connection.isValid` before the swap; a bad rotation fails clearly and
   retains the previous connection. (Dialect stays restart-only.)
+- The trace SSE stream (`GET /platform/traces/stream`) now pushes a fourth
+  `summary` event for the observability console header: a windowed `TraceSummary`
+  aggregate (`protean.trace.summary-window-ms`, default 60s) with the current
+  window's request count / error rate / p50–p99 latency, a trend versus the
+  previous equal window (null when there is no baseline — no fabricated delta),
+  and a point-in-time count of active modules by isolation mode. Computed
+  out-of-band from the trace ring buffer (recording hot path untouched) and
+  independent of `protean.trace.metrics.enabled`.
 
 ### Fixed
 

@@ -358,16 +358,32 @@ POST /platform/modules/cp-mod/approve?approver=alice
 
 ### GET `/platform/traces/stream`
 
-라이브 푸시 스트림(SSE) — 콘솔이 5초 폴링 대신 쓴다. 한 연결이 세 종류의 named 이벤트를 멀티플렉싱하며, 새로 연 연결은 세 종류의 초기 스냅샷을 먼저 받은 뒤 증분 푸시를 받는다.
+라이브 푸시 스트림(SSE) — 콘솔이 5초 폴링 대신 쓴다. 한 연결이 네 종류의 named 이벤트를 멀티플렉싱하며, 새로 연 연결은 네 종류의 초기 스냅샷을 먼저 받은 뒤 증분 푸시(대략 1초마다)를 받는다.
 
 - Produces: `text/event-stream`
-- named 이벤트: `trace`(새 `RequestTrace`), `metrics`(`ModuleMetricsSnapshot` 갱신), `modules`(모듈 목록 변경)
+- named 이벤트:
+  - `trace` — 새 `RequestTrace` 델타
+  - `metrics` — `ModuleMetricsSnapshot[]` 갱신(모듈별 누적 집계, `protean.trace.metrics.enabled=true` 일 때만 채워짐)
+  - `modules` — 현재 `ModuleStatus[]`
+  - `summary` — `TraceSummary`: 콘솔 헤더용 **윈도** 집계(아래 참고)
 - `/platform/traces` 와 마찬가지로 스트림 연결 자체는 trace 기록에서 제외된다(자기-관측 방지).
 
 ```
 event: trace
 data: {"seq":13,"method":"GET","uri":"/cp/ping","status":200,"latencyMs":2,"moduleId":"cp-mod"}
 ```
+
+`summary` 이벤트는 `TraceSummary` 를 싣는다 — trace 링버퍼에서 매 tick 계산하는 롤링-윈도 집계(`protean.trace.metrics.enabled` 와 무관)에 이전 동일-길이 윈도 대비 trend 를 더한 것:
+
+```
+event: summary
+data: {"windowMs":60000,"count":35,"errorCount":0,"errorRate":0.0,
+       "p50LatencyMs":0,"p95LatencyMs":259,"p99LatencyMs":1471,"maxLatencyMs":1471,
+       "requestsDeltaPct":null,"errorRateDeltaPp":null,"p95DeltaMs":null,
+       "activeModules":3,"modulesByMode":{"in-process":2,"worker":1}}
+```
+
+`TraceSummary` 필드: `windowMs`(롤링 윈도 길이); 현재 윈도 `(now-windowMs, now]` 의 `count`/`errorCount`/`errorRate` 및 `p50/p95/p99/maxLatencyMs`; `requestsDeltaPct`(이전 동일 윈도 대비 요청 수 비율 변화, 예 `0.12`=+12%), `errorRateDeltaPp`(에러율 변화, 퍼센트포인트), `p95DeltaMs`(p95 변화, ms) — 이 trend 3필드는 **이전 윈도에 표본이 없으면 `null`**(baseline 없으면 가짜 delta 안 만듦); `activeModules` 및 `modulesByMode`(현재 `ACTIVE` 모듈을 isolation mode 별로 센 point-in-time 카운트). 윈도 길이는 `protean.trace.summary-window-ms`(기본 60s)로 정하고, 정확도는 `protean.trace.capacity` 에 종속된다.
 
 ---
 

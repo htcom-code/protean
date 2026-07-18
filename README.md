@@ -199,7 +199,7 @@ curl -X POST localhost:8080/platform/modules \
 |--------|------|------|
 | `GET` | `/platform/traces` | Request traces (newest-first). Filters `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` |
 | `GET` | `/platform/traces/metrics` | Per-module aggregate metrics (count, error rate, latency p50/p95/p99). Requires `protean.trace.metrics.enabled` |
-| `GET` | `/platform/traces/stream` | Live SSE push (`trace`/`metrics`/`modules` events) |
+| `GET` | `/platform/traces/stream` | Live SSE push (`trace`/`metrics`/`modules`/`summary` events) |
 
 ### Config REST — `/platform/config` (`ConfigAdminController`, `protean.admin.enabled`)
 | Method | Path | Action |
