@@ -41,8 +41,11 @@
   `@PreDestroy` 가 없어, `ProcessBuilder` 로 띄운 워커 JVM(부모 JVM 이 종료돼도 OS 가
   죽이지 않음)이 랜덤 포트·힙을 문 채 orphan 으로 살아남았다. 이제 `@PreDestroy` 가
   병렬로(SIGTERM → 강제 종료) 정리한다 — 위 container 수정의 process 트랙 짝. 유예는
-  `protean.worker.shutdown-grace-ms`(기본 `5000`; `0`=즉시 강제)로 설정 가능. unclean
-  exit(`kill -9`·크래시)은 아직 회수 안 함 — 후속.
+  `protean.worker.shutdown-grace-ms`(기본 `5000`; `0`=즉시 강제)로 설정 가능. `@PreDestroy`
+  가 안 도는 unclean exit(`kill -9`·크래시)도 이제 다음 startup 에 회수한다 — 워커마다
+  per-spawn uuid 를 command line(`-Dprotean.worker.id`)에 달고 `<module-store>/workers`
+  아래 마커 파일을 남겨, startup 이 프로세스 목록에서 남은 마커의 JVM 을 강제 종료한다.
+  PID 가 아니라 uuid 로 매칭해 무관한(또는 다른 인스턴스의) 프로세스를 죽이지 않는다.
 - MCP 리소스 surface 를 REST parity 로 복원. `protean://modules/{id}/routes` 가
   worker/container 모듈에서 빈 리스트(정상 모듈을 라우트 없음으로 오독)였고
   `protean://modules` 는 shared-lib generation 필드가 null 이었다. 둘 다 이제 REST 관리
