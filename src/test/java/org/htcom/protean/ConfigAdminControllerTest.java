@@ -85,4 +85,43 @@ class ConfigAdminControllerTest {
                 .andExpect(jsonPath("$.applied").value(false));
         assertEquals(before, props.getTrace().getCapacity());
     }
+
+    // The trace-summary window and worker shutdown-grace knobs are registered LIVE, so they are exposed on the config
+    // plane (REST here; MCP shares the same ProteanConfigService) and mutable at runtime — not boot-only.
+    @Test
+    void summaryWindowMsIsLiveConfigurable() throws Exception {
+        mockMvc.perform(get("/platform/config/trace.summary-window-ms"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tier").value("LIVE"));
+        mockMvc.perform(patch("/platform/config")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"trace.summary-window-ms\": 30000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcomes[0].outcome").value("APPLIED_LIVE"));
+        assertEquals(30000L, props.getTrace().getSummaryWindowMs());
+    }
+
+    @Test
+    void shutdownGraceMsIsLiveConfigurable() throws Exception {
+        mockMvc.perform(get("/platform/config/worker.shutdown-grace-ms"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tier").value("LIVE"));
+        mockMvc.perform(patch("/platform/config")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"worker.shutdown-grace-ms\": 2000}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcomes[0].outcome").value("APPLIED_LIVE"));
+        assertEquals(2000L, props.getWorker().getShutdownGraceMs());
+    }
+
+    @Test
+    void shutdownGraceMsRejectsNegativeAtThePlane() throws Exception {
+        long before = props.getWorker().getShutdownGraceMs();
+        mockMvc.perform(patch("/platform/config")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"worker.shutdown-grace-ms\": -1}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.applied").value(false));
+        assertEquals(before, props.getWorker().getShutdownGraceMs());
+    }
 }
