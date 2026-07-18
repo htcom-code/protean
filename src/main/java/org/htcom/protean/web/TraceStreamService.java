@@ -11,10 +11,13 @@ package org.htcom.protean.web;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
+import org.htcom.protean.autoconfigure.ProteanProperties;
+import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModulePlatform;
 import org.htcom.protean.runtime.RequestTrace;
 import org.htcom.protean.runtime.TraceMetrics;
 import org.htcom.protean.runtime.TraceStore;
+import org.htcom.protean.runtime.TraceSummary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,10 +28,13 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Server-side push transport for the observability console (SSE). A single daemon ticker reads new traces
@@ -60,17 +66,20 @@ public class TraceStreamService {
     private final TraceMetrics metrics;
     private final ModulePlatform platform;
     private final ObjectMapper mapper;
+    private final ProteanProperties props;
 
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
     private final ScheduledExecutorService ticker;
     /** Highest trace seq already pushed; advanced every tick so each delta carries only what is new. */
     private volatile long lastSeq = 0;
 
-    public TraceStreamService(TraceStore store, TraceMetrics metrics, ModulePlatform platform, ObjectMapper mapper) {
+    public TraceStreamService(TraceStore store, TraceMetrics metrics, ModulePlatform platform, ObjectMapper mapper,
+                              ProteanProperties props) {
         this.store = store;
         this.metrics = metrics;
         this.platform = platform;
         this.mapper = mapper;
+        this.props = props;
         this.ticker = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "protean-trace-stream");
             t.setDaemon(true);
@@ -92,9 +101,11 @@ public class TraceStreamService {
         });
         emitter.onError(ex -> emitters.remove(emitter));
         try {
+            List<ModuleStatus> mods = moduleStatuses();
             send(emitter, "trace", store.recent(INITIAL_TRACES, null));
             send(emitter, "metrics", metrics.snapshots());
-            send(emitter, "modules", moduleStatuses());
+            send(emitter, "modules", mods);
+            send(emitter, "summary", summary(mods));
         } catch (IOException | RuntimeException ex) {
             emitter.completeWithError(ex);
             return emitter;
@@ -113,11 +124,13 @@ public class TraceStreamService {
             if (emitters.isEmpty()) {
                 return; // cursor still advanced above, so a later client's first delta stays small
             }
+            List<ModuleStatus> mods = moduleStatuses();
             if (!delta.isEmpty()) {
                 broadcast("trace", delta);
             }
             broadcast("metrics", metrics.snapshots());
-            broadcast("modules", moduleStatuses());
+            broadcast("modules", mods);
+            broadcast("summary", summary(mods));
         } catch (RuntimeException ex) {
             log.warn("trace stream tick failed", ex);
         }
@@ -148,6 +161,20 @@ public class TraceStreamService {
     private void send(SseEmitter emitter, String event, Object payload) throws IOException {
         emitter.send(SseEmitter.event().name(event)
                 .data(mapper.writeValueAsString(payload), MediaType.APPLICATION_JSON));
+    }
+
+    /**
+     * Windowed request summary for the console header, computed out-of-band from the trace ring buffer plus a
+     * point-in-time active-module-by-mode count derived from {@code modules} (reused so the two events stay
+     * consistent). Window length is read live ({@code protean.trace.summary-window-ms}), floored to 1s.
+     */
+    private TraceSummary summary(List<ModuleStatus> modules) {
+        Map<String, Long> byMode = modules.stream()
+                .filter(m -> m.desiredState() == ModuleDescriptor.DesiredState.ACTIVE)
+                .collect(Collectors.groupingBy(ModuleStatus::mode, TreeMap::new, Collectors.counting()));
+        long active = byMode.values().stream().mapToLong(Long::longValue).sum();
+        long windowMs = Math.max(1_000L, props.getTrace().getSummaryWindowMs());
+        return TraceSummary.of(store.after(0), System.currentTimeMillis(), windowMs, active, byMode);
     }
 
     /** Current module statuses, mapped exactly as {@code ModuleAdminController.list()} does. */

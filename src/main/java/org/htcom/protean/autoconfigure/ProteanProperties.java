@@ -353,6 +353,13 @@ public class ProteanProperties {
         private volatile boolean enabled = true;
         /** Ring buffer capacity (most recent N requests). */
         private volatile int capacity = 200;
+        /**
+         * Rolling window (ms) for the console summary aggregate pushed on the SSE {@code summary} event: the current
+         * window is {@code [now-windowMs, now]} and its trend compares against the previous equal window
+         * {@code [now-2*windowMs, now-windowMs]}. Read live. Independent of {@code metrics.enabled} (computed from the
+         * trace ring buffer, not the per-module aggregator), so window accuracy is bounded by {@link #capacity}.
+         */
+        private volatile long summaryWindowMs = 60_000;
 
         @NestedConfigurationProperty
         private final Metrics metrics = new Metrics();
@@ -361,6 +368,8 @@ public class ProteanProperties {
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
         public int getCapacity() { return capacity; }
         public void setCapacity(int capacity) { this.capacity = capacity; }
+        public long getSummaryWindowMs() { return summaryWindowMs; }
+        public void setSummaryWindowMs(long summaryWindowMs) { this.summaryWindowMs = summaryWindowMs; }
         public Metrics getMetrics() { return metrics; }
     }
 
