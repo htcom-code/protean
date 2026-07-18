@@ -392,6 +392,12 @@ public class ProteanProperties {
         private int minWarm = 0;
         /** Automatically restart modules of a crashed worker (process track). */
         private boolean autoRestart = false;
+        /**
+         * Grace period (ms) each worker JVM is given to shut down gracefully (SIGTERM) on main shutdown before it is
+         * force-killed. Default 5000. {@code 0} = force-kill immediately (skip the graceful wait); negative is invalid
+         * and is treated as 0.
+         */
+        private long shutdownGraceMs = 5000;
         /** Allow the worker to call main shared beans via the RPC bridge. */
         private boolean rpcBridge = false;
         /** Worker runtime deployment model: embed | sidecar. */
@@ -414,6 +420,8 @@ public class ProteanProperties {
         public void setMinWarm(int minWarm) { this.minWarm = minWarm; }
         public boolean isAutoRestart() { return autoRestart; }
         public void setAutoRestart(boolean autoRestart) { this.autoRestart = autoRestart; }
+        public long getShutdownGraceMs() { return shutdownGraceMs; }
+        public void setShutdownGraceMs(long shutdownGraceMs) { this.shutdownGraceMs = shutdownGraceMs; }
         public boolean isRpcBridge() { return rpcBridge; }
         public void setRpcBridge(boolean rpcBridge) { this.rpcBridge = rpcBridge; }
         public String getRuntime() { return runtime; }

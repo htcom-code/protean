@@ -21,6 +21,7 @@ import org.htcom.protean.proxy.ReverseProxy;
 import org.htcom.protean.runtime.DebugRouteRegistry;
 import org.htcom.protean.worker.WorkerPortAnnouncer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -280,6 +281,75 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
 
     public synchronized int workerCount() {
         return pool.size();
+    }
+
+    /** For tests: a snapshot of the current pool worker JVM {@link Process} handles, for liveness assertions. */
+    public synchronized List<Process> workerProcesses() {
+        return pool.stream().map(h -> h.process).toList();
+    }
+
+    /**
+     * On graceful main shutdown, terminate every worker JVM this instance spawned (the pool + any debug workers).
+     * {@code ProcessBuilder} children are not killed when the parent JVM exits, so without this hook the workers would
+     * survive as orphan JVMs (holding their random ports and heap) — the process-track counterpart to
+     * {@link ContainerWorkerIsolation#shutdown()} (PR #34). Each worker is sent SIGTERM ({@link Process#destroy()}) for
+     * a graceful Spring shutdown, then force-killed if it does not exit within {@code protean.worker.shutdown-grace-ms}
+     * (read live; default 5000, {@code 0} = force-kill immediately, negative → treated as 0). The snapshot is taken
+     * under the monitor and the blocking teardown runs lock-free in parallel (a slow worker must not serialize the
+     * others), mirroring {@link #fanOut}. The {@code retiring} flag is set first so the crash-restart callback
+     * ({@link #onWorkerExit}) does not respawn the workers this hook is killing.
+     */
+    @PreDestroy
+    public void shutdown() {
+        List<Process> processes = new ArrayList<>();
+        synchronized (this) {
+            for (WorkerHandle h : pool) {
+                h.retiring = true;   // intentional shutdown — suppress auto-restart on the exit callback
+                processes.add(h.process);
+            }
+            pool.clear();
+            for (DebugWorkerHandle h : debugWorkers) {
+                processes.add(h.process());
+            }
+            debugWorkers.clear();
+        }
+        if (processes.isEmpty()) {
+            return;
+        }
+        long graceMs = props.getWorker().getShutdownGraceMs();   // read live (default 5000, 0 = immediate force)
+        if (graceMs < 0) {
+            log.warn("protean.worker.shutdown-grace-ms is negative ({}) — treating as 0 (immediate force-kill)", graceMs);
+            graceMs = 0;
+        }
+        final long grace = graceMs;
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (Process p : processes) {
+                executor.execute(() -> terminateGracefully(p, grace));
+            }
+        }
+        log.info("worker isolation shutdown: terminated {} worker JVM(s) (grace {}ms)", processes.size(), grace);
+    }
+
+    /**
+     * SIGTERM ({@link Process#destroy()}) for a graceful exit, then SIGKILL ({@link Process#destroyForcibly()}) if it
+     * does not exit within {@code graceMs} ({@code <= 0} skips straight to force). Always waits for the force-kill to
+     * actually reap the process — the teardown must guarantee no orphan is left behind, and {@code destroyForcibly()}
+     * only sends the signal (it does not wait).
+     */
+    private void terminateGracefully(Process p, long graceMs) {
+        try {
+            if (graceMs > 0) {
+                p.destroy();
+                if (p.waitFor(graceMs, TimeUnit.MILLISECONDS)) {
+                    return;   // exited gracefully within the grace period
+                }
+            }
+            p.destroyForcibly();
+            p.waitFor();   // confirm the SIGKILL actually reaped it (no orphan)
+        } catch (InterruptedException e) {
+            p.destroyForcibly();
+            Thread.currentThread().interrupt();
+        }
     }
 
     // --- worker pool ---

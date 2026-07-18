@@ -140,6 +140,7 @@ Worker-isolation execution settings.
 | `protean.worker.modules-per-worker` | `int` | `4` | `future` | Max modules per worker (`1` = a dedicated JVM per module). |
 | `protean.worker.min-warm` | `int` | `0` | `future` | Number of empty workers to keep warm (for reuse). |
 | `protean.worker.auto-restart` | `boolean` | `false` | `live` | Auto-restart the modules of a crashed worker (process track). |
+| `protean.worker.shutdown-grace-ms` | `long` | `5000` | `live` | Grace period (ms) each worker JVM gets to shut down gracefully (SIGTERM) on main shutdown before it is force-killed. `0` = force-kill immediately; negative → treated as `0`. |
 | `protean.worker.rpc-bridge` | `boolean` | `false` | `restart` | Allow a worker to call the main's shared beans over the RPC bridge. |
 | `protean.worker.runtime` | `String` | `embed` | `restart` | Worker runtime deployment model: `embed` \| `sidecar`. |
 
