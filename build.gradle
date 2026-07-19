@@ -27,7 +27,10 @@ plugins {
 }
 
 group = 'org.htcom'
-version = '0.0.1-SNAPSHOT'
+// Development default is a SNAPSHOT; override with -Pversion=<release> for a Central Portal upload. The Portal's
+// validate→Publish (VALIDATED) flow requires a non-SNAPSHOT version — a SNAPSHOT is instead PUT to the maven-snapshots
+// repo (a different endpoint/permission), so Level 2 and the eventual go-live pass -Pversion=0.0.1.
+version = providers.gradleProperty('version').getOrElse('0.0.1-SNAPSHOT')
 
 java {
     toolchain {

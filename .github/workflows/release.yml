@@ -1,0 +1,79 @@
+# GitHub Actions Release — publishes the library to Maven Central (Sonatype Central Portal).
+#
+# Trigger: MANUAL (workflow_dispatch), not a tag push. This is deliberate. Our release policy makes v* tags and
+# release/* markers immutable (branch/tag rulesets forbid deletion). If a tag triggered the upload, the immutable
+# tag would exist BEFORE the deployment is validated/reviewed — and if the human then Drops it (spots a problem at
+# the VALIDATED stage), that version is burned (the tag can't be removed, so the version must be skipped). Manual
+# dispatch uploads first and creates NO tag, so a Drop lets the SAME version be retried. The tag + release/<version>
+# marker are created by a human AFTER the VALIDATED deployment is confirmed (see the release runbook).
+#
+# Versioning (decision "b"): the source stays at 0.0.1-SNAPSHOT permanently; the release coordinate is never
+# committed. It comes from the `version` input and is injected via -Pversion, which build.gradle reads through
+# providers.gradleProperty('version'). So dispatching version=0.0.1 publishes org.htcom:protean:0.0.1.
+#
+# Signing: in-memory (vanniktech signAllPublications → Bouncy Castle). No gpg binary or keyring is installed on the
+# runner; the armored private key is supplied as a string. The key, its passphrase, and the Central Portal user
+# token come from repo Secrets, exposed as ORG_GRADLE_PROJECT_* env vars so Gradle sees them as project properties.
+# build.gradle gates signAllPublications() on signingInMemoryKey being present, so this job signs and the unsigned
+# GitHub Packages publish in ci.yml stays unaffected.
+#
+# Manual release (decision 5): publishToMavenCentral uploads and Central validates the deployment (VALIDATED), then
+# STOPS. Going live (immutable, world-visible) is a separate deliberate click of "Publish" in the Central Portal UI.
+# This workflow never auto-releases (no publishAndReleaseToMavenCentral / automaticRelease).
+#
+# The dispatched ref should be a commit already on main (hence already verified by ci.yml). This job does not re-run
+# the heavy Testcontainers/isolation suite — the tagged main commit is the tested artifact and the human Portal
+# Publish is the final gate.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version WITHOUT a leading v (e.g. 0.0.1). Must not end in -SNAPSHOT."
+        required: true
+        type: string
+
+concurrency:
+  # Never cancel an in-flight publish; serialize dispatches instead.
+  group: release-maven-central
+  cancel-in-progress: false
+
+jobs:
+  central:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: validate version input
+        run: |
+          v='${{ inputs.version }}'
+          case "$v" in
+            v*)        echo "::error::version must not start with 'v' (got '$v') — pass 0.0.1, not v0.0.1"; exit 1 ;;
+            *-SNAPSHOT) echo "::error::version must be a release, not a SNAPSHOT (got '$v')"; exit 1 ;;
+            "")        echo "::error::version is empty"; exit 1 ;;
+          esac
+          echo "releasing org.htcom:protean:$v"
+      - name: publish to Maven Central (upload + validate; Publish stays a manual click on the Portal)
+        run: ./gradlew publishToMavenCentral --no-configuration-cache -Pversion=${{ inputs.version }} --console=plain
+        env:
+          ORG_GRADLE_PROJECT_signingInMemoryKey:         ${{ secrets.ORG_GRADLE_PROJECT_signingInMemoryKey }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId:       ${{ secrets.ORG_GRADLE_PROJECT_signingInMemoryKeyId }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.ORG_GRADLE_PROJECT_signingInMemoryKeyPassword }}
+          ORG_GRADLE_PROJECT_mavenCentralUsername:       ${{ secrets.ORG_GRADLE_PROJECT_mavenCentralUsername }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword:       ${{ secrets.ORG_GRADLE_PROJECT_mavenCentralPassword }}
+      - name: next steps
+        run: |
+          echo "Uploaded org.htcom:protean:${{ inputs.version }} to the Central Portal."
+          echo "It should now be VALIDATED (not yet public). Review it at https://central.sonatype.com → Deployments."
+          echo "If good: tag v${{ inputs.version }} + create release/${{ inputs.version }}, then click Publish on the Portal."
+          echo "If not:  Drop it on the Portal — the same version can be re-dispatched (no immutable tag was created)."
