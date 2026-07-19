@@ -11,6 +11,10 @@ plugins {
     id 'org.springframework.boot' version '3.5.16'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'maven-publish'
+    // Maven Central (Sonatype Central Portal) publishing. Base variant so our hand-rolled 'library' publication
+    // (worker classifier + optional JDBC deps) stays intact — the plugin only adds GPG signing + the Central Portal
+    // upload path (a plain maven{} repo cannot upload to the new Portal; it needs the plugin's Publisher API).
+    id 'com.vanniktech.maven.publish.base' version '0.37.0'
     // Sidecar worker artifact build (C28): Shadow produces the flat uber-jar the process-track sidecar runtime
     // launches via `java -cp`, and Jib builds the daemon-less container image for the container track.
     id 'com.gradleup.shadow' version '8.3.6'
@@ -192,6 +196,32 @@ publishing {
             // The JDBC drivers (mysql/postgres) are needed for protean's own bootJar and tests, but must not be forced
             // transitively onto consumers (version conflicts, dead weight; data-access contract = the driver is host-bundled).
             // → mark them optional in the published POM. Consumers add their own driver explicitly when using worker DB provisioning.
+            // POM metadata required by Maven Central (rejected without name/description/url/licenses/developers/scm).
+            pom {
+                name = 'Protean'
+                description = 'Turn Spring Boot into a runtime platform: compile Java at runtime, register REST/MCP ' +
+                        'endpoints, and hot-swap, roll back, or unload modules with no restart.'
+                url = 'https://github.com/htcom-code/protean'
+                licenses {
+                    license {
+                        name = 'Mozilla Public License 2.0'
+                        url = 'https://www.mozilla.org/en-US/MPL/2.0/'
+                        distribution = 'repo'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'htcom-code'
+                        name = 'htjulia'
+                        email = 'htjulia1@gmail.com'
+                    }
+                }
+                scm {
+                    url = 'https://github.com/htcom-code/protean'
+                    connection = 'scm:git:https://github.com/htcom-code/protean.git'
+                    developerConnection = 'scm:git:ssh://git@github.com/htcom-code/protean.git'
+                }
+            }
             pom.withXml {
                 def optionalArtifacts = ['mysql-connector-j', 'postgresql']
                 asNode().dependencies.dependency
@@ -218,6 +248,24 @@ publishing {
                 }
             }
         }
+    }
+}
+
+// Maven Central upload (vanniktech base). Central Portal is the default target and requires GPG-signed artifacts.
+// Signing is property-gated: with no in-memory key (local dev / CI without secrets) signAllPublications() is skipped,
+// so publishToMavenLocal and the GitHub Packages publish still work unsigned. The release pipeline provides
+// ORG_GRADLE_PROJECT_signingInMemoryKey (+KeyId/+KeyPassword) and ORG_GRADLE_PROJECT_mavenCentralUsername/Password
+// (Central Portal user token, not login). Coordinates/version come from project group:name:version (org.htcom:protean).
+//
+// publishToMavenCentral() is MANUAL release by design: `./gradlew publishToMavenCentral` uploads and Central
+// validates the deployment, then leaves it VALIDATED in the Portal for a human to Publish (go live, immutable) or
+// Drop (discard). So it doubles as a safe "reach Central + validate, do NOT go live" test. Going live requires the
+// separate publishAndReleaseToMavenCentral task / automaticRelease=true — deliberately NOT wired here.
+mavenPublishing {
+    publishToMavenCentral()
+    if (providers.gradleProperty('signingInMemoryKey').isPresent()
+            || System.getenv('ORG_GRADLE_PROJECT_signingInMemoryKey') != null) {
+        signAllPublications()
     }
 }
 

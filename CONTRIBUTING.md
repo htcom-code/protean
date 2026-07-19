@@ -7,13 +7,13 @@ truth for build/test/publish commands.
 
 ## Getting started
 
-There is **no `gradlew` wrapper** — use a system `gradle` (Java 21 toolchain).
+Use the Gradle **wrapper** (`./gradlew`) — it pins the Gradle version (Java 21 toolchain).
 
 ```bash
 git clone https://github.com/htcom-code/protean
 cd protean
-gradle clean test    # full regression
-gradle bootJar       # assemble the plain jar + fat bootJar
+./gradlew clean test    # full regression
+./gradlew bootJar       # assemble the plain jar + fat bootJar
 ```
 
 Requires JDK 21 and Spring Boot 3.5.x. Some tests (container isolation,
@@ -60,19 +60,19 @@ force soft-reference eviction.
 
 ```bash
 # good — separate
-gradle clean test
-gradle bootJar
+./gradlew clean test
+./gradlew bootJar
 
 # bad — combined, OOM risk
-gradle clean bootJar test
+./gradlew clean bootJar test
 ```
 
 | command | what it runs |
 |---|---|
-| `gradle clean test` | full test suite (maxHeap 512m) |
-| `gradle test --tests 'org.htcom.protean.XxxTest'` | a single class |
-| `gradle bootJar` | assemble the fat bootJar (`-boot`) |
-| `gradle publishToMavenLocal` | publish to `~/.m2` (POM / consumability check) |
+| `./gradlew clean test` | full test suite (maxHeap 512m) |
+| `./gradlew test --tests 'org.htcom.protean.XxxTest'` | a single class |
+| `./gradlew bootJar` | assemble the fat bootJar (`-boot`) |
+| `./gradlew publishToMavenLocal` | publish to `~/.m2` (POM / consumability check) |
 
 ## Code & test conventions
 
@@ -101,13 +101,19 @@ in [`docs/guide/`](docs/guide), and the README ships in English (`README.md`) an
 Korean (`README.ko.md`) — keep both in sync. Record notable changes in
 `CHANGELOG.md` / `CHANGELOG.ko.md`.
 
-## Commit & branch conventions
+## Commit, branch & release conventions
 
 - **Commits** follow Conventional Commits: `type(scope): subject` (`feat`, `fix`,
   `docs`, `refactor`, `perf`, `test`, `chore`, `ci`).
 - **Branches** are `<type>/<short-description>` in kebab-case.
-- The `main` branch is protected — open a PR rather than pushing directly, and
-  satisfy the PR template checklist.
+- **`main` is the only integration branch.** Send every contribution to `main` via
+  a PR — fork the repo, branch off `main`, and open the PR against `main`. Direct
+  pushes are blocked; the PR must satisfy the template checklist and the
+  `ci-complete` check.
+- **`release/<version>` branches and `v<version>` tags are read-only markers** of a
+  published release: they are protected against pushes, deletion, and force-push.
+  Do **not** target a PR at a `release/*` branch — it cannot be merged. Releases are
+  cut from `main`; the release branch is only a frozen pointer to the release commit.
 
 ## License
 
