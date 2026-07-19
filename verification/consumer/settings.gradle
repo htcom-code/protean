@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+// Standalone release consume-test build. Deliberately NOT included in the root settings.gradle: as an independent
+// build it resolves org.htcom:protean from a repository (mavenLocal) like a real downstream consumer, instead of
+// being substituted with the project source (project(':')) the way the examples/* modules are.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
+}
+
+rootProject.name = 'protean-consumer-verification'

@@ -64,7 +64,10 @@ jobs:
           esac
           echo "releasing org.htcom:protean:$v"
       - name: publish to Maven Central (upload + validate; Publish stays a manual click on the Portal)
-        run: ./gradlew publishToMavenCentral --no-configuration-cache -Pversion=${{ inputs.version }} --console=plain
+        # verifyReleaseArtifact is already a dependency of publishToMavenCentral (build.gradle, gated on group ==
+        # org.htcom), so the artifact-set + consume-test gate runs first regardless. It is listed explicitly here so
+        # the gate shows up as its own work in the CI log; naming both tasks does not run the gate twice.
+        run: ./gradlew verifyReleaseArtifact publishToMavenCentral --no-configuration-cache -Pversion=${{ inputs.version }} --console=plain
         env:
           ORG_GRADLE_PROJECT_signingInMemoryKey:         ${{ secrets.ORG_GRADLE_PROJECT_signingInMemoryKey }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyId:       ${{ secrets.ORG_GRADLE_PROJECT_signingInMemoryKeyId }}
