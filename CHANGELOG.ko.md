@@ -17,6 +17,13 @@
 
 ### 추가
 
+- Maven Central(Sonatype Central Portal) 발행을 `com.vanniktech.maven.publish.base`
+  플러그인으로 배선. 발행 POM 에 Central 필수 메타데이터(name·description·url·
+  MPL-2.0 license·developer·scm)를 담고, 아티팩트 서명은 property-gated — in-memory
+  GPG 키가 없으면 서명을 건너뛰어 `publishToMavenLocal` / GitHub Packages 는
+  unsigned 로 발행되고, 릴리스 파이프라인이 키와 Central Portal 토큰을 주입한다.
+  발행 산출물은 plain + sources + javadoc + worker 유지(boot jar 제외). 네임스페이스
+  검증·GPG/토큰 설정·릴리스 컷은 외부 단계로 아직 미수행.
 - worker DB admin 자격증명(`protean.worker.db.admin-url` / `username` /
   `password`)을 재기동 없이 런타임 rotation 가능. `DbScopeProvisioner` 가
   provision/deprovision 마다 `AdminCreds` 스냅샷을 읽어 자격증명이 바뀔 때만 admin

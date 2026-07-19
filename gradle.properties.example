@@ -9,3 +9,24 @@
 # githubRepo=<repo-name>
 # githubActor=<github-username>
 # githubToken=<personal-access-token: write:packages 스코프>
+
+# --- Maven Central (Sonatype Central Portal) 발행 자격 ---
+# 실제 값은 절대 커밋 금지. 개인키/토큰은 ~/.gradle/gradle.properties(사용자 전역, 레포 밖) 에 두길 권장.
+# CI 는 ORG_GRADLE_PROJECT_<name> 환경변수(= GitHub Actions Secrets)로 주입한다.
+#
+# 이 값들이 있을 때만 서명이 켜지고(signAllPublications) publishToMavenCentral 이 Portal 에 업로드한다.
+# 없으면 서명은 건너뛰고 publishToMavenLocal / GitHub Packages 만 동작한다(unsigned).
+# publishToMavenCentral 은 manual release: 업로드+검증(VALIDATED)까지만, 실공개는 Portal 에서 수동 Publish.
+#
+# 1) GPG in-memory 서명 키 (빌드 머신에 gpg 설치 없이도 서명)
+#    - signingInMemoryKey        : ASCII-armored 개인키 전체. 여러 줄이라 gradle.properties 에선 값이 까다로우니
+#                                  ORG_GRADLE_PROJECT_signingInMemoryKey 환경변수로 넣는 편이 안전.
+#    - signingInMemoryKeyId       : (선택) 키 ID 마지막 8자
+#    - signingInMemoryKeyPassword : 키 passphrase
+# signingInMemoryKey=<armored-secret-key>
+# signingInMemoryKeyId=<8-char-key-id>
+# signingInMemoryKeyPassword=<passphrase>
+#
+# 2) Central Portal user token (로그인 계정이 아니라 Portal 에서 발급한 토큰)
+# mavenCentralUsername=<portal-token-username>
+# mavenCentralPassword=<portal-token-password>

@@ -19,6 +19,15 @@ follows the migration.
 
 ### Added
 
+- Maven Central (Sonatype Central Portal) publishing is now wired via the
+  `com.vanniktech.maven.publish.base` plugin: the published POM carries the
+  Central-required metadata (name, description, url, MPL-2.0 license, developer,
+  scm), and artifact signing is property-gated — with no in-memory GPG key,
+  signing is skipped so `publishToMavenLocal` / GitHub Packages still publish
+  unsigned, while the release pipeline supplies the key and Central Portal token.
+  The published set stays plain + sources + javadoc + worker (no boot jar).
+  Namespace verification, GPG/token setup, and the release cut are external steps,
+  not yet performed.
 - Worker DB admin credentials (`protean.worker.db.admin-url` / `username` /
   `password`) are now runtime-rotatable without a restart: `DbScopeProvisioner`
   reads an `AdminCreds` snapshot per provision/deprovision and rebuilds the admin
