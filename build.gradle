@@ -272,6 +272,81 @@ mavenPublishing {
     }
 }
 
+// io.spring.dependency-management supplies dependency versions via a BOM import written into the POM's
+// <dependencyManagement>, but it does NOT stamp those versions into Gradle Module Metadata (.module). Gradle
+// consumers prefer .module over the POM, so they would see version-less dependencies and fail to resolve
+// (Maven consumers resolve fine via the POM BOM import). Disabling .module makes Gradle consumers fall back to the
+// POM — the same resolution path Maven uses — so both toolchains resolve the published artifact identically.
+tasks.withType(GenerateModuleMetadata).configureEach {
+    enabled = false
+}
+
+// --- Release verification gate (pre-Central) ---
+// A malformed, unsigned, or unconsumable artifact must never reach the Central Portal upload. verifyReleaseArtifact
+// runs BEFORE publishToMavenCentral (wired at the bottom of this block) so a bad artifact fails the build instead of
+// reaching the Portal. Normal dev tasks (build/test/bootJar/publishToMavenLocal) are unaffected — only the Central
+// upload depends on the gate. The wiring is scoped to our own coordinate (group == 'org.htcom'); a fork that repoints
+// group to its own namespace does not inherit it.
+
+// (A) Artifact-set + signature check against the mavenLocal staging output. Central's VALIDATED stage also enforces
+// POM completeness and signatures, so this mostly buys fail-fast (fail locally/CI before uploading) rather than new
+// coverage. The signature check mirrors signAllPublications' property gate: skipped when no signing key is present
+// (local dev leaves the publication unsigned), asserted when signing is active (the release pipeline).
+tasks.register('verifyReleaseArtifactSet') {
+    group = 'verification'
+    description = 'Assert the publishable artifact set (jar/sources/javadoc/pom, +signatures when signing) exists.'
+    dependsOn 'publishLibraryPublicationToMavenLocal'
+    doLast {
+        def dir = new File(System.getProperty('user.home'), '.m2/repository/org/htcom/protean/' + version)
+        def b = "protean-${version}"
+        ["${b}.jar", "${b}-sources.jar", "${b}-javadoc.jar", "${b}.pom"].each { n ->
+            def f = new File(dir, n as String)
+            if (!f.isFile() || f.length() == 0L) {
+                throw new GradleException("release verify: missing or empty artifact ${f}")
+            }
+        }
+        def signing = providers.gradleProperty('signingInMemoryKey').isPresent() ||
+                System.getenv('ORG_GRADLE_PROJECT_signingInMemoryKey') != null
+        if (signing) {
+            ["${b}.jar.asc", "${b}.pom.asc", "${b}-sources.jar.asc", "${b}-javadoc.jar.asc"].each { n ->
+                def f = new File(dir, n as String)
+                if (!f.isFile() || f.length() == 0L) {
+                    throw new GradleException("release verify: missing or empty signature ${f}")
+                }
+            }
+        }
+        logger.lifecycle("release verify: artifact set OK (signing=${signing}) — ${dir}")
+    }
+}
+
+// (B) Consume-test — the check Central does NOT perform. verification/consumer is a standalone build (not a subproject,
+// so it is never substituted with the project source): it depends on the published org.htcom:protean coordinate from
+// mavenLocal and runs a smoke. Compiling proves the published public API links for a downstream consumer; running
+// proves the published POM's transitive runtime dependencies actually resolve. Invoked via the root wrapper so it uses
+// the same pinned Gradle, with a fresh JVM (--no-daemon) to keep the nested build isolated.
+tasks.register('verifyPublishedConsumption', Exec) {
+    group = 'verification'
+    description = 'Resolve the published coordinate from mavenLocal in a standalone consumer and run it.'
+    dependsOn 'publishLibraryPublicationToMavenLocal'
+    workingDir = file('verification/consumer')
+    def wrapper = org.gradle.internal.os.OperatingSystem.current().isWindows() ? 'gradlew.bat' : 'gradlew'
+    commandLine "${rootDir}/${wrapper}", 'run', "-PproteanVersion=${version}", '--no-daemon', '--console=plain'
+}
+
+tasks.register('verifyReleaseArtifact') {
+    group = 'verification'
+    description = 'Full pre-Central release gate: artifact set (A) + published consume-test (B).'
+    dependsOn 'verifyReleaseArtifactSet', 'verifyPublishedConsumption'
+}
+
+// Scope the gate to our namespace only — a fork repointing group opts out automatically. configureEach handles the
+// vanniktech task whether it is registered eagerly or lazily.
+if (group == 'org.htcom') {
+    tasks.matching { it.name == 'publishToMavenCentral' }.configureEach {
+        dependsOn 'verifyReleaseArtifact'
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
     retry {

@@ -1,0 +1,41 @@
+/*
+ * Copyright (c) 2026 htjulia <htjulia1@gmail.com>
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+// Release consume-test: depend on the PUBLISHED protean coordinate (resolved from mavenLocal) exactly as an external
+// consumer would, then compile and run a smoke against it. Compiling proves the published jar's public API links;
+// running proves the published POM's transitive runtime dependencies actually resolve — a guarantee the Central
+// Portal's VALIDATED stage does NOT provide (it validates metadata/signatures, not consumability).
+plugins {
+    id 'java'
+    id 'application'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    // mavenLocal first: the release gate publishes protean here (publishLibraryPublicationToMavenLocal) right before
+    // invoking this build. mavenCentral supplies protean's transitive dependencies declared in its published POM.
+    mavenLocal()
+    mavenCentral()
+}
+
+// The version under test is injected by the root release gate (-PproteanVersion=<version>); defaults to the dev
+// SNAPSHOT so this build is runnable on its own after a plain publishToMavenLocal.
+def proteanVersion = (findProperty('proteanVersion') ?: '0.0.1-SNAPSHOT').toString()
+
+dependencies {
+    implementation "org.htcom:protean:${proteanVersion}"
+}
+
+application {
+    mainClass = 'org.htcom.protean.verification.ConsumerSmoke'
+}
