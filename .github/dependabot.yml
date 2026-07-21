@@ -18,6 +18,12 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "org.springframework.boot:spring-boot-gradle-plugin"  # examples buildscript classpath
         update-types: ["version-update:semver-major"]
+      # Shadow 9.x requires Gradle 9.2+ (min Gradle bumped in 9.5.0); this repo runs the
+      # Gradle 8.14.x wrapper, so a 9.x bump fails the build (Gradle 9 build API). The
+      # Gradle 8 -> 9 upgrade is a deliberate build-toolchain track (see ROADMAP -> Build
+      # toolchain), not an automated bump — keep 8.x patches/minors, block 9.x majors.
+      - dependency-name: "com.gradleup.shadow"                            # root plugins DSL (build.gradle)
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions used in .github/workflows/.
   - package-ecosystem: github-actions
