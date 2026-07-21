@@ -17,7 +17,7 @@ plugins {
     id 'com.vanniktech.maven.publish.base' version '0.37.0'
     // Sidecar worker artifact build (C28): Shadow produces the flat uber-jar the process-track sidecar runtime
     // launches via `java -cp`, and Jib builds the daemon-less container image for the container track.
-    id 'com.gradleup.shadow' version '8.3.6'
+    id 'com.gradleup.shadow' version '9.6.0'
     id 'com.google.cloud.tools.jib' version '3.5.4'
     // Retries flaky tests on CI. The JDI/debug integration tests (attach + breakpoint over JDWP) are
     // irreducibly timing-sensitive on loaded 2-vCPU GitHub runners — a breakpoint occasionally isn't hit
