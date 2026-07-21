@@ -55,6 +55,44 @@ explicit; the design is deferred to that track.
 
 ---
 
+## Build toolchain (Gradle)
+
+Unlike the Spring Boot line, the Gradle version is **build-time only** — it is not a
+runtime contract consumers depend on. It still gates which plugin versions the build
+can adopt, so major moves are tracked explicitly rather than taken as routine bumps.
+
+### ✅ Current baseline
+
+- **Gradle 8.14.x wrapper on Java 21.** The build runs on the Gradle 8 line; the
+  Shadow (`com.gradleup.shadow` 8.3.x) and Jib plugins are pinned to versions
+  compatible with it.
+
+### 🛠 Planned — Gradle 9.x upgrade
+
+Gradle 9 is a maintenance upgrade the build will eventually take (the plugin
+ecosystem is moving to it — e.g. Shadow **9.5.0+ requires Gradle 9.2+**, so the
+`com.gradleup.shadow` 9.x bump cannot be adopted on the Gradle 8 wrapper). It is
+**planned but deferred** because Gradle 9 carries breaking changes that need their
+own verification pass, not because of any consumer-facing completeness contract:
+
+- **Groovy 3 → 4** for the embedded runtime — the `build.gradle` scripts are Groovy
+  DSL, so the parser rewrite and legacy-package removal must be re-validated.
+- **Removed Gradle 8.x deprecated APIs** used anywhere in the build.
+- **Reproducible archives on by default** — re-verify the Shadow uber-jar and Jib
+  image outputs.
+- Minimum **JVM 17+ to run the daemon** — already satisfied (Java 21).
+
+When this lands it moves the wrapper to Gradle 9.2+ and unpins the Shadow/Jib plugin
+majors together, as one verified change.
+
+### 🚫 Not planned
+
+- Auto-accepting Dependabot **major** Gradle-plugin bumps (Shadow, Jib) that require
+  a newer Gradle line. They are gated on the upgrade above, not taken as automated
+  bumps — Dependabot is configured to hold `com.gradleup.shadow` at its major.
+
+---
+
 ## Observability
 
 Runtime request tracing and per-module metrics. See the operations guide
