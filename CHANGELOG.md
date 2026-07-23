@@ -46,6 +46,12 @@ follows the migration.
 
 ### Fixed
 
+- The library no longer registers its internal RPC-bridge demo beans
+  (`Echo`/`Greeting`/`Math`/`Ledger`/`Stream` `*Port`) in consumer apps. They
+  were `@Component`s under `src/main`, swept up by the auto-configuration
+  component scan, so every consumer got them — and `LedgerPortImpl` created a
+  `ledger` table in the consumer's database at startup. They are now test-only
+  scaffolding, removed from the published jar.
 - The JDBC module-store backend now works on MySQL and PostgreSQL, not only
   H2. Its schema was hardcoded to H2-only types (`descriptor_json CLOB`,
   `seq BIGINT AUTO_INCREMENT`), so `module-store.backend=jdbc` failed at

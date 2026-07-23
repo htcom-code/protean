@@ -40,6 +40,11 @@
 
 ### 수정
 
+- 라이브러리가 내부 RPC bridge 데모 빈(`Echo`/`Greeting`/`Math`/`Ledger`/`Stream`
+  `*Port`)을 더 이상 소비자 앱에 등록하지 않는다. `src/main` 의 `@Component` 라
+  오토컨피그 컴포넌트 스캔에 쓸려 모든 소비자에 등록됐고, `LedgerPortImpl` 이 기동 시
+  소비자 DB 에 `ledger` 테이블을 만들었다. 이제 테스트 전용 스캐폴딩으로, 발행 jar 에서
+  제외된다.
 - JDBC module-store 백엔드가 H2 뿐 아니라 MySQL·PostgreSQL 에서도 동작. 스키마가
   H2 전용 타입(`descriptor_json CLOB`, `seq BIGINT AUTO_INCREMENT`)으로 하드코딩돼
   `module-store.backend=jdbc` 가 다른 엔진에선 기동 시 실패했다(CLOB 은 둘 다 없고
