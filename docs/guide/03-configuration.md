@@ -100,8 +100,9 @@ For isolation-mode details see [05. Isolation Modes](05-isolation-modes.md).
 
 | Key | Type | Default | Tier | Description |
 |----|------|--------|------|------|
-| `protean.module-store.backend` | `String` | `filesystem` | `restart` | Storage backend: `filesystem` \| `jdbc`. |
+| `protean.module-store.backend` | `String` | `filesystem` | `restart` | Storage backend: `filesystem` \| `jdbc`. The `jdbc` backend supports H2/MySQL/PostgreSQL out of the box (other vendors via a `ModuleStoreDialect` bean). |
 | `protean.module-store.dir` | `String` | `${java.io.tmpdir}/protean-modules` | `restart` | Storage directory for the filesystem backend. |
+| `protean.module-store.dialect` | `String` | (empty = auto-detect) | `restart` | JDBC dialect for the `jdbc` backend: `h2` \| `mysql` \| `postgresql`, or a custom `ModuleStoreDialect.id()`. Empty auto-detects from the database product name (strict — an unknown vendor fails fast). Only relevant when `backend=jdbc`. Read-only over the config API. |
 
 ## reconcile — startup reconcile (ACTIVE-module recovery)
 
@@ -212,6 +213,7 @@ protean:
   module-store:
     backend: filesystem
     dir: /var/lib/protean/modules
+    # dialect: mysql            # jdbc backend only; empty = auto-detect (h2|mysql|postgresql)
   trace:
     enabled: true
     capacity: 500

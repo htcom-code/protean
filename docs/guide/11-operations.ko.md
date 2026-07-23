@@ -33,13 +33,15 @@ protean:
     backend: jdbc
 ```
 
-- 기동 시(`@PostConstruct`) 스키마를 자동 생성한다(`CREATE TABLE IF NOT EXISTS`): `module`(현재 상태), `module_version`(append-only 히스토리). 컬럼은 `descriptor_json CLOB`.
+- 기동 시(`@PostConstruct`) 스키마를 자동 생성한다(`CREATE TABLE IF NOT EXISTS`): `module`(현재 상태), `module_version`(append-only 히스토리). `descriptor_json` 컬럼 타입과 `seq` auto-increment 키는 활성 `ModuleStoreDialect` 가 벤더별로 고른다(H2 `CLOB` / MySQL `LONGTEXT` / PostgreSQL `TEXT`; H2·MySQL `BIGINT AUTO_INCREMENT` / PostgreSQL `BIGSERIAL`).
+- **지원 벤더**: H2·MySQL·PostgreSQL 내장. dialect 는 JDBC 데이터베이스 product name 으로 자동 감지하거나 `protean.module-store.dialect`(`h2`|`mysql`|`postgresql`)로 명시한다. 인식 못 하는 벤더는 **기동 시 fail-fast** 로 명확히 실패한다 — H2 DDL 로 조용히 폴백하지 않는다. 다른 벤더(예: Oracle)를 지원하려면 `ModuleStoreDialect` 빈을 등록한다. [10. SPI 확장](10-spi-extension.ko.md) 참고.
+- 스키마 생성 후 **기동 self-check**(롤백되는 128 KB probe)를 돌려 `descriptor_json` 컬럼이 truncation 없이 대용량 문자를 담는지, `seq` 가 auto-increment 되는지 확인한다 — bounded `VARCHAR` 나 깨진 dialect 가 나중에 대용량 디스크립터에서 터지지 않고 기동 시 드러난다.
 - 애플리케이션의 `JdbcTemplate`(즉 소비자가 구성한 `DataSource`)을 그대로 쓴다. 별도 DataSource 를 주입하지 않는다.
 - upsert 는 DB 이식성을 위해 MERGE 대신 `UPDATE→(0건)→INSERT` 방식이다.
 
 ### 백엔드 전환
 
-두 백엔드는 같은 `ModuleDescriptor` JSON 을 저장하지만 저장 위치가 다르다. 전환 시 기존 디스크립터가 자동 마이그레이션되지 않는다. 무중단이 필요하면 기존 store 의 디스크립터를 새 백엔드로 옮기거나, ACTIVE 모듈을 새 백엔드에 다시 배포해야 한다.
+두 백엔드는 같은 `ModuleDescriptor` JSON 을 저장하지만 저장 위치가 다르다. 전환 시(백엔드 또는 JDBC dialect/벤더) 기존 디스크립터가 자동 마이그레이션되지 않는다 — `protean.module-store.dialect` 가 restart 스코프인 것도 같은 이유다. 무중단이 필요하면 기존 store 의 디스크립터를 새 백엔드로 옮기거나, ACTIVE 모듈을 새 백엔드에 다시 배포해야 한다.
 
 ## 서버 재기동 시 reconcile
 

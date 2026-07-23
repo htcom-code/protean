@@ -25,7 +25,7 @@ The documents are numbered in reading order. If you're new, start with [01. Gett
 | 07 | [Data Access](07-data-access.md) | Driver bundling · resource channel · module DataSource · worker DB · transactions · managed execution |
 | 08 | [MCP Integration](08-mcp-integration.md) | Remote server security posture, Bearer/OAuth 2.0 setup, connecting & driving a client (HTTP/stdio), tool catalog, auth delegation |
 | 09 | [Debugging](09-debugging.md) | Hands-on Level 3 debugging (launch/attach/breakpoint/step/evaluate/redefine) |
-| 10 | [SPI Extension](10-spi-extension.md) | Extension points opened via bean registration (`CodeRule` · `DbDialect` · `ModuleActionAuthorizer` · `WorkerRuntimeProvider` · `ModuleUnloadCallback`) |
+| 10 | [SPI Extension](10-spi-extension.md) | Extension points opened via bean registration (`CodeRule` · `DbDialect` · `ModuleStoreDialect` · `ModuleActionAuthorizer` · `WorkerRuntimeProvider` · `ModuleUnloadCallback`) |
 
 ## Operations · Auxiliary
 

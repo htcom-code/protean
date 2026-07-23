@@ -99,6 +99,9 @@ protean:
 **Q. 재기동하면 모듈이 사라진다.**
 디스크립터 저장소가 휘발성 경로일 수 있다. filesystem 백엔드의 기본 `dir` 은 `java.io.tmpdir` 하위다 — 영속 경로로 바꾼다. 또 reconcile 은 `ACTIVE` 만 복구하므로 `PENDING_APPROVAL` 모듈은 재기동 후 서빙되지 않는다(의도된 우회 차단).
 
+**Q. `module-store.backend=jdbc` 로 기동이 실패한다(bad SQL, 또는 "No ModuleStoreDialect …").**
+JDBC store 백엔드는 H2/MySQL/PostgreSQL 을 지원한다. 벤더를 인식 못 하면 엔진에서 깨질 H2 DDL 을 쓰지 않고 fail-fast 한다 — `protean.module-store.dialect`(`h2`|`mysql`|`postgresql`)를 설정하거나, 다른 벤더는 `ModuleStoreDialect` 빈을 등록한다([10. SPI 확장](10-spi-extension.ko.md) 참고). 에러가 기동 self-check 의 truncation 보고면, (커스텀) dialect 의 `descriptor_json` 컬럼이 대용량 문자 타입이 아니다 — bounded `VARCHAR` 말고 `CLOB`/`TEXT`/`LONGTEXT` 를 쓴다.
+
 **Q. `/platform/traces` 가 항상 비어 있다.**
 `protean.trace.enabled=false` 면 기록되지 않는다. 또 trace 조회 엔드포인트 자신(`/platform/traces` 요청)은 자기-소음 방지로 기록되지 않는다. 링버퍼(`capacity`, 기본 200)를 넘긴 오래된 trace 는 폐기된다.
 
