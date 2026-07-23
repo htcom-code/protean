@@ -145,6 +145,7 @@ public class ConfigRegistry {
         restart("module.shared-lib-dir", ConfigTier.RESTART_ARTIFACT, p -> p.getModule().getSharedLibDir());
         restart("module.shared-lib-store-dir", ConfigTier.RESTART_ARTIFACT, p -> p.getModule().getSharedLibStoreDir());
         restart("module-store.dir", ConfigTier.RESTART_ARTIFACT, p -> p.getModuleStore().getDir());
+        restart("module-store.dialect", ConfigTier.RESTART_ARTIFACT, p -> p.getModuleStore().getDialect());
         restart("bridge.secret", ConfigTier.RESTART_ARTIFACT, p -> mask(p.getBridge().getSecret()));
         restart("bridge.url", ConfigTier.RESTART_ARTIFACT, p -> p.getBridge().getUrl());
         restart("bridge.auth-mode", ConfigTier.RESTART_ARTIFACT, p -> p.getBridge().getAuthMode());

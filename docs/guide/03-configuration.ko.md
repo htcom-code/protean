@@ -96,8 +96,9 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 
 | 키 | 타입 | 기본값 | 반영 | 설명 |
 |----|------|--------|------|------|
-| `protean.module-store.backend` | `String` | `filesystem` | `restart` | 저장 백엔드: `filesystem` \| `jdbc`. |
+| `protean.module-store.backend` | `String` | `filesystem` | `restart` | 저장 백엔드: `filesystem` \| `jdbc`. `jdbc` 백엔드는 H2/MySQL/PostgreSQL 을 기본 지원한다(그 외 벤더는 `ModuleStoreDialect` 빈). |
 | `protean.module-store.dir` | `String` | `${java.io.tmpdir}/protean-modules` | `restart` | filesystem 백엔드 저장 디렉터리. |
+| `protean.module-store.dialect` | `String` | (빈 값 = 자동 감지) | `restart` | `jdbc` 백엔드의 JDBC dialect: `h2` \| `mysql` \| `postgresql`, 또는 커스텀 `ModuleStoreDialect.id()`. 빈 값이면 데이터베이스 product name 으로 자동 감지한다(엄격 — 미지원 벤더는 fail-fast). `backend=jdbc` 일 때만 유효. 설정 API 로는 읽기 전용. |
 
 ## reconcile — 기동 시 reconcile(ACTIVE 모듈 복구)
 
@@ -206,6 +207,7 @@ protean:
   module-store:
     backend: filesystem
     dir: /var/lib/protean/modules
+    # dialect: mysql            # jdbc 백엔드 전용; 빈 값 = 자동 감지 (h2|mysql|postgresql)
   trace:
     enabled: true
     capacity: 500

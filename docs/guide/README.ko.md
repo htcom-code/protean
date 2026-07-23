@@ -25,7 +25,7 @@ Protean 을 의존성으로 쓰는 **Spring Boot 개발자**(라이브러리 소
 | 07 | [데이터 접근](07-data-access.ko.md) | 드라이버 번들·리소스 채널·모듈 DataSource·worker DB·트랜잭션·관리형 실행 |
 | 08 | [MCP 연동](08-mcp-integration.ko.md) | 원격 서버 보안 자세, Bearer/OAuth 2.0 설정, 클라이언트 연결·구동(HTTP/stdio), 툴 카탈로그, 인증 위임 |
 | 09 | [디버깅](09-debugging.ko.md) | Level 3 디버깅(launch/attach/breakpoint/step/evaluate/redefine) 실습 |
-| 10 | [SPI 확장](10-spi-extension.ko.md) | 빈 등록으로 여는 확장점(`CodeRule`·`DbDialect`·`ModuleActionAuthorizer`·`WorkerRuntimeProvider`·`ModuleUnloadCallback`) |
+| 10 | [SPI 확장](10-spi-extension.ko.md) | 빈 등록으로 여는 확장점(`CodeRule`·`DbDialect`·`ModuleStoreDialect`·`ModuleActionAuthorizer`·`WorkerRuntimeProvider`·`ModuleUnloadCallback`) |
 
 ## 운영 · 보조
 

@@ -40,6 +40,15 @@
 
 ### 수정
 
+- JDBC module-store 백엔드가 H2 뿐 아니라 MySQL·PostgreSQL 에서도 동작. 스키마가
+  H2 전용 타입(`descriptor_json CLOB`, `seq BIGINT AUTO_INCREMENT`)으로 하드코딩돼
+  `module-store.backend=jdbc` 가 다른 엔진에선 기동 시 실패했다(CLOB 은 둘 다 없고
+  Postgres 엔 AUTO_INCREMENT 없음). 이제 `ModuleStoreDialect` SPI 로 DDL 이 벤더
+  적응형이다 — H2/MySQL/PostgreSQL 내장, 그 외 벤더는 빈으로 확장 — 자동 감지 또는
+  `protean.module-store.dialect` 로 선택하며, 미지원 벤더는 H2 DDL 로 조용히 폴백하지
+  않고 fail-fast 한다. 기동 self-check 가 descriptor 컬럼이 truncation 없이 대용량
+  문자를 담는지, `seq` 가 auto-increment 되는지 검증한다. `protean.module-store.dialect`
+  는 설정 표면에 읽기 전용으로 노출된다.
 - worker/container 격리 모듈에 모든 HTTP method·요청 body 포워딩. 기존 ReverseProxy
   가 body 없는 GET 으로 하드코딩돼 있어 in-process 에선 되던 `@PostMapping` 이
   격리되면 405 였고, route 목록도 프록시 라우트의 method 를 비워 보고했다. 이제 요청을

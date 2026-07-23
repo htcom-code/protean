@@ -46,6 +46,17 @@ follows the migration.
 
 ### Fixed
 
+- The JDBC module-store backend now works on MySQL and PostgreSQL, not only
+  H2. Its schema was hardcoded to H2-only types (`descriptor_json CLOB`,
+  `seq BIGINT AUTO_INCREMENT`), so `module-store.backend=jdbc` failed at
+  startup on other engines (CLOB exists on neither; Postgres has no
+  AUTO_INCREMENT). DDL is now vendor-adaptive via a `ModuleStoreDialect` SPI —
+  H2/MySQL/PostgreSQL built in, other vendors pluggable via a bean — selected
+  by auto-detection or `protean.module-store.dialect`, and an unknown vendor
+  fails fast instead of silently using H2 DDL. A startup self-check verifies
+  the descriptor column holds large text without truncation and that `seq`
+  auto-increments. `protean.module-store.dialect` is exposed read-only on the
+  config surface.
 - Worker/container-isolated modules now forward all HTTP methods and request
   bodies. The reverse proxy previously hardcoded bodyless GET, so a
   `@PostMapping` that worked in-process returned 405 once isolated; route

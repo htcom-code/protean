@@ -99,6 +99,9 @@ The admin surface is off or not registered. Check that `protean.admin.enabled` i
 **Q. Modules disappear after a restart.**
 The descriptor store may be on a volatile path. The filesystem backend's default `dir` is under `java.io.tmpdir` — change it to a persistent path. Also, reconcile restores only `ACTIVE`, so a `PENDING_APPROVAL` module is not served after a restart (an intentional bypass block).
 
+**Q. Startup fails with `module-store.backend=jdbc` (bad SQL, or "No ModuleStoreDialect …").**
+The JDBC store backend supports H2/MySQL/PostgreSQL. If the vendor isn't recognized, it fails fast rather than using H2 DDL that would break on your engine — set `protean.module-store.dialect` (`h2`|`mysql`|`postgresql`), or register a `ModuleStoreDialect` bean for another vendor (see [10. SPI Extension](10-spi-extension.md)). If the error is the startup self-check reporting truncation, your (custom) dialect's `descriptor_json` column isn't a large-text type — use `CLOB`/`TEXT`/`LONGTEXT`, not a bounded `VARCHAR`.
+
 **Q. `/platform/traces` is always empty.**
 If `protean.trace.enabled=false`, nothing is recorded. Also, the trace-query endpoint itself (a `/platform/traces` request) is not recorded, to avoid self-noise. Traces older than the ring buffer (`capacity`, default 200) are discarded.
 

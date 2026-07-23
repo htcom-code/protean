@@ -37,7 +37,8 @@ linkage errors). 4.x support is a committed, planned track — see the
 - **Versioning & rollback** — every deploy accrues version history; roll back to a specific
   version (`/rollback?version=`). A canary update that fails ③verify auto-rolls back.
 - **Restart recovery** — descriptors are persisted to a write-ahead store (filesystem or
-  JDBC); on restart `reconcile` restores the ACTIVE modules. No reliance on in-memory state.
+  JDBC — vendor-adaptive H2/MySQL/PostgreSQL, pluggable); on restart `reconcile` restores
+  the ACTIVE modules. No reliance on in-memory state.
 - **Three isolation modes** — `in-process` / `worker` (separate JVM) / `container`
   (Docker · cgroup · seccomp · read-only FS). Chosen per module; all support zero-downtime
   hot-swap, worker pooling, crash supervision, and a dedicated DB.
@@ -296,6 +297,7 @@ the axes that need to vary via bean registration:
 |-----|-----------|------|
 | `gate.rules.CodeRule` | register a `CodeRule` bean | Add a custom bytecode rule to promotion gate ② |
 | `db.DbDialect` | register a `DbDialect` bean | Add/override a vendor for DB-scope provisioning (built-in mysql/postgresql fallback) |
+| `module.ModuleStoreDialect` | register a `ModuleStoreDialect` bean | Add/override a vendor for the JDBC module-store backend (built-in h2/mysql/postgresql) |
 | `mcp.ModuleActionAuthorizer` | register a `ModuleActionAuthorizer` bean | Authorize MCP module actions (default permissive) |
 | `isolation.WorkerRuntimeProvider` | register a bean | Swap the worker deployment model (embed/sidecar) |
 | `module.ModuleUnloadCallback` | register a module/consumer bean | Cleanup hook for out-of-context resources (ThreadLocal, MBean, …) on unload |
@@ -335,7 +337,7 @@ Excerpt:
 | `protean.module.request-timeout-ms` | `0` | Module request timeout (0 = unlimited) |
 | `protean.module.shared-lib-dir` | (empty) | Shared lib dir — its jars go on the module CL parent + compile classpath (drop-in) |
 | `protean.module.executor.pool-size` | `2` | Managed executor (`ProteanTaskExecutor`) pool size |
-| `protean.module-store.backend` / `.dir` | `filesystem` | Descriptor store: filesystem\|jdbc |
+| `protean.module-store.backend` / `.dir` / `.dialect` | `filesystem` | Descriptor store: filesystem\|jdbc (jdbc dialect auto-detected; h2/mysql/postgresql built in) |
 | `protean.trace.enabled` / `.capacity` | `true` / `200` | Request-trace ring buffer |
 | `protean.trace.metrics.enabled` | `false` | Per-module aggregate metrics (count, error rate, latency percentiles; opt-in) |
 | `protean.trace.metrics.latency-buckets` / `.max-modules` | `20` / `512` | Latency histogram buckets / tracked-module cap |

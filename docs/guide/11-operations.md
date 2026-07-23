@@ -33,13 +33,15 @@ protean:
     backend: jdbc
 ```
 
-- At startup (`@PostConstruct`) it auto-creates the schema (`CREATE TABLE IF NOT EXISTS`): `module` (current state), `module_version` (append-only history). The column is `descriptor_json CLOB`.
+- At startup (`@PostConstruct`) it auto-creates the schema (`CREATE TABLE IF NOT EXISTS`): `module` (current state), `module_version` (append-only history). The `descriptor_json` column type and the `seq` auto-increment key are chosen per vendor by the active `ModuleStoreDialect` (H2 `CLOB` / MySQL `LONGTEXT` / PostgreSQL `TEXT`; H2·MySQL `BIGINT AUTO_INCREMENT` / PostgreSQL `BIGSERIAL`).
+- **Supported vendors**: H2, MySQL, and PostgreSQL are built in. The dialect is auto-detected from the JDBC database product name, or set it explicitly with `protean.module-store.dialect` (`h2`|`mysql`|`postgresql`). An unrecognized vendor **fails fast at startup** with a clear message — it does not silently fall back to H2 DDL. To support another vendor (e.g. Oracle), register a `ModuleStoreDialect` bean; see [10. SPI Extension](10-spi-extension.md).
+- After creating the schema it runs a **startup self-check** (a rolled-back 128 KB probe) confirming the `descriptor_json` column holds large text without truncation and that `seq` auto-increments — so a bounded `VARCHAR` or a broken dialect surfaces at boot, not later on a large descriptor.
 - It uses the application's `JdbcTemplate` (i.e. the `DataSource` the consumer configured) as-is. It does not inject a separate DataSource.
 - The upsert uses `UPDATE → (0 rows) → INSERT` instead of MERGE, for DB portability.
 
 ### Switching backends
 
-Both backends store the same `ModuleDescriptor` JSON but in different locations. On switching, existing descriptors are not migrated automatically. If you need zero downtime, move the existing store's descriptors to the new backend, or redeploy the ACTIVE modules onto the new backend.
+Both backends store the same `ModuleDescriptor` JSON but in different locations. On switching (backend or JDBC dialect/vendor), existing descriptors are not migrated automatically — `protean.module-store.dialect` is restart-scoped for the same reason. If you need zero downtime, move the existing store's descriptors to the new backend, or redeploy the ACTIVE modules onto the new backend.
 
 ## reconcile on server restart
 

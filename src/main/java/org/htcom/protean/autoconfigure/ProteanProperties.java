@@ -342,10 +342,18 @@ public class ProteanProperties {
         private String backend = "filesystem";
         /** Storage directory for the filesystem backend. */
         private String dir = System.getProperty("java.io.tmpdir") + "/protean-modules";
+        /**
+         * JDBC dialect id for the jdbc backend ({@code h2}|{@code mysql}|{@code postgresql}|custom). Empty (the
+         * default) auto-detects from the database product name; set it to override detection or to select a custom
+         * {@code ModuleStoreDialect} bean. Only relevant when {@code backend=jdbc}.
+         */
+        private String dialect = "";
         public String getBackend() { return backend; }
         public void setBackend(String backend) { this.backend = backend; }
         public String getDir() { return dir; }
         public void setDir(String dir) { this.dir = dir; }
+        public String getDialect() { return dialect; }
+        public void setDialect(String dialect) { this.dialect = dialect; }
     }
 
     /** Runtime trace recording. */
