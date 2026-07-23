@@ -52,6 +52,12 @@ follows the migration.
   component scan, so every consumer got them — and `LedgerPortImpl` created a
   `ledger` table in the consumer's database at startup. They are now test-only
   scaffolding, removed from the published jar.
+- Worker JVMs no longer instantiate the module-store beans. `JdbcModuleStore` /
+  `FileSystemModuleStore` had no profile gate, so a worker (process or
+  container) that inherited `module-store.backend=jdbc` created the platform's
+  `module` / `module_version` tables — and ran the startup self-check — inside
+  each module's auto-provisioned scope database, dead artifacts the worker never
+  uses. Both are now `@Profile("!worker")`, matching their host-only consumers.
 - The JDBC module-store backend now works on MySQL and PostgreSQL, not only
   H2. Its schema was hardcoded to H2-only types (`descriptor_json CLOB`,
   `seq BIGINT AUTO_INCREMENT`), so `module-store.backend=jdbc` failed at

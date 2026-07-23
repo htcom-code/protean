@@ -45,6 +45,11 @@
   오토컨피그 컴포넌트 스캔에 쓸려 모든 소비자에 등록됐고, `LedgerPortImpl` 이 기동 시
   소비자 DB 에 `ledger` 테이블을 만들었다. 이제 테스트 전용 스캐폴딩으로, 발행 jar 에서
   제외된다.
+- 워커 JVM 이 module-store 빈을 더 이상 생성하지 않는다. `JdbcModuleStore` /
+  `FileSystemModuleStore` 에 프로파일 게이트가 없어, `module-store.backend=jdbc` 를
+  상속한 워커(process·container)가 각 모듈의 auto-provision scope DB 안에 플랫폼의
+  `module` / `module_version` 테이블을 만들고 기동 self-check 까지 돌렸다 — 워커가
+  쓰지 않는 dead 산출물. 이제 둘 다 호스트 전용 소비자와 동일하게 `@Profile("!worker")`.
 - JDBC module-store 백엔드가 H2 뿐 아니라 MySQL·PostgreSQL 에서도 동작. 스키마가
   H2 전용 타입(`descriptor_json CLOB`, `seq BIGINT AUTO_INCREMENT`)으로 하드코딩돼
   `module-store.backend=jdbc` 가 다른 엔진에선 기동 시 실패했다(CLOB 은 둘 다 없고
