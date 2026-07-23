@@ -11,6 +11,7 @@ package org.htcom.protean.module;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.htcom.protean.autoconfigure.ProteanProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -28,6 +29,7 @@ import java.util.stream.Stream;
  * Writes go through a temp file &rarr; atomic move to prevent partial writes on crash (write-ahead durability).
  */
 @Component
+@Profile("!worker")
 @ConditionalOnProperty(name = "protean.module-store.backend", havingValue = "filesystem", matchIfMissing = true)
 public class FileSystemModuleStore implements ModuleStore {
 
