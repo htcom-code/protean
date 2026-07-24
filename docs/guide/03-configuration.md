@@ -139,7 +139,8 @@ Worker-isolation execution settings.
 
 | Key | Type | Default | Tier | Description |
 |----|------|--------|------|------|
-| `protean.worker.modules-per-worker` | `int` | `4` | `future` | Max modules per worker (`1` = a dedicated JVM per module). |
+| `protean.worker.modules-per-worker` | `int` | `128` | `future` | Max modules packed into one worker JVM (`1` = a dedicated JVM per module). Default `128` is sized for production density — a worker JVM's ~200–300 MB base overhead dominates cost at small values. Crash blast-radius grows with it; lower it in development. **Scale `worker.container.memory` (and heap) together when raising it** — see below. (Note: `worker.db.auto-provision=true` currently forces this to `1`.) |
+| `protean.worker.jvm-args` | `List<String>` | `[]` | `future` | Extra JVM args prepended to each spawned worker (e.g. `["-Xmx512m"]`). Container workers already get `-XX:MaxRAMPercentage=75.0` (cgroup-relative); use this to size heap for the process/embed/sidecar tracks, which have no memory bound. Applied to the next spawn. |
 | `protean.worker.min-warm` | `int` | `0` | `future` | Number of empty workers to keep warm (for reuse). |
 | `protean.worker.auto-restart` | `boolean` | `false` | `live` | Auto-restart the modules of a crashed worker (process track). |
 | `protean.worker.shutdown-grace-ms` | `long` | `5000` | `live` | Grace period (ms) each worker JVM gets to shut down gracefully (SIGTERM) on main shutdown before it is force-killed. `0` = force-kill immediately; negative → treated as `0`. |
@@ -169,8 +170,8 @@ Defense-in-depth auth on mutating worker admin calls (chiefly for the container 
 |----|------|--------|------|------|
 | `protean.worker.container.image` | `String` | `eclipse-temurin:21-jdk` | `future` | Worker container image. |
 | `protean.worker.container.jar` | `String` | `""` | `future` | Explicit worker jar path. If empty, auto-discovers the `-boot.jar` in `build/libs`. |
-| `protean.worker.container.memory` | `String` | `256m` | `future` | Container memory limit. |
-| `protean.worker.container.pids-limit` | `long` | `512` | `future` | PID limit for fork-bomb defense. |
+| `protean.worker.container.memory` | `String` | `512m` | `future` | Container cgroup memory limit. Sized to hold `modules-per-worker=128` (the JVM inside gets `-XX:MaxRAMPercentage=75.0` → ~75% as heap). **Raise it proportionally if you raise `modules-per-worker`** (roughly `base + K × per-module`). |
+| `protean.worker.container.pids-limit` | `long` | `1024` | `future` | PID limit for fork-bomb defense. Sized for `modules-per-worker=128` (packed module threads + Tomcat + per-module executors). |
 | `protean.worker.container.network` | `String` | `""` | `future` | Network for egress isolation (e.g. `internal`). Empty = default. |
 | `protean.worker.container.seccomp` | `String` | `""` | `future` | seccomp profile path. Empty = docker default. |
 | `protean.worker.container.auto-restart` | `boolean` | `false` | `live` | Auto-restart container workers. |

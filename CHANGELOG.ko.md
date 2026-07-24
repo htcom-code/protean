@@ -38,6 +38,16 @@
   센 point-in-time 카운트를 담는다. trace 링버퍼에서 out-of-band 로 계산(기록 핫패스
   무손상)하며 `protean.trace.metrics.enabled` 와 무관하다.
 
+### 변경
+
+- 워커 패킹 기본값을 운영 밀도 기준으로 상향. `worker.modules-per-worker` `4` → `128`
+  (작은 값에선 워커 JVM 베이스 오버헤드 ~200~300MB가 비용을 지배; 운영계는 검증된 코드라
+  크래시 위험 낮음). 이를 수용하도록 컨테이너 트랙 동반 조정: `worker.container.memory`
+  `256m` → `512m`, `worker.container.pids-limit` `512` → `1024`, 컨테이너 워커는
+  `-XX:MaxRAMPercentage=75.0`으로 기동. 신설 `worker.jvm-args`는 메모리 경계가 없는
+  process/embed/sidecar 트랙의 heap 사이징용(경계가 없어 퍼센트는 위험). `modules-per-worker`를
+  키우면 이 값들도 함께 상향. (`worker.db.auto-provision`은 여전히 워커당 1모듈 강제.)
+
 ### 수정
 
 - 라이브러리가 내부 RPC bridge 데모 빈(`Echo`/`Greeting`/`Math`/`Ledger`/`Stream`

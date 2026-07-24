@@ -89,8 +89,8 @@ class ContainerHardeningTest {
         assertEquals("v1", get("/cs/ping").body());
         assertTrue(isolation.inspectSecurityOpt("cs-mod").contains("no-new-privileges"),
                 "no-new-privileges should be applied: " + isolation.inspectSecurityOpt("cs-mod"));
-        assertEquals(512L, isolation.inspectPidsLimit("cs-mod"), "pids-limit (fork-bomb defense) applied");
-        assertEquals(256L * 1024 * 1024, isolation.inspectMemoryLimit("cs-mod"), "cgroup memory limit applied");
+        assertEquals(1024L, isolation.inspectPidsLimit("cs-mod"), "pids-limit (fork-bomb defense) applied");
+        assertEquals(512L * 1024 * 1024, isolation.inspectMemoryLimit("cs-mod"), "cgroup memory limit applied");
     }
 
     @Test

@@ -12,6 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -403,8 +404,20 @@ public class ProteanProperties {
 
     /** External worker (process/container) settings. */
     public static class Worker {
-        /** Maximum modules per worker (1 = a dedicated JVM per module). */
-        private int modulesPerWorker = 4;
+        /**
+         * Maximum modules packed into one worker JVM (1 = a dedicated JVM per module). Default 128 — sized for
+         * production density (a worker JVM's ~200-300MB base overhead dominates cost at small values, so few workers
+         * each packing many modules is far cheaper). Crash blast-radius grows with this, so lower it in development.
+         * Note: {@code worker.db.auto-provision=true} currently forces this to 1 (a dedicated DB scope per module).
+         */
+        private int modulesPerWorker = 128;
+        /**
+         * Extra JVM arguments prepended to each spawned worker JVM (e.g. {@code ["-Xmx512m"]}). Container workers get a
+         * cgroup-relative default ({@code -XX:MaxRAMPercentage=75.0}) already; use this to size heap for the
+         * process/embed/sidecar tracks, which have no memory bound (a percentage would be relative to the whole host).
+         * Applied to the next worker spawn.
+         */
+        private List<String> jvmArgs = List.of();
         /** Number of empty workers to keep warm (for reuse). */
         private int minWarm = 0;
         /** Automatically restart modules of a crashed worker (process track). */
@@ -433,6 +446,8 @@ public class ProteanProperties {
 
         public int getModulesPerWorker() { return modulesPerWorker; }
         public void setModulesPerWorker(int modulesPerWorker) { this.modulesPerWorker = modulesPerWorker; }
+        public List<String> getJvmArgs() { return jvmArgs; }
+        public void setJvmArgs(List<String> jvmArgs) { this.jvmArgs = jvmArgs; }
         public int getMinWarm() { return minWarm; }
         public void setMinWarm(int minWarm) { this.minWarm = minWarm; }
         public boolean isAutoRestart() { return autoRestart; }
@@ -492,9 +507,9 @@ public class ProteanProperties {
         private String image = "eclipse-temurin:21-jdk";
         /** Explicit worker jar path (empty = auto-detect the -boot.jar in build/libs). */
         private String jar = "";
-        private String memory = "256m";
+        private String memory = "512m";
         /** PID limit for fork-bomb protection. */
-        private long pidsLimit = 512;
+        private long pidsLimit = 1024;
         /** Network for egress isolation (e.g. internal). Empty = default. */
         private String network = "";
         /** seccomp profile path. Empty = Docker default. */

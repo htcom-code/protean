@@ -133,7 +133,8 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 
 | 키 | 타입 | 기본값 | 반영 | 설명 |
 |----|------|--------|------|------|
-| `protean.worker.modules-per-worker` | `int` | `4` | `future` | 워커당 최대 모듈 수(`1`=모듈당 전용 JVM). |
+| `protean.worker.modules-per-worker` | `int` | `128` | `future` | 워커 JVM 하나에 패킹할 최대 모듈 수(`1`=모듈당 전용 JVM). 기본 `128`은 운영 밀도 기준 — 작은 값에선 워커 JVM 베이스 오버헤드(~200~300MB)가 비용을 지배. 크래시 blast-radius가 커지므로 개발계에선 낮춘다. **키우면 `worker.container.memory`(와 heap)도 함께 상향**(아래 참고). (참고: `worker.db.auto-provision=true`면 현재 `1`로 강제.) |
+| `protean.worker.jvm-args` | `List<String>` | `[]` | `future` | 각 워커에 추가 주입하는 JVM 인자(예: `["-Xmx512m"]`). 컨테이너 워커는 이미 `-XX:MaxRAMPercentage=75.0`(cgroup 상대) 적용 → 이 옵션은 메모리 경계가 없는 process/embed/sidecar 트랙 heap 사이징용. 다음 spawn에 반영. |
 | `protean.worker.min-warm` | `int` | `0` | `future` | 빈 워커를 따뜻하게 유지할 수(재사용). |
 | `protean.worker.auto-restart` | `boolean` | `false` | `라이브` | 크래시한 워커의 모듈 자동 재기동(process track). |
 | `protean.worker.shutdown-grace-ms` | `long` | `5000` | `라이브` | 메인 종료 시 각 워커 JVM에 graceful 종료(SIGTERM)를 위해 주는 유예(ms). 이후 강제 종료. `0`=즉시 강제 종료; 음수→`0`으로 처리. |
@@ -163,8 +164,8 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 |----|------|--------|------|------|
 | `protean.worker.container.image` | `String` | `eclipse-temurin:21-jdk` | `future` | 워커 컨테이너 이미지. |
 | `protean.worker.container.jar` | `String` | `""` | `future` | 명시 워커 jar 경로. 비면 `build/libs` 의 `-boot.jar` 자동 탐색. |
-| `protean.worker.container.memory` | `String` | `256m` | `future` | 컨테이너 메모리 한도. |
-| `protean.worker.container.pids-limit` | `long` | `512` | `future` | fork-bomb 방어용 PID 한도. |
+| `protean.worker.container.memory` | `String` | `512m` | `future` | 컨테이너 cgroup 메모리 한도. `modules-per-worker=128`을 담도록 설정(컨테이너 안 JVM은 `-XX:MaxRAMPercentage=75.0` → ~75%를 heap으로). **`modules-per-worker`를 키우면 비례해 상향**(대략 `base + K × per-module`). |
+| `protean.worker.container.pids-limit` | `long` | `1024` | `future` | fork-bomb 방어용 PID 한도. `modules-per-worker=128`(패킹 모듈 스레드 + Tomcat + 모듈별 executor) 기준. |
 | `protean.worker.container.network` | `String` | `""` | `future` | egress 격리용 네트워크(예: `internal`). 비면 기본. |
 | `protean.worker.container.seccomp` | `String` | `""` | `future` | seccomp 프로파일 경로. 비면 docker 기본. |
 | `protean.worker.container.auto-restart` | `boolean` | `false` | `라이브` | 컨테이너 워커 자동 재기동. |
