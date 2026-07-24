@@ -30,7 +30,7 @@ class ModuleDescriptorBuilderTest {
         ModuleDescriptor viaCtor = new ModuleDescriptor(
                 "m", "1", ModuleDescriptor.TrustTier.TRUSTED, ModuleDescriptor.DesiredState.ACTIVE,
                 "gen.C", List.of("gen.C"), Map.of("gen.C", "src"), Map.of("gen.CT", "test"),
-                false, null, "in-process", null, null, null, Map.of(), List.of(),
+                false, null, "in-process", null /* scope */, null, null, null, Map.of(), List.of(),
                 ModuleDescriptor.ModuleKind.NORMAL, List.of(), List.of());
 
         ModuleDescriptor viaBuilder = ModuleDescriptor.builder()

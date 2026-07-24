@@ -49,6 +49,7 @@ class ContainerAutoProvisionDbTest {
     static void props(DynamicPropertyRegistry registry) {
         registry.add("protean.worker.db.auto-provision", () -> "true");
         registry.add("protean.worker.db.dialect", () -> "postgresql");
+        registry.add("protean.worker.db.scopes", () -> "cp2scope");
         registry.add("protean.worker.db.admin-url", pg::getJdbcUrl);
         registry.add("protean.worker.db.admin-username", pg::getUsername);
         registry.add("protean.worker.db.admin-password", pg::getPassword);
@@ -98,12 +99,12 @@ class ContainerAutoProvisionDbTest {
         isolation.deploy(ModuleDescriptor.builder()
                 .id("cp2-mod").version("1.0.0").trustTier(ModuleDescriptor.TrustTier.UNTRUSTED)
                 .controllerFqcn(FQCN).componentFqcns(List.of(FQCN)).sources(Map.of(FQCN, SRC))
-                .isolationMode("container")
+                .isolationMode("container").scope("cp2scope")
                 .build());
 
-        // The container worker connects via host.docker.internal to its own schema (cp2_mod) in the host's Postgres and works there
+        // The container worker connects via host.docker.internal to its scope schema (the sanitized scope name) and works there
         mockMvc.perform(get("/cp2/probe"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("rows=1,schema=cp2_mod"));
+                .andExpect(content().string("rows=1,schema=cp2scope"));
     }
 }

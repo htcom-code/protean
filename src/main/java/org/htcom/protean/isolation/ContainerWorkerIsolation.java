@@ -11,6 +11,7 @@ package org.htcom.protean.isolation;
 import org.htcom.protean.autoconfigure.ProteanProperties;
 import org.htcom.protean.db.DbScope;
 import org.htcom.protean.db.DbScopeProvisioner;
+import org.htcom.protean.db.ScopeManager;
 import org.htcom.protean.dynamic.DynamicEndpointRegistrar.RouteInfo;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.SharedLibStore;
@@ -121,8 +122,10 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     /** Shared-lib directory on the host. When set, it is bind-mounted read-only into the container and passed to the worker
      * (unlike the process worker, the container has a separate FS namespace, so the in-container path differs from the host path). */
     private final String sharedLibDir;
-    /** DB scope provisioned per module (reused across hot-swap/crash recovery so the same DB is kept). */
-    private final Map<String, DbScope> moduleScopes = new ConcurrentHashMap<>();
+    /** DB scope provisioned per scope name (shared by all modules of that scope). */
+    private final Map<String, DbScope> scopeProvisions = new ConcurrentHashMap<>();
+    /** Scope registry facade (allowlist + persistence); null when host beans are absent. */
+    private final ScopeManager scopeManager;
     /** Worker /__admin/* auth (opt-in). When enabled the secret is injected into every spawned container so its
      * WorkerAdminAuthFilter verifies the main's admin calls; the secret is null when disabled. */
     private final boolean adminAuthEnabled;
@@ -132,6 +135,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     public ContainerWorkerIsolation(HttpClient client, ReverseProxy proxy, ObjectMapper mapper,
                                     WorkerRuntimeProvider runtimeProvider,
                                     ObjectProvider<DbScopeProvisioner> provisionerProvider,
+                                    ObjectProvider<ScopeManager> scopeManagerProvider,
                                     ObjectProvider<WorkerAdminSecretHolder> adminSecretProvider,
                                     WorkerAdminClient admin,
                                     ProteanProperties props) {
@@ -140,6 +144,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         this.mapper = mapper;
         this.runtimeProvider = runtimeProvider;
         this.provisioner = provisionerProvider.getIfAvailable();
+        this.scopeManager = scopeManagerProvider.getIfAvailable();
         this.adminAuthEnabled = props.getWorker().getAdminAuth().isEnabled();
         WorkerAdminSecretHolder adminSecretHolder = adminSecretProvider.getIfAvailable();
         this.adminAuthSecret = adminSecretHolder != null ? adminSecretHolder.token() : null;
@@ -169,8 +174,15 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             throw new IllegalStateException("container module already deployed: " + descriptor.id());
         }
         if (provisioner != null) {
-            // Provision an isolated DB scope per module (no capacity concern since it is 1 module = 1 container).
-            moduleScopes.computeIfAbsent(descriptor.id(), provisioner::provision);
+            // Container is 1 module = 1 container; the scope only decides which shared DB the module binds to.
+            String scopeName = resolveScope(descriptor);
+            scopeProvisions.computeIfAbsent(scopeName, name -> {
+                DbScope s = provisioner.provision(name);
+                if (scopeManager != null) {
+                    scopeManager.markActive(name, provisioner.dialect().id());
+                }
+                return s;
+            });
         }
         Container c = startContainer(descriptor);
         for (RouteInfo route : c.routes) {
@@ -217,10 +229,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             proxy.unregister(path);
         }
         retire(c);
-        if (provisioner != null) {
-            moduleScopes.remove(moduleId);
-            provisioner.deprovision(moduleId);  // actually removed only under the deprovision-on-undeploy option
-        }
+        // Scope model: a scope's DB is shared and outlives modules — undeploy never deprovisions it (operator-driven).
     }
 
     /** For tests: the cgroup memory limit (bytes) applied to the container. */
@@ -387,6 +396,23 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         }
     }
 
+    /**
+     * Resolves and validates the scope a module binds to under auto-provision. When on, the module must declare a
+     * {@code scope} that is a known (seeded or admin-created) scope.
+     */
+    private String resolveScope(ModuleDescriptor descriptor) {
+        String scope = descriptor.scope();
+        if (scope == null || scope.isBlank()) {
+            throw new IllegalStateException("auto-provision is on: module '" + descriptor.id()
+                    + "' must declare a scope (see protean.worker.db.scopes / scope admin API)");
+        }
+        if (scopeManager != null && !scopeManager.isKnown(scope)) {
+            throw new IllegalStateException("unknown scope '" + scope + "' for module '" + descriptor.id()
+                    + "' — declare it in protean.worker.db.scopes or create it via the scope admin API");
+        }
+        return scope;
+    }
+
     /** Starts the container and returns a handle after health + module deploy are complete (no proxy/map side effects). */
     private Container startContainer(ModuleDescriptor descriptor) {
         String name = NAME_PREFIX + descriptor.id() + "-" + seq.incrementAndGet();
@@ -448,7 +474,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             run.add("--protean.worker.admin-auth.secret=" + adminAuthSecret);
             run.add("--protean.worker.admin-auth.mode=" + adminAuthMode);
         }
-        DbScope scope = moduleScopes.get(descriptor.id());
+        DbScope scope = descriptor.scope() == null ? null : scopeProvisions.get(descriptor.scope());
         if (scope != null) {
             // Inside a container localhost is the container itself → rewrite the DB host to db-host (read live) before passing it.
             run.add("--spring.datasource.url=" + rewriteHost(scope.url(), c.getDbHost()));
