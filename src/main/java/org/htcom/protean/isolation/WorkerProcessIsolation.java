@@ -424,6 +424,11 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
      */
     private String resolveScope(ModuleDescriptor descriptor) {
         if (provisioner == null) {
+            String declared = descriptor.scope();
+            if (declared != null && !declared.isBlank()) {
+                log.warn("module '{}' declares scope '{}' but worker.db.auto-provision is off — the scope is ignored "
+                        + "(scopes apply only under auto-provision)", descriptor.id(), declared);
+            }
             return null;
         }
         String scope = descriptor.scope();

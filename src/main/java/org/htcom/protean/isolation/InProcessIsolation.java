@@ -12,9 +12,14 @@ import org.htcom.protean.compiler.ModuleClassLoader;
 import org.htcom.protean.compiler.ParentTier;
 import org.htcom.protean.compiler.RuntimeCompiler;
 import org.htcom.protean.compiler.SharedModuleRegistry;
+import org.htcom.protean.db.DbScopeProvisioner;
 import org.htcom.protean.module.ModuleContainer;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModuleResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -29,17 +34,47 @@ import java.util.Map;
 @Component
 public class InProcessIsolation implements IsolationStrategy {
 
+    private static final Logger log = LoggerFactory.getLogger(InProcessIsolation.class);
+
     private final RuntimeCompiler compiler;
     private final ModuleContainer container;
+    /** True on the host when auto-provision is on (a {@link DbScopeProvisioner} bean is present). */
+    private final boolean autoProvision;
+    /** True inside a worker JVM, where in-process is the execution engine and scope is a host concern (not re-checked). */
+    private final boolean workerProfile;
 
-    public InProcessIsolation(RuntimeCompiler compiler, ModuleContainer container) {
+    public InProcessIsolation(RuntimeCompiler compiler, ModuleContainer container,
+                              ObjectProvider<DbScopeProvisioner> provisionerProvider, Environment env) {
         this.compiler = compiler;
         this.container = container;
+        this.autoProvision = provisionerProvider.getIfAvailable() != null;
+        this.workerProfile = env.matchesProfiles("worker");
     }
 
     @Override
     public String mode() {
         return "in-process";
+    }
+
+    /**
+     * Guards the scope contract for in-process. A DB scope can only be honored by a separate-JVM worker/container (its
+     * own scoped datasource); in-process runs in the main JVM with the main datasource. So under auto-provision a module
+     * that declares a {@code scope} but lands in-process is <b>rejected</b> (closing the ap=true + default in-process
+     * trap). With auto-provision off the scope is simply inert → <b>warn</b> and ignore (kept lenient for compatibility).
+     * Skipped inside a worker JVM, where in-process is merely the execution engine and scope was already resolved on the host.
+     */
+    private void checkScope(ModuleDescriptor descriptor) {
+        String scope = descriptor.scope();
+        if (scope == null || scope.isBlank() || workerProfile) {
+            return;
+        }
+        if (autoProvision) {
+            throw new IllegalStateException("module '" + descriptor.id() + "' declares scope '" + scope
+                    + "' but is routed to in-process isolation, which cannot bind to a per-scope database — "
+                    + "deploy it with worker or container isolation (protean.isolation.mode / the module's isolationMode)");
+        }
+        log.warn("module '{}' declares scope '{}' but worker.db.auto-provision is off — the scope is ignored "
+                + "(scopes apply only under auto-provision)", descriptor.id(), scope);
     }
 
     @Override
@@ -50,6 +85,7 @@ public class InProcessIsolation implements IsolationStrategy {
 
     @Override
     public void deploy(ModuleDescriptor descriptor) {
+        checkScope(descriptor);
         if (descriptor.isLibrary()) {
             publishLibrary(descriptor);   // activation = publish a generation onto the parent tier, not route registration
             return;
@@ -79,6 +115,7 @@ public class InProcessIsolation implements IsolationStrategy {
 
     @Override
     public void hotSwap(ModuleDescriptor descriptor) {
+        checkScope(descriptor);
         if (descriptor.isLibrary()) {
             publishLibrary(descriptor);   // publishes a new library generation; dependents pick it up on their next (re)compile
             return;

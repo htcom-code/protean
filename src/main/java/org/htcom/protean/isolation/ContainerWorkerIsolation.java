@@ -184,6 +184,9 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
                 }
                 return s;
             });
+        } else if (descriptor.scope() != null && !descriptor.scope().isBlank()) {
+            log.warn("module '{}' declares scope '{}' but worker.db.auto-provision is off — the scope is ignored "
+                    + "(scopes apply only under auto-provision)", descriptor.id(), descriptor.scope());
         }
         Container c = startContainer(descriptor);
         for (RouteInfo route : c.routes) {
