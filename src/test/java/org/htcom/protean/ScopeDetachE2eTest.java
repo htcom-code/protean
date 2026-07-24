@@ -52,6 +52,7 @@ class ScopeDetachE2eTest {
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {
+        deleteRecursively(STORE_DIR);   // pre-context: this test persists a DETACHED scope; start each run clean
         registry.add("protean.module-store.dir", STORE_DIR::toString);
         registry.add("protean.isolation.mode", () -> "worker");
         registry.add("protean.worker.db.auto-provision", () -> "true");
@@ -66,6 +67,21 @@ class ScopeDetachE2eTest {
     @Autowired ModulePlatform platform;
     @Autowired ScopeAdminService scopes;
     @Autowired ScopeManager scopeManager;
+
+    private static void deleteRecursively(Path root) {
+        if (!java.nio.file.Files.exists(root)) {
+            return;
+        }
+        try (var walk = java.nio.file.Files.walk(root)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    java.nio.file.Files.deleteIfExists(p);
+                } catch (java.io.IOException ignored) {
+                }
+            });
+        } catch (java.io.IOException ignored) {
+        }
+    }
 
     static final String FQCN = "runtime.det.DetController";
     static ModuleDescriptor module() {
