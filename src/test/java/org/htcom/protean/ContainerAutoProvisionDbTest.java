@@ -81,6 +81,18 @@ class ContainerAutoProvisionDbTest {
             }
             """;
 
+    static final String FQCN2 = "runtime.cp2.Cp2PingController";
+    static final String SRC2 = """
+            package runtime.cp2;
+            import org.springframework.web.bind.annotation.GetMapping;
+            import org.springframework.web.bind.annotation.RestController;
+            @RestController
+            public class Cp2PingController {
+                @GetMapping("/cp2/ping")
+                public String ping() { return "cp2"; }
+            }
+            """;
+
     @BeforeEach
     void preconditions() {
         assumeTrue(OsIsolationTest.bootJarExists(), "no bootJar ('gradle bootJar') — skip");
@@ -88,9 +100,11 @@ class ContainerAutoProvisionDbTest {
 
     @AfterEach
     void cleanup() {
-        try {
-            isolation.undeploy("cp2-mod");
-        } catch (RuntimeException ignored) {
+        for (String id : new String[]{"cp2-mod", "cp2-mod2"}) {
+            try {
+                isolation.undeploy(id);
+            } catch (RuntimeException ignored) {
+            }
         }
     }
 
@@ -106,5 +120,20 @@ class ContainerAutoProvisionDbTest {
         mockMvc.perform(get("/cp2/probe"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("rows=1,schema=cp2scope"));
+    }
+
+    @Test
+    void same_scope_modules_pack_into_one_container() throws Exception {
+        isolation.deploy(ModuleDescriptor.builder()
+                .id("cp2-mod").version("1.0.0").controllerFqcn(FQCN).componentFqcns(List.of(FQCN))
+                .sources(Map.of(FQCN, SRC)).isolationMode("container").scope("cp2scope").build());
+        isolation.deploy(ModuleDescriptor.builder()
+                .id("cp2-mod2").version("1.0.0").controllerFqcn(FQCN2).componentFqcns(List.of(FQCN2))
+                .sources(Map.of(FQCN2, SRC2)).isolationMode("container").scope("cp2scope").build());
+
+        // Both modules share scope "cp2scope" → pack into a single container (isolation boundary = scope, not module).
+        org.junit.jupiter.api.Assertions.assertEquals(1, isolation.containerCount(),
+                "same-scope modules must share one container");
+        mockMvc.perform(get("/cp2/ping")).andExpect(status().isOk()).andExpect(content().string("cp2"));
     }
 }

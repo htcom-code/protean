@@ -482,20 +482,28 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         }
     }
 
-    /** After a hot-swap, drain the module from the old worker and then clean up (asynchronous outside the lock, re-synchronized during cleanup). */
+    /**
+     * After a hot-swap, drain the module from the old worker. Called while holding the isolation monitor (from
+     * {@link #hotSwap}). If the old worker is left empty it is marked retiring and pulled from the pool
+     * <b>immediately</b>, so a concurrent deploy cannot reuse a worker we are about to terminate; only the actual
+     * process kill is deferred by the grace period to let in-flight requests to the old version drain.
+     */
     private void scheduleDrainCleanup(WorkerHandle oldHandle, String moduleId) {
+        boolean retireAfterGrace = oldHandle.modules.isEmpty();
+        if (retireAfterGrace) {
+            oldHandle.retiring = true;   // stop reuse now; defer only the process kill
+            pool.remove(oldHandle);
+        }
         Thread t = new Thread(() -> {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             }
-            synchronized (this) {
-                if (oldHandle.modules.isEmpty()) {
-                    oldHandle.retiring = true;
-                    oldHandle.process.destroy();
-                    pool.remove(oldHandle);
-                } else {
+            if (retireAfterGrace) {
+                oldHandle.process.destroy();
+            } else {
+                synchronized (this) {
                     postUndeploy(oldHandle.port, moduleId);
                 }
             }

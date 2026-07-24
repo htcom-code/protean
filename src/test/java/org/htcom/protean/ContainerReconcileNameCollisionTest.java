@@ -34,9 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Regression for the container reconcile name-collision bug: after an unclean main exit a detached container
- * keeps holding the deterministic name (`protean-worker-&lt;id&gt;-&lt;seq&gt;`), and because {@code seq} resets on
- * restart the next deploy re-derives that exact name. A blind {@code docker run --name} then fails with a 125
- * conflict and the module is skipped (route 404). {@code startContainer} now removes a stale same-name container
+ * keeps holding the deterministic name (`protean-worker-&lt;scope-or-pool&gt;-&lt;seq&gt;`), and because {@code seq}
+ * resets on restart the next spawn re-derives that exact name. A blind {@code docker run --name} then fails with a
+ * 125 conflict and the module is skipped (route 404). {@code spawnContainer} now removes a stale same-name container
  * first. This test plants such an orphan and asserts the deploy still succeeds. Docker + bootJar gated.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -45,8 +45,9 @@ class ContainerReconcileNameCollisionTest {
 
     static final Path STORE_DIR = Path.of(System.getProperty("java.io.tmpdir"), "protean-container-collision-test");
     static final String ID = "collide";
-    // The first container deploy on a fresh isolation instance uses seq=1, so this is the name it will pick.
-    static final String COLLIDING_NAME = "protean-worker-" + ID + "-1";
+    // The first container spawn on a fresh isolation instance uses the general pool (no auto-provision) at seq=1,
+    // so this is the deterministic name it will pick — the exact name a prior main's orphan would still hold.
+    static final String COLLIDING_NAME = "protean-worker-pool-1";
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry registry) {
