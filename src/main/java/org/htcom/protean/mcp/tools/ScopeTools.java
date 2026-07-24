@@ -132,11 +132,23 @@ public final class ScopeTools {
         }
 
         /**
-         * Call-time auto-provision gate (mirrors the {@code debug.*} surface gate): resolve the {@link ScopeAdminService}
-         * — absent when auto-provision is off — and short-circuit with a clear {@code isError} rather than executing.
+         * Two-stage gate. (1) <b>Argument contract first</b>: a missing declared-required field is
+         * {@code INVALID_ARGUMENT} regardless of whether auto-provision is on — otherwise the capability gate below
+         * would mask it and {@code McpInputContractTest}'s "omitting a required field fails" guarantee would pass for
+         * the wrong reason (the call fails on the gate, not the missing field). (2) <b>Capability gate</b> (mirrors the
+         * {@code debug.*} surface gate): resolve the {@link ScopeAdminService} — absent when auto-provision is off — and
+         * short-circuit with a clear {@code isError} rather than executing.
          */
         @Override
         public final McpToolResult call(JsonNode arguments, McpCallContext ctx) {
+            for (JsonNode req : inputSchema().path("required")) {
+                String field = req.asText();
+                boolean missing = arguments == null || !arguments.hasNonNull(field)
+                        || (arguments.get(field).isTextual() && arguments.get(field).asText().isBlank());
+                if (missing) {
+                    return McpToolResult.error(ErrorCode.INVALID_ARGUMENT, "'" + field + "' is required");
+                }
+            }
             ScopeAdminService svc = svcProvider.getIfAvailable();
             if (svc == null) {
                 return McpToolResult.error(ErrorCode.STATE_CONFLICT,

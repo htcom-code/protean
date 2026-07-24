@@ -58,6 +58,27 @@ class ScopeToolGateTest {
     }
 
     @Test
+    void required_argument_check_runs_before_the_auto_provision_gate() {
+        // Ordering guarantee: a missing required field must fail as an argument error even when auto-provision is off —
+        // otherwise the capability gate would mask it and McpInputContractTest's required-field guarantee would be
+        // vacuous for these tools (it only checks isError, not why).
+        ObjectMapper mapper = new ObjectMapper();
+        McpTool getTool = new ScopeTools.GetTool(mapper, absent());
+
+        // No 'name' → argument contract fires first (INVALID_ARGUMENT), NOT the auto-provision gate.
+        McpToolResult missing = getTool.call(mapper.createObjectNode(), null);
+        assertTrue(missing.isError());
+        assertTrue(missing.text() != null && missing.text().contains("required"),
+                "missing required field must fail as an argument error, not the gate: " + missing.text());
+
+        // 'name' present but auto-provision off → now the capability gate fires.
+        McpToolResult gated = getTool.call(mapper.createObjectNode().put("name", "tenant-a"), null);
+        assertTrue(gated.isError());
+        assertTrue(gated.text() != null && gated.text().contains("auto-provision"),
+                "with the argument present, the auto-provision gate must fire: " + gated.text());
+    }
+
+    @Test
     void destroy_tool_declares_the_confirm_argument() {
         ObjectMapper mapper = new ObjectMapper();
         ScopeTools.DestroyTool tool = new ScopeTools.DestroyTool(mapper, absent());
