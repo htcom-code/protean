@@ -134,6 +134,15 @@ class WorkerAutoProvisionDbTest {
     }
 
     @Test
+    void scope_admin_rest_lists_the_seeded_scope() throws Exception {
+        // The scope-admin surface (ScopeAdminController → ScopeAdminService → ScopeManager) is wired under
+        // auto-provision + admin.enabled(default) and lists the seeded scope even before any deploy.
+        mockMvc.perform(get("/platform/scopes"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("wpscope")));
+    }
+
+    @Test
     void deploy_without_scope_is_rejected_under_auto_provision() {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () ->
                 isolation.deploy(ModuleDescriptor.builder()

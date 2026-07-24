@@ -35,8 +35,9 @@ public class PostgresDialect implements DbDialect {
                 + "CREATE ROLE \"" + name + "\" LOGIN PASSWORD '" + password + "'; END IF; END $$");
         // Reset the password so a re-provision (e.g. after a restart, when the in-memory scope cache is gone
         // and a fresh password is generated) actually takes effect — the DO block above leaves an existing
-        // role's password unchanged, which would leave the worker unable to connect.
-        admin.execute("ALTER ROLE \"" + name + "\" WITH PASSWORD '" + password + "'");
+        // role's password unchanged, which would leave the worker unable to connect. WITH LOGIN is set
+        // explicitly so a re-provision after a detach (which sets NOLOGIN) restores the login capability.
+        admin.execute("ALTER ROLE \"" + name + "\" WITH LOGIN PASSWORD '" + password + "'");
         admin.execute("GRANT ALL ON SCHEMA \"" + name + "\" TO \"" + name + "\"");
         admin.execute("ALTER ROLE \"" + name + "\" SET search_path = \"" + name + "\"");
     }
@@ -45,6 +46,21 @@ public class PostgresDialect implements DbDialect {
     public void dropScope(JdbcTemplate admin, String name) {
         admin.execute("DROP SCHEMA IF EXISTS \"" + name + "\" CASCADE");
         admin.execute("DROP ROLE IF EXISTS \"" + name + "\"");
+    }
+
+    @Override
+    public void detachScope(JdbcTemplate admin, String name) {
+        // Revoke the login only — the SCHEMA and all data (and the role's ownership of it) are retained. A hard DROP
+        // ROLE would fail while the role owns the schema's objects; NOLOGIN is the data-safe, reversible detach: a
+        // later createScope runs ALTER ROLE … WITH LOGIN and restores connectivity. No-op if the role is absent.
+        admin.execute("DO $$ BEGIN "
+                + "IF EXISTS (SELECT FROM pg_roles WHERE rolname = '" + name + "') THEN "
+                + "ALTER ROLE \"" + name + "\" WITH NOLOGIN; END IF; END $$");
+    }
+
+    @Override
+    public void destroyScope(JdbcTemplate admin, String name) {
+        dropScope(admin, name);   // DROP SCHEMA CASCADE + DROP ROLE — irreversible
     }
 
     @Override

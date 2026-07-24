@@ -65,6 +65,62 @@ class MySqlScopeProvisioningTest {
     }
 
     @Test
+    void detach_drops_the_user_but_retains_the_database_and_data() {
+        // Detach = data-safe deprovision: the dedicated USER is dropped but its DATABASE and data remain. A later
+        // re-provision recreates the user (fresh password) and the persisted data is still there.
+        assumeTrue(OsIsolationTest.dockerAvailable(), "no Docker — skip MySQL detach test");
+        try (MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")) {
+            mysql.start();
+            String adminUrl = mysql.getJdbcUrl();
+            DbScopeProvisioner prov = new DbScopeProvisioner(
+                    new MySqlDialect(), adminUrl, "root", mysql.getPassword(), false);
+
+            DbScope first = prov.provision("tenant-x");
+            jdbc(first.url(), first.username(), first.password()).execute("CREATE TABLE t (x INT)");
+            jdbc(first.url(), first.username(), first.password()).update("INSERT INTO t VALUES (42)");
+
+            prov.detach("tenant-x");
+
+            JdbcTemplate admin = jdbc(adminUrl, "root", mysql.getPassword());
+            assertEquals(1, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
+                    Integer.class, first.username()), "detach must retain the database");
+            assertEquals(0, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM mysql.user WHERE user = ?", Integer.class, first.username()),
+                    "detach must drop the user");
+
+            DbScope second = prov.provision("tenant-x");
+            JdbcTemplate j2 = jdbc(second.url(), second.username(), second.password());
+            assertEquals(42, (int) j2.queryForObject("SELECT x FROM t", Integer.class),
+                    "data must survive detach + re-provision");
+        }
+    }
+
+    @Test
+    void destroy_drops_the_database_and_user_irreversibly() {
+        assumeTrue(OsIsolationTest.dockerAvailable(), "no Docker — skip MySQL destroy test");
+        try (MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")) {
+            mysql.start();
+            String adminUrl = mysql.getJdbcUrl();
+            DbScopeProvisioner prov = new DbScopeProvisioner(
+                    new MySqlDialect(), adminUrl, "root", mysql.getPassword(), false);
+
+            DbScope s = prov.provision("tenant-y");
+            jdbc(s.url(), s.username(), s.password()).execute("CREATE TABLE t (x INT)");
+
+            prov.destroy("tenant-y");
+
+            JdbcTemplate admin = jdbc(adminUrl, "root", mysql.getPassword());
+            assertEquals(0, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
+                    Integer.class, s.username()), "destroy must drop the database");
+            assertEquals(0, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM mysql.user WHERE user = ?", Integer.class, s.username()),
+                    "destroy must drop the user");
+        }
+    }
+
+    @Test
     void reprovision_resets_password_so_the_new_credentials_connect() {
         // Restart scenario: the in-memory scope cache is gone, so provision() runs again for an existing
         // user and generates a *fresh* password. The user must end up with that new password (otherwise the

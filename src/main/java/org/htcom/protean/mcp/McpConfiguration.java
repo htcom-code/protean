@@ -243,6 +243,51 @@ public class McpConfiguration {
         return new RejectModuleTool(mapper, platform);
     }
 
+    // --- scope admin tools (protean.scope_*) — registered only under auto-provision (scopes exist only then).
+    //     Each depends on ScopeAdminService, itself present only under auto-provision, so the condition matches. ---
+
+    @Bean
+    @ConditionalOnProperty(name = "protean.worker.db.auto-provision", havingValue = "true")
+    McpTool scopeListTool(ObjectMapper mapper, org.htcom.protean.db.ScopeAdminService scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.ListTool(mapper, scopes);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "protean.worker.db.auto-provision", havingValue = "true")
+    McpTool scopeGetTool(ObjectMapper mapper, org.htcom.protean.db.ScopeAdminService scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.GetTool(mapper, scopes);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "protean.worker.db.auto-provision", havingValue = "true")
+    McpTool scopeCreateTool(ObjectMapper mapper, org.htcom.protean.db.ScopeAdminService scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.CreateTool(mapper, scopes);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "protean.worker.db.auto-provision", havingValue = "true")
+    McpTool scopeOpenTool(ObjectMapper mapper, org.htcom.protean.db.ScopeAdminService scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.OpenTool(mapper, scopes);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "protean.worker.db.auto-provision", havingValue = "true")
+    McpTool scopeCloseTool(ObjectMapper mapper, org.htcom.protean.db.ScopeAdminService scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.CloseTool(mapper, scopes);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "protean.worker.db.auto-provision", havingValue = "true")
+    McpTool scopeDetachTool(ObjectMapper mapper, org.htcom.protean.db.ScopeAdminService scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.DetachTool(mapper, scopes);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "protean.worker.db.auto-provision", havingValue = "true")
+    McpTool scopeDestroyTool(ObjectMapper mapper, org.htcom.protean.db.ScopeAdminService scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.DestroyTool(mapper, scopes);
+    }
+
     /** stdio transport entry point — only when {@code protean.mcp.stdio=true} (local spawn scenario). */
     @Bean
     @ConditionalOnProperty(name = "protean.mcp.stdio", havingValue = "true")

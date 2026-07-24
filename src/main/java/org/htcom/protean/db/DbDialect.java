@@ -26,8 +26,29 @@ public interface DbDialect {
     /** Creates an isolated scope: a dedicated DB/schema + a dedicated user/role + GRANTs limited to its own area. */
     void createScope(JdbcTemplate admin, String name, String password);
 
-    /** Removes the scope (deprovisioning). */
+    /** Removes the scope (deprovisioning). Full drop — DB/schema and its login together (destroy semantics). */
     void dropScope(JdbcTemplate admin, String name);
+
+    /**
+     * Detaches a scope: removes only its <b>login</b> (the dedicated USER/ROLE can no longer connect) while leaving the
+     * DATABASE/SCHEMA and all data intact. Reversible — a subsequent {@link #createScope} re-enables the login with a
+     * fresh password. This is the default, data-safe deprovisioning path.
+     *
+     * <p>Default throws: a custom dialect that has not implemented detach cannot offer it (never falls through to a
+     * data-destroying drop). The built-in MySQL/PostgreSQL dialects override it.
+     */
+    default void detachScope(JdbcTemplate admin, String name) {
+        throw new UnsupportedOperationException("dialect '" + id() + "' does not implement detachScope — "
+                + "detach (data-safe deprovision) is unavailable; implement it or use destroy explicitly");
+    }
+
+    /**
+     * Destroys a scope: irreversibly drops its DATABASE/SCHEMA (CASCADE) and its login — <b>all data is lost</b>.
+     * Default delegates to {@link #dropScope} (a legacy dialect's full drop is exactly destroy semantics).
+     */
+    default void destroyScope(JdbcTemplate admin, String name) {
+        dropScope(admin, name);
+    }
 
     /** Builds the JDBC URL for connecting to that scope from the admin URL. */
     String scopedUrl(String adminUrl, String name);

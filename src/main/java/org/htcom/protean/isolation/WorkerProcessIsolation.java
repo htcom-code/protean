@@ -65,7 +65,8 @@ import java.util.regex.Pattern;
  */
 @Component
 @Profile("!worker")
-public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTierTarget {
+public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTierTarget,
+        org.htcom.protean.db.ScopeReclaimable {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerProcessIsolation.class);
 
@@ -430,11 +431,19 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             throw new IllegalStateException("auto-provision is on: module '" + descriptor.id()
                     + "' must declare a scope (see protean.worker.db.scopes / scope admin API)");
         }
-        if (scopeManager != null && !scopeManager.isKnown(scope)) {
-            throw new IllegalStateException("unknown scope '" + scope + "' for module '" + descriptor.id()
-                    + "' — declare it in protean.worker.db.scopes or create it via the scope admin API");
+        if (scopeManager != null && !scopeManager.isDeployable(scope)) {
+            String detail = scopeManager.isKnown(scope)
+                    ? "scope '" + scope + "' is not ACTIVE (closed/detached) — reopen it via the scope admin API"
+                    : "unknown scope '" + scope + "' — declare it in protean.worker.db.scopes or create it via the scope admin API";
+            throw new IllegalStateException(detail + " (module '" + descriptor.id() + "')");
         }
         return scope;
+    }
+
+    /** {@link org.htcom.protean.db.ScopeReclaimable}: drop the cached provision so a later deploy re-provisions the scope. */
+    @Override
+    public synchronized void forgetScope(String scopeName) {
+        scopeProvisions.remove(scopeName);
     }
 
     /** Picks a live worker with spare capacity (that does not already have this module), or spawns a new one. */

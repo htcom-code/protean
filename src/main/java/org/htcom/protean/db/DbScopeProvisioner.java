@@ -122,6 +122,22 @@ public class DbScopeProvisioner {
         dialect.dropScope(adminFor(credsSupplier.get()), Identifiers.safeName(moduleId, dialect.maxNameLength()));
     }
 
+    /**
+     * Detaches a scope (operator-driven, scope-admin path): removes only its login while retaining the DATABASE/SCHEMA
+     * and all data. Reversible — a later {@link #provision} recreates the login with a fresh password.
+     */
+    public void detach(String scopeName) {
+        dialect.detachScope(adminFor(credsSupplier.get()), Identifiers.safeName(scopeName, dialect.maxNameLength()));
+    }
+
+    /**
+     * Destroys a scope (operator-driven, scope-admin path): irreversibly drops its DATABASE/SCHEMA (CASCADE) and login.
+     * <b>All data is lost.</b> Guarded by the scope-admin layer (allow-destroy + name re-confirmation).
+     */
+    public void destroy(String scopeName) {
+        dialect.destroyScope(adminFor(credsSupplier.get()), Identifiers.safeName(scopeName, dialect.maxNameLength()));
+    }
+
     public boolean deprovisionOnUndeploy() {
         return deprovisionOnUndeploy.getAsBoolean();
     }
