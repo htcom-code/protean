@@ -114,7 +114,7 @@ protean:
       url: jdbc:mysql://db:3306/app
 ```
 
-모듈당 전용 격리 DB 를 자동 프로비저닝하려면 `protean.worker.db.auto-provision=true`. 이때는 격리 보장을 위해 워커당 1모듈(`capacity=1`)·워밍 재사용 없음(`min-warm=0`)으로 강제되며, 프로비저닝된 스코프 creds 로 전용 워커를 띄운다. 벤더별 프로비저닝은 [07. 데이터 접근](07-data-access.ko.md), dialect 확장은 [10. SPI 확장](10-spi-extension.ko.md).
+**scope**(tenant/업무 도메인 묶음) 단위로 격리된 DB 를 자동 프로비저닝하려면 `protean.worker.db.auto-provision=true`. 배포는 scope 를 선택하고, 같은 scope 모듈은 그 scope 의 워커에 `modules-per-worker`까지 패킹되며 서로 다른 scope 는 별도 워커를 갖는다 — 격리 경계는 모듈이 아니라 scope 다. 모듈당 전용 워커가 필요하면 `modules-per-worker=1`. 벤더별 프로비저닝과 scope 모델은 [07. 데이터 접근](07-data-access.ko.md), dialect 확장은 [10. SPI 확장](10-spi-extension.ko.md).
 
 ### 격리 모드 간 타입 공유(LIBRARY 모듈)
 
@@ -124,7 +124,7 @@ protean:
 
 ## container (Docker 컨테이너 워커)
 
-`ContainerWorkerIsolation` 이 워커를 Docker 컨테이너로 띄워 cgroup·read-only·cap-drop·seccomp 로 가둔다. 워커 프로세스만으론 못 막는 호스트 자원·파일·시스템콜 침해를 OS 레벨에서 차단하는 미신뢰 tier 기준선이다. 풀은 두지 않는다 — "모듈당 1컨테이너"가 OS 격리의 본질이라 패킹은 격리를 약화한다. RPC 브리지는 미지원(`supports()` 가 `needsSharedBeans` 모듈을 거부).
+`ContainerWorkerIsolation` 이 워커를 Docker 컨테이너로 띄워 cgroup·read-only·cap-drop·seccomp 로 가둔다. 워커 프로세스만으론 못 막는 호스트 자원·파일·시스템콜 침해를 OS 레벨에서 차단하는 미신뢰 tier 기준선이다. 컨테이너를 풀링해 `modules-per-worker`(기본 128)까지 패킹하며, auto-provision 하에서는 풀을 **scope**(tenant) 로 키잉한다 — 같은 scope 모듈은 한 컨테이너를 공유하고 서로 다른 scope 는 별도 컨테이너로 격리된다(OS 격리 경계 = scope). 엄격한 컨테이너당 1모듈 경계는 `modules-per-worker=1`(최대 격리, 패킹 없음). RPC 브리지는 미지원(`supports()` 가 `needsSharedBeans` 모듈을 거부).
 
 ### 요건
 

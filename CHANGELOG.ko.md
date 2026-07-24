@@ -38,6 +38,21 @@
   센 point-in-time 카운트를 담는다. trace 링버퍼에서 out-of-band 로 계산(기록 핫패스
   무손상)하며 `protean.trace.metrics.enabled` 와 무관하다.
 
+- **DB scope 모델.** `worker.db.auto-provision` 을 "모듈마다 격리"에서 "**scope 선택**"으로
+  재정의. scope(tenant/업무 도메인 묶음)가 DB 프로비저닝과 worker/container 패킹의 단위다 —
+  같은 scope 모듈은 프로비저닝된 DB 하나를 공유하고 그 scope 의 worker/container 에
+  `worker.modules-per-worker`까지 패킹되며, 서로 다른 scope 는 격리된다. 배포는 알려진 ACTIVE
+  `scope` 를 지정해야 한다(module.yaml / 배포 API / `ModuleDescriptor.scope`); 시작 seed 허용목록
+  `worker.db.scopes`(비우면 `default` 하나)와 신설 `ScopeStore`/`ScopeManager` 레지스트리가 알려진
+  scope 를 추적하고 재기동을 넘겨 유지한다.
+- **scope 관리 표면.** REST `/platform/scopes`(list · get · create · close · open · detach ·
+  destroy — 명시적 action 하위 리소스, `DELETE` 동사 미사용)와 MCP `protean.scope_*` 툴,
+  `admin.enabled` + `auto-provision` 하에서 활성. 라이프사이클: create/open → ACTIVE, close →
+  CLOSED, detach(로그인만 제거·데이터 보존 — 가역), destroy(`DROP DATABASE/SCHEMA` — 비가역).
+  `destroy` 는 신설 `worker.db.allow-destroy`(기본 `false`) + 이름 확인으로 가드되고 감사 로그가 남는다.
+- `DbDialect` 에 `detachScope`(로그인만·가역)와 `destroyScope`(CASCADE·비가역)를 하위호환 default
+  메서드로 추가; 내장 MySQL/PostgreSQL 이 둘 다 override.
+
 ### 변경
 
 - 워커 패킹 기본값을 운영 밀도 기준으로 상향. `worker.modules-per-worker` `4` → `128`
@@ -46,9 +61,23 @@
   `256m` → `512m`, `worker.container.pids-limit` `512` → `1024`, 컨테이너 워커는
   `-XX:MaxRAMPercentage=75.0`으로 기동. 신설 `worker.jvm-args`는 메모리 경계가 없는
   process/embed/sidecar 트랙의 heap 사이징용(경계가 없어 퍼센트는 위험). `modules-per-worker`를
-  키우면 이 값들도 함께 상향. (`worker.db.auto-provision`은 여전히 워커당 1모듈 강제.)
+  키우면 이 값들도 함께 상향.
+- `worker.db.auto-provision` 하에서 **worker·container 모드 모두 이제 같은 scope 모듈을** 공유
+  worker/container 에 `worker.modules-per-worker`까지 패킹한다(격리 경계 = 모듈이 아니라 scope) —
+  container 모드는 더 이상 컨테이너당 1모듈이 아니다. 엄격한 worker/container 당 1모듈 경계는
+  `worker.modules-per-worker=1`. scope 를 선언한 모듈이 in-process 로 라우팅되면 거부되고(in-process 는
+  scope 별 datasource 에 바인딩 불가), auto-provision 이 꺼진 채 선언된 scope 는 경고와 함께 무시된다.
+
+### Deprecated
+
+- `worker.db.deprovision-on-undeploy` — undeploy 는 scope 를 해제하지 않는다; scope 라이프사이클은
+  scope 관리 API(detach/destroy)로 운영자가 주도한다. 호환성 위해 유지되나 scope 의 DB 에 영향 없음.
 
 ### 수정
+
+- worker·container 풀의 hot-swap 드레인 레이스: 스왑 후 비워진 old 워커/컨테이너가 grace 창 동안
+  풀에 남아 동시 배포에 재사용된 뒤 지연 정리에 의해 종료되던 문제(워커 `/__admin/deploy` 500 으로
+  표출). 이제 비면 즉시 retiring 표시 + 풀에서 제거하고, 프로세스 종료 / `docker rm` 만 유예한다.
 
 - 라이브러리가 내부 RPC bridge 데모 빈(`Echo`/`Greeting`/`Math`/`Ledger`/`Stream`
   `*Port`)을 더 이상 소비자 앱에 등록하지 않는다. `src/main` 의 `@Component` 라

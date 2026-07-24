@@ -53,8 +53,8 @@ linkage errors). 4.x support is a committed, planned track — see the
 - **Level 3 debugging** — JDI-based breakpoints, stepping, variable inspection, expression
   evaluation, fix-and-continue (redefine). Zero-dep.
 - **Module data-access contract** — provides only engine-agnostic mechanism (resource
-  channel, multi-DataSource, per-module DB-scope auto-provisioning); ORM, pooling, and
-  policy are left to the consumer.
+  channel, multi-DataSource, per-scope DB auto-provisioning + tenant scoping); ORM,
+  pooling, and policy are left to the consumer.
 - **Structured errors (RFC 9457)** — MCP/HTTP/Admin errors surface as RFC 9457
   problem + extension members correlated by `traceId`, so an agent self-corrects and retries
   deterministically instead of parsing prose.
@@ -132,9 +132,11 @@ inside its child context.
 - **Resource channel** — `ModuleDescriptor.resources` (path → content, binaries base64)
   ships non-Java files such as mapper XML, `persistence.xml`, migration SQL; the module
   ClassLoader serves them owned-child-first.
-- **Per-module DB-scope provisioning** — `protean.worker.db.auto-provision` creates a
-  dedicated DB/schema + user per module (MySQL/Postgres built in; vendor extension via a
-  `DbDialect` bean).
+- **Per-scope DB provisioning** — `protean.worker.db.auto-provision` turns deployment into
+  "select a scope" (tenant/business-domain): each scope gets a dedicated DB/schema + user,
+  and same-scope modules share it and pack into that scope's worker/container. Operator-driven
+  scope lifecycle (create/close/detach/destroy) via `/platform/scopes` + MCP `scope_*`; MySQL/
+  Postgres built in, vendor extension via a `DbDialect` bean.
 - **Transactions** — follow from the DataSource choice: in-process + shared DataSource +
   parent tx manager participates in the host tx; a private DataSource is isolated;
   worker/container are always isolated (crossing is via the RPC bridge).
@@ -345,7 +347,8 @@ Excerpt:
 | `protean.worker.auto-restart` / `.rpc-bridge` | `false` | Crash restart / RPC bridge |
 | `protean.worker.runtime` | `embed` | Worker runtime: embed\|sidecar |
 | `protean.worker.container.*` | — | image · memory · pids-limit · network · seccomp · db-host |
-| `protean.worker.db.auto-provision` | `false` | Auto-create an isolated DB scope per module (needs dialect + admin credentials) |
+| `protean.worker.db.auto-provision` | `false` | Auto-provision an isolated DB per scope (tenant); a deploy selects a scope (needs dialect + admin credentials) |
+| `protean.worker.db.scopes` / `.allow-destroy` | (empty) / `false` | Startup scope allowlist (empty → `default`) / guard for the irreversible scope `destroy` |
 
 See `autoconfigure/ProteanProperties.java` for the full set.
 

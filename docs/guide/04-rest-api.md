@@ -479,6 +479,53 @@ Remove a lib from the store. It affects **future generations only** — generati
 
 - Response `204`
 
+## Scope admin — base path `/platform/scopes`
+
+Operator surface for the DB **scope** lifecycle under `worker.db.auto-provision` (see [07. Data Access](07-data-access.md), [11. Operations](11-operations.md)). Active only when **both** `protean.admin.enabled` (default on) and `protean.worker.db.auto-provision=true`. Deployers only *select* a scope at deploy time; creating and tearing down scopes is done here. Uses explicit action sub-resources (no `DELETE` verb), since `detach` (data-safe) and `destroy` (irreversible) must not collapse into one ambiguous call.
+
+A scope view is `{ "name", "state" (ACTIVE|CLOSED|DETACHED), "dialectId", "modules" (current module count) }`.
+
+### GET `/platform/scopes`
+
+List all known scopes (registry ∪ startup seed).
+
+- Response `200`: array of scope views.
+
+### GET `/platform/scopes/{name}`
+
+- Response `200`: scope view. `404` if the scope is unknown.
+
+### POST `/platform/scopes`
+
+Create (or reopen) a scope as ACTIVE. The database is provisioned lazily on the first deploy. Idempotent.
+
+- Body: `{ "name": "tenant-a" }`
+- Response `201`: `Location: /platform/scopes/{name}` + scope view.
+
+### POST `/platform/scopes/{name}/close`
+
+Close a scope: new deploys are rejected, running modules keep serving. Reversible via `/open`. Data untouched.
+
+- Response `200`: scope view (`state: CLOSED`).
+
+### POST `/platform/scopes/{name}/open`
+
+Reopen a CLOSED scope back to ACTIVE.
+
+- Response `200`: scope view (`state: ACTIVE`).
+
+### POST `/platform/scopes/{name}/detach`
+
+Undeploy the scope's modules, reclaim its workers/containers, and drop only its DB login — the database and all data are retained (reversible: re-create + redeploy re-provisions the login).
+
+- Response `200`: scope view (`state: DETACHED`).
+
+### POST `/platform/scopes/{name}/destroy?confirm={name}`
+
+**Irreversibly** drop the scope's database/schema (CASCADE) after undeploying its modules — all data is lost. Guarded: requires `protean.worker.db.allow-destroy=true` **and** `confirm` to equal the scope name; audit-logged. Refused (`409`) when `allow-destroy` is off or the confirmation does not match.
+
+- Response `200`: `{ "name", "destroyed": true }`
+
 ## Related docs
 
 - [02. Module Authoring](02-module-authoring.md)

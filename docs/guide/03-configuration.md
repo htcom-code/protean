@@ -139,7 +139,7 @@ Worker-isolation execution settings.
 
 | Key | Type | Default | Tier | Description |
 |----|------|--------|------|------|
-| `protean.worker.modules-per-worker` | `int` | `128` | `future` | Max modules packed into one worker JVM (`1` = a dedicated JVM per module). Default `128` is sized for production density — a worker JVM's ~200–300 MB base overhead dominates cost at small values. Crash blast-radius grows with it; lower it in development. **Scale `worker.container.memory` (and heap) together when raising it** — see below. (Note: `worker.db.auto-provision=true` currently forces this to `1`.) |
+| `protean.worker.modules-per-worker` | `int` | `128` | `future` | Max modules packed into one worker JVM (`1` = a dedicated JVM per module). Default `128` is sized for production density — a worker JVM's ~200–300 MB base overhead dominates cost at small values. Crash blast-radius grows with it; lower it in development. **Scale `worker.container.memory` (and heap) together when raising it** — see below. Applies to both worker and container modes; under `worker.db.auto-provision` it is the per-scope packing capacity (`1` = one worker/container per module). |
 | `protean.worker.jvm-args` | `List<String>` | `[]` | `future` | Extra JVM args prepended to each spawned worker (e.g. `["-Xmx512m"]`). Container workers already get `-XX:MaxRAMPercentage=75.0` (cgroup-relative); use this to size heap for the process/embed/sidecar tracks, which have no memory bound. Applied to the next spawn. |
 | `protean.worker.min-warm` | `int` | `0` | `future` | Number of empty workers to keep warm (for reuse). |
 | `protean.worker.auto-restart` | `boolean` | `false` | `live` | Auto-restart the modules of a crashed worker (process track). |
@@ -177,16 +177,18 @@ Defense-in-depth auth on mutating worker admin calls (chiefly for the container 
 | `protean.worker.container.auto-restart` | `boolean` | `false` | `live` | Auto-restart container workers. |
 | `protean.worker.container.db-host` | `String` | `host.docker.internal` | `future` | Hostname-rewrite target for reaching the host DB from a container. |
 
-### worker.db — per-module isolated DB-scope auto-provisioning
+### worker.db — per-scope isolated DB auto-provisioning
 
 | Key | Type | Default | Tier | Description |
 |----|------|--------|------|------|
-| `protean.worker.db.auto-provision` | `boolean` | `false` | `restart` | Enable per-module isolated DB-scope auto-provisioning. |
+| `protean.worker.db.auto-provision` | `boolean` | `false` | `restart` | Enable per-**scope** isolated DB auto-provisioning. A deploy then selects a scope (tenant/business-domain); same-scope modules share the scope's provisioned DB and pack into its worker/container. |
 | `protean.worker.db.dialect` | `String` | (none) | `restart` | `mysql` \| `postgresql`. `restart` (not live): existing scopes were created under the current dialect's DDL/URL shape, so a live swap would leave them unmanageable. |
 | `protean.worker.db.admin-url` | `String` | (none) | `future` | Admin connection URL for provisioning. Rotatable at runtime — a change applies to the next provision without a restart; the new connection is validated before adoption and a bad value is rejected (the previous connection is kept). |
 | `protean.worker.db.admin-username` | `String` | (none) | `future` | Admin username (rotatable at runtime; see `admin-url`). |
 | `protean.worker.db.admin-password` | `String` | (none) | `future` | Admin password (rotatable at runtime without a restart; see `admin-url`). |
-| `protean.worker.db.deprovision-on-undeploy` | `boolean` | `false` | `live` | Whether to remove the provisioned scope on undeploy. |
+| `protean.worker.db.scopes` | `List<String>` | (empty) | `future` | Startup seed allowlist of scope names. Empty → a single implicit `default` scope. A deploy must select a known scope; new scopes are added at runtime via the scope admin API (deployers cannot create scopes). |
+| `protean.worker.db.allow-destroy` | `boolean` | `false` | `live` | Whether the scope admin `destroy` (DROP DATABASE/SCHEMA — irreversible data loss) is permitted. Default `false` refuses it; when `true`, a guarded destroy is exposed (name re-confirmation + audit log). Detach (keeps data) is always available. |
+| `protean.worker.db.deprovision-on-undeploy` | `boolean` | `false` | `live` | **Deprecated.** Undeploy never removes a scope — scope lifecycle is operator-driven via the scope admin API (detach/destroy). Retained for compatibility; has no effect on the scope's database. |
 
 ### worker.sidecar — sidecar worker runtime (opt-in)
 

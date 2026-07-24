@@ -49,12 +49,27 @@ public interface DbDialect {
     int maxNameLength();
     /** 격리 스코프 생성: 전용 DB/스키마 + 전용 유저/롤 + 한정 GRANT. */
     void createScope(JdbcTemplate admin, String name, String password);
-    /** 스코프 제거(디프로비저닝). */
+    /** scope 완전 제거 — DB/스키마와 로그인을 함께(destroy 의미). */
     void dropScope(JdbcTemplate admin, String name);
-    /** 관리자 URL 로부터 그 스코프 접속 JDBC URL 생성. */
+    /** 관리자 URL 로부터 그 scope 접속 JDBC URL 생성. */
     String scopedUrl(String adminUrl, String name);
+
+    /**
+     * scope detach: 로그인만 제거(DB/스키마·데이터는 보존). 가역 — 이후 createScope 가 로그인을 재활성화.
+     * default 는 throw — detach 미구현 커스텀 dialect 가 데이터를 조용히 파괴하지 않도록. 내장 MySQL=DROP USER,
+     * PostgreSQL=ALTER ROLE … NOLOGIN.
+     */
+    default void detachScope(JdbcTemplate admin, String name) { throw new UnsupportedOperationException(); }
+
+    /**
+     * scope destroy: DROP DATABASE/SCHEMA CASCADE + 로그인 — 비가역, 데이터 전부 소실. default 는 dropScope 위임
+     * (레거시 dialect 의 완전 드롭이 곧 destroy). 내장은 둘 다 override.
+     */
+    default void destroyScope(JdbcTemplate admin, String name) { dropScope(admin, name); }
 }
 ```
+
+`detachScope`/`destroyScope` 는 scope 관리 라이프사이클([11. 운영](11-operations.ko.md))을 뒷받침한다: `detach` 는 데이터 보존(가역), `destroy` 는 가드된 비가역 드롭. 둘 다 default 메서드라 기존 세 메서드만 구현한 dialect 도 컴파일된다 — 다만 데이터 안전 detach 를 제공하려면 `detachScope` 를 override 해야 한다(default 는 destroy 로 흘리지 않고 거부).
 
 빈 등록: `DbDialect` 빈을 노출하면 `DbProvisioningConfig` 가 `List<DbDialect>` 로 수집해 `id()` 키 registry 에 넣는다. `protean.worker.db.dialect` 값과 `id()` 가 일치하는 dialect 가 선택된다.
 

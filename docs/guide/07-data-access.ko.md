@@ -178,9 +178,11 @@ public class MultiConfig {
 
 worker/container 에서 호스트 로직과 트랜잭션적으로 엮이려면 인-메모리 tx 공유가 아니라 **RPC 브리지**로 호스트 공유 빈을 호출해야 한다(각 쪽이 자기 tx 를 가짐). 격리 모드 자체는 [05. 격리 모드](05-isolation-modes.ko.md), 브리지는 관련 문서 참조.
 
-## worker 전용 DB 자동 프로비저닝
+## scope 단위 DB 자동 프로비저닝 (worker / container)
 
-worker 모드에서 모듈마다 **격리된 전용 DB 스코프**를 자동 생성할 수 있다. 켜면 `DbScopeProvisioner` 가 admin 커넥션으로 모듈마다 전용 DB/스키마 + 전용 유저/롤 + 자기 영역으로 한정된 `GRANT` 를 만들고, 그 스코프 접속 정보(url/username/password)를 워커 프로세스에 `spring.datasource.*` 로 주입한다. 워커는 그 자격으로만 접속하므로 타 모듈 DB 를 볼 수 없다.
+worker·container 격리에서 **scope 단위로 격리된 DB**를 자동 생성할 수 있다. **scope** 는 tenant/업무 도메인 묶음이며, DB 프로비저닝과 worker/container 패킹의 단위다. `worker.db.auto-provision` 을 켜면 배포는 "모듈마다 격리"에서 "**scope 선택**"으로 바뀐다 — 같은 scope 모듈은 그 scope 의 프로비저닝된 DB 와 worker/container 를 공유하고, 서로 다른 scope 는 격리된다.
+
+켜면 `DbScopeProvisioner` 가 admin 커넥션으로 **scope 마다** 전용 DB/스키마 + 전용 유저/롤 + 자기 영역으로 한정된 `GRANT` 를 만들고, 그 scope 접속 정보(url/username/password)를 worker/container 에 `spring.datasource.*` 로 주입한다. 워커는 그 자격으로만 접속하므로 다른 scope 의 DB 를 볼 수 없다.
 
 ```yaml
 protean:
@@ -191,21 +193,24 @@ protean:
       admin-url: jdbc:mysql://localhost:3306/
       admin-username: root
       admin-password: ${DB_ADMIN_PW}
-      deprovision-on-undeploy: false   # 기본 보존; true 면 undeploy 시 스코프 제거
+      scopes: [tenant-a, tenant-b]   # 시작 시 seed 허용목록; 비우면 암묵적 "default" scope 하나
 ```
+
+**배포 시 scope 선택.** auto-provision 이 켜지면 모든 배포는 `scope` 를 반드시 지정해야 한다(`module.yaml` 의 `scope:` 키, 배포 API 의 `scope` 인자, 또는 `ModuleDescriptor.scope`). 알려진 **ACTIVE** scope 여야 하며, 미지정·미지원·닫힘/detached scope 는 거부된다. 배포자는 scope 를 *선택*만 하고, scope *생성*은 운영자 몫이다(seed 목록 또는 scope 관리 API — 배포자는 생성 불가). auto-provision 이 **꺼져** 있으면 선언된 scope 는 무시된다(경고 로그). auto-provision 하에서 scope 를 선언한 모듈이 **in-process** 로 라우팅되면 거부된다 — in-process 는 메인 JVM·메인 datasource 로 돌아 scope 별 DB 에 바인딩할 수 없으므로 worker/container 를 써야 한다.
 
 동작 상세:
 
-- 벤더별 격리 방식: **MySQL** = 모듈당 전용 `DATABASE` + 전용 `USER` + 그 DB 로 한정된 `GRANT`. **PostgreSQL** = 같은 DB 안의 전용 `SCHEMA` + 전용 `ROLE` + 그 스키마로 한정된 `GRANT`(+ `search_path` 고정).
-- `auto-provision` 시 모듈당 전용 DB → **모듈당 전용 워커**(capacity=1, 워밍 재사용 금지).
-- 모듈 id 는 DDL 식별자로 새니타이즈된다(`[a-z0-9_]` 화이트리스트, 글자로 시작, 벤더 최대 길이 초과 시 해시 축약). DDL 식별자는 바인드 파라미터로 넣을 수 없어 문자열로 박히므로 인젝션 방지에 이 새니타이즈가 필수다.
+- 벤더별 격리 방식: **MySQL** = scope 당 전용 `DATABASE` + 전용 `USER` + 그 DB 로 한정된 `GRANT`. **PostgreSQL** = 같은 DB 안의 scope 당 전용 `SCHEMA` + 전용 `ROLE` + 그 스키마로 한정된 `GRANT`(+ `search_path` 고정).
+- 모듈당 격리가 아니라 패킹: 같은 scope 모듈은 그 scope 의 worker/container 에 `worker.modules-per-worker`(기본 128)까지 패킹되고, 격리 경계는 scope 다. 엄격한 worker/container 당 1모듈 경계는 `worker.modules-per-worker=1`. [05. 격리 모드](05-isolation-modes.ko.md) 참조.
+- scope 이름은 DDL 식별자로 새니타이즈된다(`[a-z0-9_]` 화이트리스트, 글자로 시작, 벤더 최대 길이 초과 시 해시 축약). DDL 식별자는 바인드 파라미터로 넣을 수 없어 문자열로 박히므로 인젝션 방지에 이 새니타이즈가 필수다.
 - admin 접속 드라이버(mysql/postgres)는 **호스트(앱) 클래스패스**에 있어야 한다(위 optional 주의 참조). shared-lib CL 에 두면 안 된다.
-- 스코프 유저의 비밀번호는 24자 난수(`SecureRandom`)로 생성된다.
-- **admin 자격증명은 런타임 교체(rotation) 가능**(`admin-url` / `admin-username` / `admin-password`, `future` tier): 변경은 앱 재시작 없이 다음 provision/deprovision 에 반영된다 — provisioner 가 admin 연결을 다시 만들되, 채택 전 새 자격증명을 검증하고 실패하면 기존 연결을 유지한다. (`dialect` 는 라이브 아님 — 기존 스코프가 현재 dialect 형태로 만들어졌기 때문. [03. 설정 레퍼런스](03-configuration.ko.md) 참조.)
+- scope 유저의 비밀번호는 24자 난수(`SecureRandom`)로 생성된다.
+- **admin 자격증명은 런타임 교체(rotation) 가능**(`admin-url` / `admin-username` / `admin-password`, `future` tier): 변경은 앱 재시작 없이 다음 provision 에 반영된다 — provisioner 가 admin 연결을 다시 만들되, 채택 전 새 자격증명을 검증하고 실패하면 기존 연결을 유지한다. (`dialect` 는 라이브 아님 — 기존 scope 가 현재 dialect 형태로 만들어졌기 때문. [03. 설정 레퍼런스](03-configuration.ko.md) 참조.)
+- scope 라이프사이클(create/close/detach/destroy)은 **운영자 주도**로 scope 관리 API 를 통해 이뤄진다 — 모듈 undeploy 는 그 scope 를 절대 제거하지 않는다(scope 의 DB 는 공유되며 개별 모듈보다 오래 산다). `worker.db.deprovision-on-undeploy` 는 **deprecated** 이며 더 이상 undeploy 시 scope 를 제거하지 않는다. [11. 운영](11-operations.ko.md) 참조.
 
 ### 벤더 확장은 `DbDialect` 빈
 
-내장은 `mysql`·`postgresql` 뿐이지만, 라이브러리 소스를 포크하지 않고 `DbDialect` 빈을 등록하면 Oracle·SQL Server·MariaDB 등 임의 벤더를 추가할 수 있다. 같은 `DbDialect.id()` 를 반환하면 내장 dialect 를 덮어쓴다. 구현·등록 방법은 [10. SPI 확장](10-spi-extension.ko.md) 참조.
+내장은 `mysql`·`postgresql` 뿐이지만, 라이브러리 소스를 포크하지 않고 `DbDialect` 빈을 등록하면 Oracle·SQL Server·MariaDB 등 임의 벤더를 추가할 수 있다. 같은 `DbDialect.id()` 를 반환하면 내장 dialect 를 덮어쓴다. dialect 는 scope 해제도 `detachScope`(로그인만 제거, DB·데이터 보존 — 가역)와 `destroyScope`(DB/스키마 CASCADE 삭제 — 비가역)로 나눈다. 둘 다 default 메서드라 기존 dialect 도 그대로 동작한다. 구현·등록 방법은 [10. SPI 확장](10-spi-extension.ko.md) 참조.
 
 ## 자원 누수 방지: 관리형 실행기와 언로드 훅
 

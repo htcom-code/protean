@@ -204,6 +204,20 @@ tier 모델과 키별 의미는 [03. 설정](03-configuration.ko.md) 참고.
 | `protean.deploy_shared_lib` | `name`·`version`·`bytesBase64`(필수); `signerKeyId`·`signature`(선택) | Base64 jar 업로드 후 새 세대 발행. [shared-lib 서명 게이트](06-promotion-gates.ko.md) 를 거침 |
 | `protean.remove_shared_lib` | `name`(필수) | 향후 세대에서 lib 제거(사용 중인 세대는 유지) |
 
+### scope 관리 툴
+
+`worker.db.auto-provision` 하의 DB **scope** 라이프사이클 관리 — `/platform/scopes` [REST 엔드포인트](04-rest-api.ko.md)의 MCP 대응. auto-provision 이 켜졌을 때만 등록. 전부 `CUSTOM` 인가 action 으로 분류된다.
+
+| 툴 이름 | 입력 | 목적 |
+|---|---|---|
+| `protean.scope_list` | (없음) | 알려진 모든 scope(registry ∪ seed): 이름·상태(ACTIVE/CLOSED/DETACHED)·dialect·모듈 수 |
+| `protean.scope_get` | `name`(필수) | 한 scope 의 상태·dialect·모듈 수 |
+| `protean.scope_create` | `name`(필수) | scope 를 ACTIVE 로 생성(또는 재개방) — DB 는 첫 배포 시 지연 프로비저닝. 멱등 |
+| `protean.scope_open` | `name`(필수) | CLOSED scope 를 ACTIVE 로 재개방 |
+| `protean.scope_close` | `name`(필수) | scope 닫기: 새 배포 거부, 실행 중 모듈은 계속 서빙. 가역; 데이터 무손상 |
+| `protean.scope_detach` | `name`(필수) | scope 의 모듈을 undeploy 하고 DB 로그인 제거; DB·데이터는 보존(가역) |
+| `protean.scope_destroy` | `name`·`confirm`(둘 다 필수) | 모듈 undeploy 후 scope 의 DB 를 **비가역**으로 드롭. 가드: `worker.db.allow-destroy=true` 와 `confirm`=scope 이름 필요 |
+
 ### 배포 입력 형식 — `files[]` 와 `manifest`
 
 `deploy_module`/`update_module` 은 두 입력 방식 중 하나를 받는다(배타).

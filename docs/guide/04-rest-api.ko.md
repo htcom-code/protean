@@ -479,6 +479,53 @@ curl -X POST http://localhost:8080/platform/shared-libs \
 
 - 응답 `204`
 
+## scope 관리 — 기준 경로 `/platform/scopes`
+
+`worker.db.auto-provision` 하의 DB **scope** 라이프사이클 운영자 표면([07. 데이터 접근](07-data-access.ko.md), [11. 운영](11-operations.ko.md) 참조). `protean.admin.enabled`(기본 on)와 `protean.worker.db.auto-provision=true` **둘 다** 켜져야 활성. 배포자는 배포 시 scope 를 *선택*만 하고, scope 생성·해제는 여기서 한다. 명시적 action 하위 리소스를 쓰며(`DELETE` 동사 미사용) — `detach`(데이터 안전)와 `destroy`(비가역)가 한 모호한 호출로 합쳐지면 안 되기 때문.
+
+scope 뷰 = `{ "name", "state"(ACTIVE|CLOSED|DETACHED), "dialectId", "modules"(현재 모듈 수) }`.
+
+### GET `/platform/scopes`
+
+알려진 모든 scope(registry ∪ 시작 seed) 목록.
+
+- 응답 `200`: scope 뷰 배열.
+
+### GET `/platform/scopes/{name}`
+
+- 응답 `200`: scope 뷰. 미지의 scope 면 `404`.
+
+### POST `/platform/scopes`
+
+scope 를 ACTIVE 로 생성(또는 재개방). DB 는 첫 배포 시 지연 프로비저닝. 멱등.
+
+- 바디: `{ "name": "tenant-a" }`
+- 응답 `201`: `Location: /platform/scopes/{name}` + scope 뷰.
+
+### POST `/platform/scopes/{name}/close`
+
+scope 닫기: 새 배포는 거부, 실행 중 모듈은 계속 서빙. `/open` 으로 가역. 데이터 무손상.
+
+- 응답 `200`: scope 뷰(`state: CLOSED`).
+
+### POST `/platform/scopes/{name}/open`
+
+CLOSED scope 를 ACTIVE 로 재개방.
+
+- 응답 `200`: scope 뷰(`state: ACTIVE`).
+
+### POST `/platform/scopes/{name}/detach`
+
+scope 의 모듈을 undeploy 하고 워커/컨테이너를 회수한 뒤 DB 로그인만 제거 — DB 와 데이터는 보존(가역: 재생성 + 재배포 시 로그인 재프로비저닝).
+
+- 응답 `200`: scope 뷰(`state: DETACHED`).
+
+### POST `/platform/scopes/{name}/destroy?confirm={name}`
+
+모듈 undeploy 후 scope 의 DB/스키마를 **비가역**으로 드롭(CASCADE) — 데이터 전부 소실. 가드: `protean.worker.db.allow-destroy=true` **그리고** `confirm` 이 scope 이름과 일치해야 함; 감사 로그. `allow-destroy` 가 꺼졌거나 확인 불일치면 거부(`409`).
+
+- 응답 `200`: `{ "name", "destroyed": true }`
+
 ## 관련 문서
 
 - [02. 모듈 작성](02-module-authoring.ko.md)

@@ -114,7 +114,7 @@ protean:
       url: jdbc:mysql://db:3306/app
 ```
 
-To auto-provision a dedicated, isolated DB per module, use `protean.worker.db.auto-provision=true`. In that case, to guarantee isolation, it is forced to one module per worker (`capacity=1`) with no warm reuse (`min-warm=0`), and launches a dedicated worker with the provisioned scope credentials. For vendor-specific provisioning see [07. Data Access](07-data-access.md); for dialect extensions see [10. SPI Extension](10-spi-extension.md).
+To auto-provision an isolated DB per **scope** (a tenant / business-domain grouping), use `protean.worker.db.auto-provision=true`. A deploy then selects a scope, and same-scope modules pack into that scope's worker up to `modules-per-worker` while different scopes get separate workers — the isolation boundary is the scope, not the module. Set `modules-per-worker=1` for a dedicated worker per module. For vendor-specific provisioning and the scope model see [07. Data Access](07-data-access.md); for dialect extensions see [10. SPI Extension](10-spi-extension.md).
 
 ### Typed sharing (LIBRARY modules) across isolation modes
 
@@ -124,7 +124,7 @@ On a library update, the main-side `WorkerSharedModulePropagator` reacts (after 
 
 ## container (Docker container worker)
 
-`ContainerWorkerIsolation` launches the worker as a Docker container and confines it with cgroup, read-only, cap-drop, and seccomp. It is the untrusted-tier baseline, blocking at the OS level the host-resource, file, and syscall violations that a worker process alone cannot stop. It keeps no pool — "one container per module" is the essence of OS isolation, so packing would weaken isolation. The RPC bridge is unsupported (`supports()` rejects `needsSharedBeans` modules).
+`ContainerWorkerIsolation` launches the worker as a Docker container and confines it with cgroup, read-only, cap-drop, and seccomp. It is the untrusted-tier baseline, blocking at the OS level the host-resource, file, and syscall violations that a worker process alone cannot stop. It pools containers and packs modules up to `modules-per-worker` (default 128); under auto-provision the pool is keyed by **scope** (tenant), so same-scope modules share a container while different scopes are isolated in separate containers — the OS-isolation boundary is the scope. Set `modules-per-worker=1` for the strict one-container-per-module boundary (maximum isolation, no packing). The RPC bridge is unsupported (`supports()` rejects `needsSharedBeans` modules).
 
 ### Requirements
 
