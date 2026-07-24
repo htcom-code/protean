@@ -46,8 +46,9 @@
   `worker.db.scopes`(비우면 `default` 하나)와 신설 `ScopeStore`/`ScopeManager` 레지스트리가 알려진
   scope 를 추적하고 재기동을 넘겨 유지한다.
 - **scope 관리 표면.** REST `/platform/scopes`(list · get · create · close · open · detach ·
-  destroy — 명시적 action 하위 리소스, `DELETE` 동사 미사용)와 MCP `protean.scope_*` 툴,
-  `admin.enabled` + `auto-provision` 하에서 활성. 라이프사이클: create/open → ACTIVE, close →
+  destroy — 명시적 action 하위 리소스, `DELETE` 동사 미사용; `admin.enabled` + `auto-provision`
+  하에서 활성)와 MCP `protean.scope_*` 툴(`debug.*` 처럼 **항상 목록 노출**, call-time 게이트 —
+  `auto-provision` 이 꺼지면 `isError`). 라이프사이클: create/open → ACTIVE, close →
   CLOSED, detach(로그인만 제거·데이터 보존 — 가역), destroy(`DROP DATABASE/SCHEMA` — 비가역).
   `destroy` 는 신설 `worker.db.allow-destroy`(기본 `false`) + 이름 확인으로 가드되고 감사 로그가 남는다.
 - `DbDialect` 에 `detachScope`(로그인만·가역)와 `destroyScope`(CASCADE·비가역)를 하위호환 default

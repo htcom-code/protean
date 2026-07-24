@@ -206,7 +206,7 @@ tier 모델과 키별 의미는 [03. 설정](03-configuration.ko.md) 참고.
 
 ### scope 관리 툴
 
-`worker.db.auto-provision` 하의 DB **scope** 라이프사이클 관리 — `/platform/scopes` [REST 엔드포인트](04-rest-api.ko.md)의 MCP 대응. auto-provision 이 켜졌을 때만 등록. 전부 `CUSTOM` 인가 action 으로 분류된다.
+`worker.db.auto-provision` 하의 DB **scope** 라이프사이클 관리 — `/platform/scopes` [REST 엔드포인트](04-rest-api.ko.md)의 MCP 대응. `debug.*` 관례를 따라 이 툴들은 **항상 목록에 노출**(에이전트가 발견 가능)되되 **call-time 게이트**된다: auto-provision 이 꺼져 있으면 각 호출이 툴을 숨기는 대신 `worker.db.auto-provision` 을 가리키는 `isError` 를 반환한다. 전부 `CUSTOM` 인가 action 으로 분류된다.
 
 | 툴 이름 | 입력 | 목적 |
 |---|---|---|

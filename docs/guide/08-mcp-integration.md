@@ -206,7 +206,7 @@ Manage the live native-jar [shared-lib store](07-data-access.md) — the MCP ana
 
 ### Scope admin tools
 
-Manage the DB **scope** lifecycle under `worker.db.auto-provision` — the MCP analog of the `/platform/scopes` [REST endpoints](04-rest-api.md). Registered only when auto-provision is on. All classify as the `CUSTOM` authorization action.
+Manage the DB **scope** lifecycle under `worker.db.auto-provision` — the MCP analog of the `/platform/scopes` [REST endpoints](04-rest-api.md). Following the `debug.*` convention, these tools are **always listed** (so an agent can discover them) but **gated at call time**: when auto-provision is off, every call returns an `isError` pointing at `worker.db.auto-provision` rather than the tools being hidden. All classify as the `CUSTOM` authorization action.
 
 | Tool name | Input | Purpose |
 |---|---|---|

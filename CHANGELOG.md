@@ -53,8 +53,10 @@ follows the migration.
   a startup seed allowlist `worker.db.scopes` (empty → a single `default`) plus the
   new `ScopeStore`/`ScopeManager` registry track known scopes and survive restart.
 - **Scope admin surface.** REST `/platform/scopes` (list · get · create · close ·
-  open · detach · destroy — explicit action sub-resources, no `DELETE` verb) and MCP
-  `protean.scope_*` tools, active under `admin.enabled` + `auto-provision`. Lifecycle:
+  open · detach · destroy — explicit action sub-resources, no `DELETE` verb; active
+  under `admin.enabled` + `auto-provision`) and MCP `protean.scope_*` tools (always
+  listed like `debug.*`, gated at call time — an `isError` when `auto-provision` is
+  off). Lifecycle:
   create/open → ACTIVE, close → CLOSED, detach (drop login, keep data — reversible),
   destroy (`DROP DATABASE/SCHEMA` — irreversible). `destroy` is guarded by the new
   `worker.db.allow-destroy` (default `false`) + a name-confirmation, and audit-logged.
