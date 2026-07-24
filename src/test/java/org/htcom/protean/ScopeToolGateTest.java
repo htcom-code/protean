@@ -79,6 +79,25 @@ class ScopeToolGateTest {
     }
 
     @Test
+    void every_scope_tool_declares_an_output_schema() {
+        // Contract completeness (the original gap a): every scope tool emits structuredContent, so each MUST declare an
+        // outputSchema. Locks it for all seven so re-introducing the gap on any one fails here.
+        ObjectMapper m = new ObjectMapper();
+        McpTool[] tools = {
+                new ScopeTools.ListTool(m, absent()), new ScopeTools.GetTool(m, absent()),
+                new ScopeTools.CreateTool(m, absent()), new ScopeTools.OpenTool(m, absent()),
+                new ScopeTools.CloseTool(m, absent()), new ScopeTools.DetachTool(m, absent()),
+                new ScopeTools.DestroyTool(m, absent()),
+        };
+        for (McpTool t : tools) {
+            org.junit.jupiter.api.Assertions.assertNotNull(t.outputSchema(),
+                    t.name() + " emits structuredContent, so it must declare an outputSchema");
+            assertTrue(t.outputSchema().path("type").asText().equals("object"),
+                    t.name() + " outputSchema must be an object (structuredContent is an object)");
+        }
+    }
+
+    @Test
     void destroy_tool_declares_the_confirm_argument() {
         ObjectMapper mapper = new ObjectMapper();
         ScopeTools.DestroyTool tool = new ScopeTools.DestroyTool(mapper, absent());
