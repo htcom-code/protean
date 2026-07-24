@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "protean.worker.db.admin-url=jdbc:postgresql://unused-host:5432/db",
         "protean.worker.db.admin-username=u",
         "protean.worker.db.admin-password=p",
-        "protean.worker.db.scopes=alpha,beta"
+        "protean.worker.db.scopes=alpha,beta,gamma"
 })
 class ScopeAdminServiceTest {
 
@@ -109,5 +109,17 @@ class ScopeAdminServiceTest {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
                 () -> container.deploy(mod("sa-c-ghost", "ghost", "container")));
         assertTrue(ex.getMessage().contains("unknown scope"), ex.getMessage());
+    }
+
+    @Test
+    void container_deploy_rejects_a_closed_scope() {
+        scopeManager.close("gamma", "postgresql");
+        try {
+            IllegalStateException ex = assertThrows(IllegalStateException.class,
+                    () -> container.deploy(mod("sa-c-gamma", "gamma", "container")));
+            assertTrue(ex.getMessage().contains("not ACTIVE"), ex.getMessage());
+        } finally {
+            scopeManager.open("gamma", "postgresql");
+        }
     }
 }
