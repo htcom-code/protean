@@ -37,6 +37,48 @@ public final class ScopeTools {
     private ScopeTools() {
     }
 
+    // --- output schemas (contract completeness: every tool that emits structuredContent declares one) ---
+
+    /** A single scope view: {name, state, dialectId?, modules}. */
+    static ObjectNode scopeViewSchema(ObjectMapper m) {
+        ObjectNode s = m.createObjectNode();
+        s.put("type", "object");
+        ObjectNode p = s.putObject("properties");
+        p.putObject("name").put("type", "string").put("description", "Scope name.");
+        ObjectNode state = p.putObject("state");
+        state.put("type", "string").put("description", "Lifecycle state.");
+        state.putArray("enum").add("ACTIVE").add("CLOSED").add("DETACHED");
+        p.putObject("dialectId").putArray("type").add("string").add("null");  // nullable until provisioned
+        p.putObject("modules").put("type", "integer").put("description", "ACTIVE modules bound to the scope.");
+        s.putArray("required").add("name").add("state").add("modules");
+        s.put("additionalProperties", false);
+        return s;
+    }
+
+    /** The list result wrapper: {scopes: [scopeView, ...]} (structuredContent must be an object, not a bare array). */
+    static ObjectNode scopeListSchema(ObjectMapper m) {
+        ObjectNode s = m.createObjectNode();
+        s.put("type", "object");
+        ObjectNode scopes = s.putObject("properties").putObject("scopes");
+        scopes.put("type", "array");
+        scopes.set("items", scopeViewSchema(m));
+        s.putArray("required").add("scopes");
+        s.put("additionalProperties", false);
+        return s;
+    }
+
+    /** The destroy acknowledgement: {name, destroyed}. */
+    static ObjectNode scopeDestroySchema(ObjectMapper m) {
+        ObjectNode s = m.createObjectNode();
+        s.put("type", "object");
+        ObjectNode p = s.putObject("properties");
+        p.putObject("name").put("type", "string");
+        p.putObject("destroyed").put("type", "boolean");
+        s.putArray("required").add("name").add("destroyed");
+        s.put("additionalProperties", false);
+        return s;
+    }
+
     abstract static class Base implements McpTool {
         final ObjectMapper mapper;
         private final ObjectProvider<ScopeAdminService> svcProvider;
@@ -118,6 +160,11 @@ public final class ScopeTools {
         }
 
         @Override
+        public ObjectNode outputSchema() {
+            return scopeListSchema(mapper);
+        }
+
+        @Override
         public String title() {
             return "List Scopes";
         }
@@ -162,6 +209,11 @@ public final class ScopeTools {
         }
 
         @Override
+        public ObjectNode outputSchema() {
+            return scopeViewSchema(mapper);
+        }
+
+        @Override
         public String title() {
             return "Get Scope";
         }
@@ -194,6 +246,11 @@ public final class ScopeTools {
         @Override
         public String name() {
             return "protean.scope_create";
+        }
+
+        @Override
+        public ObjectNode outputSchema() {
+            return scopeViewSchema(mapper);
         }
 
         @Override
@@ -230,6 +287,11 @@ public final class ScopeTools {
         }
 
         @Override
+        public ObjectNode outputSchema() {
+            return scopeViewSchema(mapper);
+        }
+
+        @Override
         public String title() {
             return "Open Scope";
         }
@@ -260,6 +322,11 @@ public final class ScopeTools {
         @Override
         public String name() {
             return "protean.scope_close";
+        }
+
+        @Override
+        public ObjectNode outputSchema() {
+            return scopeViewSchema(mapper);
         }
 
         @Override
@@ -296,6 +363,11 @@ public final class ScopeTools {
         }
 
         @Override
+        public ObjectNode outputSchema() {
+            return scopeViewSchema(mapper);
+        }
+
+        @Override
         public String title() {
             return "Detach Scope";
         }
@@ -327,6 +399,11 @@ public final class ScopeTools {
         @Override
         public String name() {
             return "protean.scope_destroy";
+        }
+
+        @Override
+        public ObjectNode outputSchema() {
+            return scopeDestroySchema(mapper);
         }
 
         @Override
