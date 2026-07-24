@@ -202,6 +202,11 @@ public final class ScopeTools {
         }
 
         @Override
+        public ModuleActionAuthorizer.ModuleAction action() {
+            return ModuleActionAuthorizer.ModuleAction.READ;   // read-only listing
+        }
+
+        @Override
         protected McpToolResult callWith(JsonNode arguments, McpCallContext ctx, ScopeAdminService svc) {
             ArrayNode arr = mapper.valueToTree(svc.list());
             ObjectNode structured = mapper.createObjectNode();
@@ -239,6 +244,11 @@ public final class ScopeTools {
         @Override
         public McpToolAnnotations annotations() {
             return McpToolAnnotations.readOnly();
+        }
+
+        @Override
+        public ModuleActionAuthorizer.ModuleAction action() {
+            return ModuleActionAuthorizer.ModuleAction.READ;   // read-only inspection
         }
 
         @Override
@@ -397,6 +407,11 @@ public final class ScopeTools {
         }
 
         @Override
+        public ModuleActionAuthorizer.ModuleAction action() {
+            return ModuleActionAuthorizer.ModuleAction.DELETE;   // undeploys modules + drops the scope login (teardown)
+        }
+
+        @Override
         protected McpToolResult callWith(JsonNode arguments, McpCallContext ctx, ScopeAdminService svc) {
             String name = requiredName(arguments);
             return McpToolResult.ok("Scope " + name + " detached (data retained)", tree(svc.detach(name)));
@@ -437,6 +452,11 @@ public final class ScopeTools {
         @Override
         public McpToolAnnotations annotations() {
             return McpToolAnnotations.builder().readOnly(false).destructive(true).idempotent(false).openWorld(false).build();
+        }
+
+        @Override
+        public ModuleActionAuthorizer.ModuleAction action() {
+            return ModuleActionAuthorizer.ModuleAction.DELETE;   // irreversible DROP DATABASE/SCHEMA — must not escape a DELETE-deny policy
         }
 
         @Override

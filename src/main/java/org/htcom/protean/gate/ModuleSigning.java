@@ -58,6 +58,7 @@ public final class ModuleSigning {
         m.put("needsSharedBeans", d.needsSharedBeans());
         m.put("verification", d.verification());
         m.put("isolationMode", d.isolationMode());
+        m.put("scope", d.scope());
         m.put("bridgedInterfaces", d.bridgedInterfaces());
         m.put("resources", d.resources());
         m.put("kind", d.kind() == null ? null : d.kind().name());
@@ -66,7 +67,9 @@ public final class ModuleSigning {
         // NOTE: usedSharedLibs is intentionally excluded — it is server-observed (not consumer-authored), so it must
         // not participate in the signature (the consumer signs before the server observes it). signerKeyId/signature
         // are likewise excluded (a signature cannot cover itself). kind/exports/uses ARE consumer-authored declarations
-        // (shared-module typed sharing), so they are covered by the signature (tamper protection).
+        // (shared-module typed sharing), so they are covered by the signature (tamper protection). scope is likewise
+        // consumer-authored and decides which tenant DB the worker binds to, so it is covered too — otherwise a signed
+        // module could be re-pointed at another tenant's scope without invalidating the signature.
         try {
             return CANON.writeValueAsBytes(m);
         } catch (JsonProcessingException e) {
