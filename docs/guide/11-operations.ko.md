@@ -51,6 +51,24 @@ protean:
 - `PENDING_APPROVAL` 모듈은 복구되지 않는다 — 미승인 모듈이 재기동으로 서빙되는 우회를 차단한다.
 - 개별 모듈 복구 실패는 로그만 남기고 건너뛴다(다른 모듈 복구를 막지 않는다). `reconcile: {복구}/{전체} 모듈 복구` 로그로 결과를 확인한다.
 - reconcile 은 게이트를 다시 태우지 않고 저장된 디스크립터를 재배포한다(설치 시 이미 통과). 저장소가 비어 있으면 no-op.
+- **scope 사용 시**(`worker.db.auto-provision`): 복구되는 각 모듈은 디스크립터에 적힌 scope 에 재부착되고, 그 scope 의 DB 는 첫 배포 때 지연 (재)프로비저닝된다. scope 레지스트리(`ScopeStore`)는 시작 seed 와 합쳐지고 self-heal 한다 — 레지스트리 항목이 유실돼도 디스크립터에 적힌 scope 이름은 존중된다.
+
+## scope 라이프사이클 (auto-provision)
+
+`worker.db.auto-provision` 하에서 **scope**(tenant/업무 도메인 묶음)는 DB 프로비저닝과 worker/container 패킹의 단위다. 배포자는 scope 를 *선택*만 하고, 라이프사이클은 운영자가 [scope 관리 API](04-rest-api.ko.md)(REST `/platform/scopes`, MCP `protean.scope_*`)로 소유한다.
+
+**레지스트리(`ScopeStore`).** scope 메타데이터 — `ScopeRecord(name, state, dialectId)`, 자격증명은 절대 저장하지 않음 — 는 module store 와 별개로 같은 `module-store.backend`(filesystem | jdbc)에 영속된다. `ScopeManager` 파사드가 이를 `worker.db.scopes` seed 와 합쳐 알려진 집합이 재기동을 넘겨 살아남게 한다.
+
+**상태 머신.**
+
+| 동작 | 효과 | 데이터 | 가역 |
+| --- | --- | --- | --- |
+| create / open | scope 가 ACTIVE(배포 가능); DB 는 첫 배포 시 지연 프로비저닝 | — | — |
+| close | 배포 가능 허용목록에서 제거; 실행 중 모듈은 계속 서빙 | 무손상 | ↔ open |
+| detach | scope 의 모듈 undeploy + 워커/컨테이너 회수 + **DB 로그인만** 제거 | 보존 | ↔ 재생성 + 재배포 |
+| destroy | `DROP DATABASE`/`SCHEMA CASCADE` + 로그인 | **소실** | ✗ |
+
+**데이터 안전.** `detach` 가 기본이자 데이터 안전한 해제다 — scope 를 멈추되 DB 와 데이터는 보존한다(scope 재생성 + 재배포 시 로그인 재프로비저닝). `destroy` 는 비가역이며 **가드**된다: `worker.db.allow-destroy=true`(기본 `false`) **그리고** 호출자가 scope 이름을 확인값으로 되풀이해야만 허용되고, 감사 로그가 남는다. 데이터 삭제는 배포 경로의 일상 작업이 아니라 DBA 소유 작업이다. undeploy 는 scope 를 해제하지 않는다(deprovision-on-undeploy 플래그는 없다 — 해제는 위의 `detach`/`destroy` 로만).
 
 ## 요청 트레이스 / 모니터링
 

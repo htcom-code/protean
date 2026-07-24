@@ -49,12 +49,27 @@ public interface DbDialect {
     int maxNameLength();
     /** Create an isolated scope: dedicated DB/schema + dedicated user/role + scoped GRANT. */
     void createScope(JdbcTemplate admin, String name, String password);
-    /** Drop the scope (deprovision). */
+    /** Drop the scope fully — DB/schema and its login together (destroy semantics). */
     void dropScope(JdbcTemplate admin, String name);
     /** Build the JDBC URL for connecting to that scope from the admin URL. */
     String scopedUrl(String adminUrl, String name);
+
+    /**
+     * Detach a scope: drop only its login (keep the DB/schema and all data). Reversible — a later
+     * createScope re-enables the login. Default throws, so a custom dialect that has not implemented
+     * detach never silently destroys data. Built-in MySQL = DROP USER; PostgreSQL = ALTER ROLE … NOLOGIN.
+     */
+    default void detachScope(JdbcTemplate admin, String name) { throw new UnsupportedOperationException(); }
+
+    /**
+     * Destroy a scope: DROP DATABASE/SCHEMA CASCADE + login — irreversible, all data lost. Default
+     * delegates to dropScope (a legacy dialect's full drop is exactly destroy). Built-ins override both.
+     */
+    default void destroyScope(JdbcTemplate admin, String name) { dropScope(admin, name); }
 }
 ```
+
+`detachScope`/`destroyScope` back the scope admin lifecycle (see [11. Operations](11-operations.md)): `detach` keeps data (reversible), `destroy` is the guarded, irreversible drop. Both are default methods, so a dialect that only implements the original three keeps compiling — but it must override `detachScope` to offer data-safe detach (the default refuses rather than fall through to a destroy).
 
 Bean registration: expose a `DbDialect` bean and `DbProvisioningConfig` collects it as `List<DbDialect>` into an `id()`-keyed registry. The dialect whose `id()` matches the `protean.worker.db.dialect` value is selected.
 
@@ -94,7 +109,6 @@ protean:
       admin-url: jdbc:mariadb://db:3306/
       admin-username: root
       admin-password: ${DB_ADMIN_PW}
-      deprovision-on-undeploy: false
 ```
 
 ## ModuleStoreDialect — module-store DDL vendor

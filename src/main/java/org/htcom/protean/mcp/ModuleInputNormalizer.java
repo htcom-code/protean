@@ -74,6 +74,7 @@ public class ModuleInputNormalizer {
                 ? ModuleDescriptor.TrustTier.valueOf(args.get("trustTier").asText())
                 : ModuleDescriptor.TrustTier.TRUSTED;
         String isolationMode = args.hasNonNull("isolationMode") ? args.get("isolationMode").asText() : null;
+        String scope = args.hasNonNull("scope") ? args.get("scope").asText() : null;
         boolean needsSharedBeans = args.path("needsSharedBeans").asBoolean(false);
         List<String> components = stringList(args, "components");
         if (components.isEmpty() && controller != null) {
@@ -118,7 +119,7 @@ public class ModuleInputNormalizer {
                 .id(id).version(version).trustTier(tier).desiredState(ModuleDescriptor.DesiredState.ACTIVE)
                 .controllerFqcn(controller).componentFqcns(components)
                 .sources(sources).tests(tests).needsSharedBeans(needsSharedBeans)
-                .verification(verification).isolationMode(isolationMode)
+                .verification(verification).isolationMode(isolationMode).scope(scope)
                 .bridgedInterfaces(bridged.isEmpty() ? null : bridged)
                 .resources(resources)
                 .kind(moduleKind).exports(exports).uses(uses)

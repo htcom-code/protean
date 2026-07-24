@@ -243,6 +243,45 @@ public class McpConfiguration {
         return new RejectModuleTool(mapper, platform);
     }
 
+    // --- scope admin tools (protean.scope_*). Following the debug.* convention, these are always listed (registered
+    //     under mcp.enabled) so an agent can discover them; the ScopeAdminService they operate on exists only under
+    //     auto-provision, so each tool resolves it via ObjectProvider and returns a clear call-time error when off. ---
+
+    @Bean
+    McpTool scopeListTool(ObjectMapper mapper, ObjectProvider<org.htcom.protean.db.ScopeAdminService> scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.ListTool(mapper, scopes);
+    }
+
+    @Bean
+    McpTool scopeGetTool(ObjectMapper mapper, ObjectProvider<org.htcom.protean.db.ScopeAdminService> scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.GetTool(mapper, scopes);
+    }
+
+    @Bean
+    McpTool scopeCreateTool(ObjectMapper mapper, ObjectProvider<org.htcom.protean.db.ScopeAdminService> scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.CreateTool(mapper, scopes);
+    }
+
+    @Bean
+    McpTool scopeOpenTool(ObjectMapper mapper, ObjectProvider<org.htcom.protean.db.ScopeAdminService> scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.OpenTool(mapper, scopes);
+    }
+
+    @Bean
+    McpTool scopeCloseTool(ObjectMapper mapper, ObjectProvider<org.htcom.protean.db.ScopeAdminService> scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.CloseTool(mapper, scopes);
+    }
+
+    @Bean
+    McpTool scopeDetachTool(ObjectMapper mapper, ObjectProvider<org.htcom.protean.db.ScopeAdminService> scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.DetachTool(mapper, scopes);
+    }
+
+    @Bean
+    McpTool scopeDestroyTool(ObjectMapper mapper, ObjectProvider<org.htcom.protean.db.ScopeAdminService> scopes) {
+        return new org.htcom.protean.mcp.tools.ScopeTools.DestroyTool(mapper, scopes);
+    }
+
     /** stdio transport entry point — only when {@code protean.mcp.stdio=true} (local spawn scenario). */
     @Bean
     @ConditionalOnProperty(name = "protean.mcp.stdio", havingValue = "true")

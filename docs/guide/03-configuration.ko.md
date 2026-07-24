@@ -133,7 +133,7 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 
 | 키 | 타입 | 기본값 | 반영 | 설명 |
 |----|------|--------|------|------|
-| `protean.worker.modules-per-worker` | `int` | `128` | `future` | 워커 JVM 하나에 패킹할 최대 모듈 수(`1`=모듈당 전용 JVM). 기본 `128`은 운영 밀도 기준 — 작은 값에선 워커 JVM 베이스 오버헤드(~200~300MB)가 비용을 지배. 크래시 blast-radius가 커지므로 개발계에선 낮춘다. **키우면 `worker.container.memory`(와 heap)도 함께 상향**(아래 참고). (참고: `worker.db.auto-provision=true`면 현재 `1`로 강제.) |
+| `protean.worker.modules-per-worker` | `int` | `128` | `future` | 워커 JVM 하나에 패킹할 최대 모듈 수(`1`=모듈당 전용 JVM). 기본 `128`은 운영 밀도 기준 — 작은 값에선 워커 JVM 베이스 오버헤드(~200~300MB)가 비용을 지배. 크래시 blast-radius가 커지므로 개발계에선 낮춘다. **키우면 `worker.container.memory`(와 heap)도 함께 상향**(아래 참고). worker·container 양쪽에 적용되며, `worker.db.auto-provision` 하에서는 scope 단위 패킹 용량이다(`1`=모듈당 워커/컨테이너 1개). |
 | `protean.worker.jvm-args` | `List<String>` | `[]` | `future` | 각 워커에 추가 주입하는 JVM 인자(예: `["-Xmx512m"]`). 컨테이너 워커는 이미 `-XX:MaxRAMPercentage=75.0`(cgroup 상대) 적용 → 이 옵션은 메모리 경계가 없는 process/embed/sidecar 트랙 heap 사이징용. 다음 spawn에 반영. |
 | `protean.worker.min-warm` | `int` | `0` | `future` | 빈 워커를 따뜻하게 유지할 수(재사용). |
 | `protean.worker.auto-restart` | `boolean` | `false` | `라이브` | 크래시한 워커의 모듈 자동 재기동(process track). |
@@ -171,16 +171,17 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 | `protean.worker.container.auto-restart` | `boolean` | `false` | `라이브` | 컨테이너 워커 자동 재기동. |
 | `protean.worker.container.db-host` | `String` | `host.docker.internal` | `future` | 컨테이너에서 호스트 DB 로 닿기 위한 호스트명 재작성 대상. |
 
-### worker.db — 모듈당 격리 DB 스코프 자동 프로비저닝
+### worker.db — scope 단위 격리 DB 자동 프로비저닝
 
 | 키 | 타입 | 기본값 | 반영 | 설명 |
 |----|------|--------|------|------|
-| `protean.worker.db.auto-provision` | `boolean` | `false` | `restart` | 모듈당 격리 DB 스코프 자동 프로비저닝 활성화. |
+| `protean.worker.db.auto-provision` | `boolean` | `false` | `restart` | **scope** 단위 격리 DB 자동 프로비저닝 활성화. 배포가 scope(tenant/업무 도메인)를 선택하고, 같은 scope 모듈은 그 scope 의 프로비저닝된 DB 를 공유하며 그 워커/컨테이너에 패킹된다. |
 | `protean.worker.db.dialect` | `String` | (없음) | `restart` | `mysql` \| `postgresql`. `restart`(라이브 아님): 기존 스코프가 현재 dialect 의 DDL/URL 형태로 만들어져 라이브 교체 시 관리 불능이 되므로. |
 | `protean.worker.db.admin-url` | `String` | (없음) | `future` | 프로비저닝용 관리 접속 URL. 런타임 교체(rotation) 가능 — 변경은 재시작 없이 다음 provision 에 반영되고, 채택 전 새 연결을 검증해 잘못된 값은 거부한다(기존 연결 유지). |
 | `protean.worker.db.admin-username` | `String` | (없음) | `future` | 관리 사용자명 (런타임 교체 가능; `admin-url` 참조). |
 | `protean.worker.db.admin-password` | `String` | (없음) | `future` | 관리 비밀번호 (재시작 없이 런타임 교체 가능; `admin-url` 참조). |
-| `protean.worker.db.deprovision-on-undeploy` | `boolean` | `false` | `라이브` | undeploy 시 프로비저닝된 스코프 제거 여부. |
+| `protean.worker.db.scopes` | `List<String>` | (비어 있음) | `future` | 시작 시 seed 하는 scope 이름 허용목록. 비우면 암묵적 `default` scope 하나. 배포는 알려진 scope 를 선택해야 하며, 새 scope 는 런타임에 scope 관리 API 로 추가한다(배포자는 scope 생성 불가). |
+| `protean.worker.db.allow-destroy` | `boolean` | `false` | `라이브` | scope 관리 `destroy`(DROP DATABASE/SCHEMA — 비가역 데이터 손실) 허용 여부. 기본 `false` 는 거부; `true` 면 가드된 destroy 노출(이름 재확인 + 감사 로그). detach(데이터 보존)는 항상 가능. |
 
 ### worker.sidecar — sidecar 워커 런타임(opt-in)
 

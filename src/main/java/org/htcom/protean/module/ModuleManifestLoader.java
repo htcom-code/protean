@@ -87,6 +87,7 @@ public class ModuleManifestLoader {
         ModuleDescriptor.TrustTier trustTier = ModuleDescriptor.TrustTier.valueOf(
                 stringOr(root, "trustTier", "TRUSTED"));
         String isolationMode = stringOr(root, "isolationMode", null);
+        String scope = stringOr(root, "scope", null);
         boolean needsSharedBeans = Boolean.parseBoolean(stringOr(root, "needsSharedBeans", "false"));
         List<String> components = stringList(root, "components");
         if (components.isEmpty() && controller != null) {
@@ -105,7 +106,7 @@ public class ModuleManifestLoader {
                 .desiredState(ModuleDescriptor.DesiredState.ACTIVE)
                 .controllerFqcn(controller).componentFqcns(components)
                 .sources(sources).tests(tests).needsSharedBeans(needsSharedBeans)
-                .isolationMode(isolationMode).bridgedInterfaces(bridged.isEmpty() ? null : bridged)
+                .isolationMode(isolationMode).scope(scope).bridgedInterfaces(bridged.isEmpty() ? null : bridged)
                 .resources(resources)
                 .kind(kind).exports(exports).uses(uses)
                 .build();

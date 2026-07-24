@@ -44,6 +44,18 @@ public class MySqlDialect implements DbDialect {
     }
 
     @Override
+    public void detachScope(JdbcTemplate admin, String name) {
+        // Drop only the login; the DATABASE (schema=database in MySQL) and its data are retained. A later
+        // createScope re-creates the user (CREATE USER IF NOT EXISTS + ALTER … PASSWORD) → reversible.
+        admin.execute("DROP USER IF EXISTS '" + name + "'@'%'");
+    }
+
+    @Override
+    public void destroyScope(JdbcTemplate admin, String name) {
+        dropScope(admin, name);   // DROP DATABASE + DROP USER — irreversible
+    }
+
+    @Override
     public String scopedUrl(String adminUrl, String name) {
         return "jdbc:mysql://" + authority(adminUrl) + "/" + name;
     }

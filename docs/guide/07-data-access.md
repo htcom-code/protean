@@ -178,9 +178,11 @@ Whether a module transaction participates in the host transaction depends on the
 
 To bind transactionally with host logic in worker/container mode, you must call host shared beans over the **RPC bridge** rather than sharing an in-memory tx (each side has its own tx). For isolation modes themselves see [05. Isolation Modes](05-isolation-modes.md); for the bridge see the related docs.
 
-## worker-only automatic DB provisioning
+## Automatic DB provisioning by scope (worker / container)
 
-In worker mode, an **isolated dedicated DB scope** can be auto-created per module. When on, `DbScopeProvisioner` uses an admin connection to create, per module, a dedicated DB/schema + a dedicated user/role + a `GRANT` scoped to its own area, and injects that scope's connection info (url/username/password) into the worker process as `spring.datasource.*`. The worker connects only with those credentials, so it cannot see other modules' DBs.
+Under worker or container isolation, Protean can auto-provision an **isolated DB per scope**. A **scope** is a tenant / business-domain grouping — the unit of both DB provisioning and worker/container packing. Turning on `worker.db.auto-provision` reframes deployment from "isolate every module" to "**select a scope**": modules of the same scope share that scope's provisioned database and its worker/container(s), and different scopes are isolated from each other.
+
+When on, `DbScopeProvisioner` uses an admin connection to create, **per scope**, a dedicated DB/schema + a dedicated user/role + a `GRANT` scoped to its own area, and injects that scope's connection info (url/username/password) into the worker/container as `spring.datasource.*`. A worker connects only with those credentials, so one scope cannot see another scope's DB.
 
 ```yaml
 protean:
@@ -191,21 +193,24 @@ protean:
       admin-url: jdbc:mysql://localhost:3306/
       admin-username: root
       admin-password: ${DB_ADMIN_PW}
-      deprovision-on-undeploy: false   # preserved by default; true drops the scope on undeploy
+      scopes: [tenant-a, tenant-b]   # startup seed allowlist; empty → a single implicit "default" scope
 ```
+
+**Selecting a scope at deploy time.** With auto-provision on, every deploy MUST name a `scope` (the `scope:` key in `module.yaml`, the `scope` deploy-API argument, or `ModuleDescriptor.scope`). It must be a known, **ACTIVE** scope — a missing, unknown, or closed/detached scope is rejected. The deployer only *selects* a scope; the operator *creates* scopes (via the seed list or the scope admin API — deployers cannot create them). With auto-provision **off**, a declared scope is ignored (logged as a warning). A module routed to **in-process** isolation that declares a scope under auto-provision is rejected — in-process runs in the main JVM with the main datasource and cannot bind a per-scope DB; use worker or container.
 
 Behavior details:
 
-- Per-vendor isolation method: **MySQL** = a dedicated `DATABASE` + dedicated `USER` + a `GRANT` scoped to that DB, per module. **PostgreSQL** = a dedicated `SCHEMA` inside the same DB + dedicated `ROLE` + a `GRANT` scoped to that schema (+ a fixed `search_path`).
-- With `auto-provision`, a dedicated DB per module → **a dedicated worker per module** (capacity=1, no warm reuse).
-- The module id is sanitized into a DDL identifier (`[a-z0-9_]` whitelist, must start with a letter, hash-truncated if it exceeds the vendor max length). DDL identifiers cannot be passed as bind parameters and are inlined as strings, so this sanitization is essential to prevent injection.
+- Per-vendor isolation method: **MySQL** = a dedicated `DATABASE` + dedicated `USER` + a `GRANT` scoped to that DB, per scope. **PostgreSQL** = a dedicated `SCHEMA` inside the same DB + dedicated `ROLE` + a `GRANT` scoped to that schema (+ a fixed `search_path`), per scope.
+- Packing, not per-module isolation: same-scope modules pack into that scope's worker/container up to `worker.modules-per-worker` (default 128), and the isolation boundary is the scope. Set `worker.modules-per-worker=1` for the strict one-worker/container-per-module boundary. See [05. Isolation Modes](05-isolation-modes.md).
+- The scope name is sanitized into a DDL identifier (`[a-z0-9_]` whitelist, must start with a letter, hash-truncated if it exceeds the vendor max length). DDL identifiers cannot be passed as bind parameters and are inlined as strings, so this sanitization is essential to prevent injection.
 - The admin-connection driver (mysql/postgres) must be on the **host (app) classpath** (see the optional caution above). It must not go in the shared-lib CL.
 - The scope user's password is generated as a 24-character random string (`SecureRandom`).
-- **Admin credentials are rotatable at runtime** (`admin-url` / `admin-username` / `admin-password`, `future` tier): a change applies to the next provision/deprovision without an app restart — the provisioner rebuilds its admin connection, validating the new credentials before adopting them and keeping the previous connection if they fail. (`dialect` is **not** live — existing scopes were shaped by the current dialect; see [03. Configuration](03-configuration.md).)
+- **Admin credentials are rotatable at runtime** (`admin-url` / `admin-username` / `admin-password`, `future` tier): a change applies to the next provision without an app restart — the provisioner rebuilds its admin connection, validating the new credentials before adopting them and keeping the previous connection if they fail. (`dialect` is **not** live — existing scopes were shaped by the current dialect; see [03. Configuration](03-configuration.md).)
+- Scope lifecycle (create / close / detach / destroy) is **operator-driven** via the scope admin API — undeploying a module never removes its scope (the scope's DB is shared and outlives individual modules). See [11. Operations](11-operations.md).
 
 ### Vendor extension is a `DbDialect` bean
 
-Only `mysql` and `postgresql` are built in, but by registering a `DbDialect` bean without forking the library source you can add arbitrary vendors such as Oracle, SQL Server, or MariaDB. Returning the same `DbDialect.id()` overrides the built-in dialect. For implementation and registration see [10. SPI Extension](10-spi-extension.md).
+Only `mysql` and `postgresql` are built in, but by registering a `DbDialect` bean without forking the library source you can add arbitrary vendors such as Oracle, SQL Server, or MariaDB. Returning the same `DbDialect.id()` overrides the built-in dialect. A dialect also splits scope teardown into `detachScope` (drop only the login, keep the database and data — reversible) and `destroyScope` (drop the database/schema CASCADE, irreversible); both are default methods, so an existing dialect keeps working. For implementation and registration see [10. SPI Extension](10-spi-extension.md).
 
 ## Preventing resource leaks: managed executor and unload hooks
 

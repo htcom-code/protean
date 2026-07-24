@@ -71,8 +71,8 @@ public class ConfigRegistry {
                 p -> p.getWorker().getShutdownGraceMs(), (p, v) -> p.getWorker().setShutdownGraceMs(v));
         bool("worker.container.auto-restart", ConfigTier.LIVE,
                 p -> p.getWorker().getContainer().isAutoRestart(), (p, v) -> p.getWorker().getContainer().setAutoRestart(v));
-        bool("worker.db.deprovision-on-undeploy", ConfigTier.LIVE,
-                p -> p.getWorker().getDb().isDeprovisionOnUndeploy(), (p, v) -> p.getWorker().getDb().setDeprovisionOnUndeploy(v));
+        bool("worker.db.allow-destroy", ConfigTier.LIVE,
+                p -> p.getWorker().getDb().isAllowDestroy(), (p, v) -> p.getWorker().getDb().setAllowDestroy(v));
         longNum("bridge.hmac-window-ms", ConfigTier.LIVE, 1,
                 p -> p.getBridge().getHmacWindowMs(), (p, v) -> p.getBridge().setHmacWindowMs(v));
         stringList("mcp.authorization.scopes-supported", ConfigTier.LIVE,
@@ -111,6 +111,8 @@ public class ConfigRegistry {
                 p -> p.getWorker().getContainer().getDbHost(), (p, v) -> p.getWorker().getContainer().setDbHost(v));
         str("worker.db.dialect", ConfigTier.FUTURE,
                 p -> p.getWorker().getDb().getDialect(), (p, v) -> p.getWorker().getDb().setDialect(v));
+        stringList("worker.db.scopes", ConfigTier.LIVE,
+                p -> p.getWorker().getDb().getScopes(), (p, v) -> p.getWorker().getDb().setScopes(v));
         str("worker.db.admin-url", ConfigTier.FUTURE,
                 p -> p.getWorker().getDb().getAdminUrl(), (p, v) -> p.getWorker().getDb().setAdminUrl(v));
         str("worker.db.admin-username", ConfigTier.FUTURE,
@@ -159,8 +161,7 @@ public class ConfigRegistry {
         //
         // worker.db.admin-url/username/password are now live too: DbScopeProvisioner re-reads them via a supplier and
         // rebuilds (and validates) its admin JDBC connection when they change, so an admin-credential rotation applies
-        // to the next provision/deprovision without a restart (APPLIED_FUTURE — not retroactive to provisioned scopes).
-        // (protean.worker.db.deprovision-on-undeploy IS live — read per undeploy in DbScopeProvisioner.)
+        // to the next provision without a restart (APPLIED_FUTURE — not retroactive to provisioned scopes).
         //
         // Still pending: worker.db.dialect selects a strategy object, and existing scopes were created under the old
         // dialect's DDL/URL shape, so a live dialect swap is a distinct, riskier follow-up — honestly reported

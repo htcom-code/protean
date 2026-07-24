@@ -545,11 +545,25 @@ public class ProteanProperties {
         private volatile String adminUrl;
         private volatile String adminUsername;
         private volatile String adminPassword;
-        /** Whether to remove the provisioned scope on undeploy. */
-        private boolean deprovisionOnUndeploy = false;
+        /**
+         * Seed allowlist of DB scopes (tenants) created at startup. A module deploy must bind to one of these via its
+         * {@code scope}. Empty → a single {@code "default"} scope. New scopes are added at runtime via the scope admin
+         * API; the deployer cannot create scopes.
+         */
+        private List<String> scopes = List.of();
+        /**
+         * Whether the platform may destroy a scope's database (DROP DATABASE/SCHEMA, irreversible data loss). Default
+         * false — protean only detaches (keeps data); actual destruction is the DBA's job out-of-band. When true, a
+         * guarded destroy is exposed (detached-first + name reconfirm + audit).
+         */
+        private boolean allowDestroy = false;
 
         public boolean isAutoProvision() { return autoProvision; }
         public void setAutoProvision(boolean autoProvision) { this.autoProvision = autoProvision; }
+        public List<String> getScopes() { return scopes; }
+        public void setScopes(List<String> scopes) { this.scopes = scopes; }
+        public boolean isAllowDestroy() { return allowDestroy; }
+        public void setAllowDestroy(boolean allowDestroy) { this.allowDestroy = allowDestroy; }
         public String getDialect() { return dialect; }
         public void setDialect(String dialect) { this.dialect = dialect; }
         public String getAdminUrl() { return adminUrl; }
@@ -558,8 +572,6 @@ public class ProteanProperties {
         public void setAdminUsername(String adminUsername) { this.adminUsername = adminUsername; }
         public String getAdminPassword() { return adminPassword; }
         public void setAdminPassword(String adminPassword) { this.adminPassword = adminPassword; }
-        public boolean isDeprovisionOnUndeploy() { return deprovisionOnUndeploy; }
-        public void setDeprovisionOnUndeploy(boolean v) { this.deprovisionOnUndeploy = v; }
     }
 
     /** Sidecar worker runtime (opt-in). */

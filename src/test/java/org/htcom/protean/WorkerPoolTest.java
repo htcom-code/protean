@@ -66,6 +66,25 @@ class WorkerPoolTest {
                 .build();
     }
 
+    /** Same module id as {@link #module(int)} but a new version/body (for a hot-swap). */
+    static ModuleDescriptor moduleV2(int n) {
+        String fqcn = "runtime.pool.P" + n + "Controller";
+        String src = """
+                package runtime.pool;
+                import org.springframework.web.bind.annotation.GetMapping;
+                import org.springframework.web.bind.annotation.RestController;
+                @RestController
+                public class P%dController {
+                    @GetMapping("/p%d/ping")
+                    public String ping() { return "m%d-v2"; }
+                }
+                """.formatted(n, n, n);
+        return ModuleDescriptor.builder()
+                .id("pool-m" + n).version("2.0.0").trustTier(ModuleDescriptor.TrustTier.UNTRUSTED)
+                .controllerFqcn(fqcn).componentFqcns(List.of(fqcn)).sources(Map.of(fqcn, src))
+                .build();
+    }
+
     @AfterEach
     void cleanup() {
         for (int n = 1; n <= 3; n++) {
@@ -100,5 +119,21 @@ class WorkerPoolTest {
         isolation.undeploy("pool-m2");
         assertEquals(1, isolation.workerCount(), "empty workers are cleaned up (min-warm=0)");
         mockMvc.perform(get("/p3/ping")).andExpect(status().isOk()).andExpect(content().string("m3"));
+    }
+
+    @Test
+    void hot_swap_removes_the_emptied_old_worker_synchronously() throws Exception {
+        // Regression for the drain race: after a hot-swap moves the module to a fresh worker, the emptied old worker
+        // must be pulled from the pool IMMEDIATELY (marked retiring + removed under the lock), not only after the grace
+        // delay. Otherwise a concurrent deploy could reuse it and then be killed by the deferred cleanup
+        // (→ worker /__admin/deploy 500). We assert the pool reflects the removal synchronously (count stays 1, not 2).
+        isolation.deploy(module(1));
+        assertEquals(1, isolation.workerCount());
+
+        isolation.hotSwap(moduleV2(1));   // v2 lands on a new worker; the old one is now empty
+
+        assertEquals(1, isolation.workerCount(),
+                "the emptied old worker must be removed from the pool synchronously on hot-swap (no reuse window)");
+        mockMvc.perform(get("/p1/ping")).andExpect(status().isOk()).andExpect(content().string("m1-v2"));
     }
 }

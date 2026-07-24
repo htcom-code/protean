@@ -53,6 +53,7 @@ public record ModuleDescriptor(
         boolean needsSharedBeans,
         VerificationPlan verification,
         String isolationMode,
+        String scope,
         List<String> bridgedInterfaces,
         String signerKeyId,
         String signature,
@@ -117,7 +118,7 @@ public record ModuleDescriptor(
                 .id(id).version(version).trustTier(trustTier).desiredState(desiredState)
                 .controllerFqcn(controllerFqcn).componentFqcns(componentFqcns)
                 .sources(sources).tests(tests).needsSharedBeans(needsSharedBeans)
-                .verification(verification).isolationMode(isolationMode).bridgedInterfaces(bridgedInterfaces)
+                .verification(verification).isolationMode(isolationMode).scope(scope).bridgedInterfaces(bridgedInterfaces)
                 .signerKeyId(signerKeyId).signature(signature).resources(resources)
                 .usedSharedLibs(usedSharedLibs)
                 .kind(kind).exports(exports).uses(uses);
@@ -141,6 +142,7 @@ public record ModuleDescriptor(
         private boolean needsSharedBeans = false;
         private VerificationPlan verification;
         private String isolationMode;
+        private String scope;
         private List<String> bridgedInterfaces;
         private String signerKeyId;
         private String signature;
@@ -164,6 +166,8 @@ public record ModuleDescriptor(
         public Builder needsSharedBeans(boolean needsSharedBeans) { this.needsSharedBeans = needsSharedBeans; return this; }
         public Builder verification(VerificationPlan verification) { this.verification = verification; return this; }
         public Builder isolationMode(String isolationMode) { this.isolationMode = isolationMode; return this; }
+        /** Auto-provision DB scope (tenant) this module binds to; only meaningful when {@code worker.db.auto-provision=true}. */
+        public Builder scope(String scope) { this.scope = scope; return this; }
         public Builder bridgedInterfaces(List<String> bridgedInterfaces) { this.bridgedInterfaces = bridgedInterfaces; return this; }
         public Builder signerKeyId(String signerKeyId) { this.signerKeyId = signerKeyId; return this; }
         public Builder signature(String signature) { this.signature = signature; return this; }
@@ -175,7 +179,7 @@ public record ModuleDescriptor(
 
         public ModuleDescriptor build() {
             return new ModuleDescriptor(id, version, trustTier, desiredState, controllerFqcn, componentFqcns,
-                    sources, tests, needsSharedBeans, verification, isolationMode, bridgedInterfaces,
+                    sources, tests, needsSharedBeans, verification, isolationMode, scope, bridgedInterfaces,
                     signerKeyId, signature, resources, usedSharedLibs, kind, exports, uses);
         }
     }

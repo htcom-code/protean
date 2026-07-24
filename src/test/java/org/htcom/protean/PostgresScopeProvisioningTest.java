@@ -38,7 +38,7 @@ class PostgresScopeProvisioningTest {
             pg.start();
             String adminUrl = pg.getJdbcUrl();
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword(), true);
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
 
             DbScope a = prov.provision("mod-a");
             DbScope b = prov.provision("mod-b");
@@ -55,12 +55,74 @@ class PostgresScopeProvisioningTest {
                     "module A must not access module B's schema");
 
             // deprovision -> remove A's schema
-            prov.deprovision("mod-a");
+            prov.destroy("mod-a");
             JdbcTemplate admin = jdbc(adminUrl, pg.getUsername(), pg.getPassword());
             Integer schemas = admin.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
                     Integer.class, a.username());
             assertEquals(0, schemas, "the schema must be gone after deprovisioning");
+        }
+    }
+
+    @Test
+    void detach_drops_login_but_retains_the_schema_and_data_and_reprovision_restores_access() {
+        // Detach = data-safe deprovision: the role can no longer log in (NOLOGIN) but its SCHEMA and data remain.
+        // Re-provisioning (create) restores LOGIN with a fresh password and the persisted data is still there.
+        assumeTrue(OsIsolationTest.dockerAvailable(), "no Docker — skip Postgres detach test");
+        try (PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16")) {
+            pg.start();
+            String adminUrl = pg.getJdbcUrl();
+            DbScopeProvisioner prov = new DbScopeProvisioner(
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
+
+            DbScope first = prov.provision("tenant-x");
+            JdbcTemplate j1 = jdbc(first.url(), first.username(), first.password());
+            j1.execute("CREATE TABLE t (x INT)");
+            j1.update("INSERT INTO t VALUES (42)");
+
+            prov.detach("tenant-x");
+
+            JdbcTemplate admin = jdbc(adminUrl, pg.getUsername(), pg.getPassword());
+            // schema (and its data) retained
+            assertEquals(1, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
+                    Integer.class, first.username()), "detach must retain the schema");
+            // the role still exists but cannot log in
+            assertEquals(0, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM pg_roles WHERE rolname = ? AND rolcanlogin", Integer.class, first.username()),
+                    "detach must revoke the role's LOGIN");
+            assertThrows(Exception.class, () -> jdbc(first.url(), first.username(), first.password())
+                    .queryForObject("SELECT 1", Integer.class), "a detached role must not be able to connect");
+
+            // re-provision restores login (fresh password) and the data survives
+            DbScope second = prov.provision("tenant-x");
+            JdbcTemplate j2 = jdbc(second.url(), second.username(), second.password());
+            assertEquals(42, (int) j2.queryForObject("SELECT x FROM t", Integer.class),
+                    "data must survive detach + re-provision");
+        }
+    }
+
+    @Test
+    void destroy_drops_the_schema_and_role_irreversibly() {
+        assumeTrue(OsIsolationTest.dockerAvailable(), "no Docker — skip Postgres destroy test");
+        try (PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16")) {
+            pg.start();
+            String adminUrl = pg.getJdbcUrl();
+            DbScopeProvisioner prov = new DbScopeProvisioner(
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
+
+            DbScope s = prov.provision("tenant-y");
+            jdbc(s.url(), s.username(), s.password()).execute("CREATE TABLE t (x INT)");
+
+            prov.destroy("tenant-y");
+
+            JdbcTemplate admin = jdbc(adminUrl, pg.getUsername(), pg.getPassword());
+            assertEquals(0, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
+                    Integer.class, s.username()), "destroy must drop the schema (CASCADE)");
+            assertEquals(0, (int) admin.queryForObject(
+                    "SELECT COUNT(*) FROM pg_roles WHERE rolname = ?", Integer.class, s.username()),
+                    "destroy must drop the role");
         }
     }
 
@@ -73,9 +135,9 @@ class PostgresScopeProvisioningTest {
         try (PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16")) {
             pg.start();
             String adminUrl = pg.getJdbcUrl();
-            // deprovision-on-undeploy = false → the role/schema persist across "restarts"
+            // no teardown between provisions → the role/schema persist across "restarts"
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword(), false);
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
 
             DbScope first = prov.provision("mod-a");
             JdbcTemplate j1 = jdbc(first.url(), first.username(), first.password());

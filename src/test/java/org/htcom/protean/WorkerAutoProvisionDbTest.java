@@ -51,10 +51,10 @@ class WorkerAutoProvisionDbTest {
         registry.add("protean.isolation.mode", () -> "worker");
         registry.add("protean.worker.db.auto-provision", () -> "true");
         registry.add("protean.worker.db.dialect", () -> "postgresql");
+        registry.add("protean.worker.db.scopes", () -> "wpscope");
         registry.add("protean.worker.db.admin-url", pg::getJdbcUrl);
         registry.add("protean.worker.db.admin-username", pg::getUsername);
         registry.add("protean.worker.db.admin-password", pg::getPassword);
-        registry.add("protean.worker.db.deprovision-on-undeploy", () -> "true");
     }
 
     @Autowired MockMvc mockMvc;
@@ -81,11 +81,25 @@ class WorkerAutoProvisionDbTest {
             }
             """;
 
+    static final String FQCN2 = "runtime.wp.Wp2Controller";
+    static final String SRC2 = """
+            package runtime.wp;
+            import org.springframework.web.bind.annotation.GetMapping;
+            import org.springframework.web.bind.annotation.RestController;
+            @RestController
+            public class Wp2Controller {
+                @GetMapping("/wp2/ping")
+                public String ping() { return "wp2"; }
+            }
+            """;
+
     @AfterEach
     void cleanup() {
-        try {
-            isolation.undeploy("wp-mod");
-        } catch (RuntimeException ignored) {
+        for (String id : new String[]{"wp-mod", "wp-mod2"}) {
+            try {
+                isolation.undeploy(id);
+            } catch (RuntimeException ignored) {
+            }
         }
     }
 
@@ -94,12 +108,45 @@ class WorkerAutoProvisionDbTest {
         isolation.deploy(ModuleDescriptor.builder()
                 .id("wp-mod").version("1.0.0").trustTier(ModuleDescriptor.TrustTier.UNTRUSTED)
                 .controllerFqcn(FQCN).componentFqcns(List.of(FQCN)).sources(Map.of(FQCN, SRC))
-                .isolationMode("worker")
+                .isolationMode("worker").scope("wpscope")
                 .build());
 
-        // the worker boots with the provisioned Postgres scope -> works in its own schema (wp_mod, the sanitized result)
+        // the worker boots with the provisioned Postgres scope -> works in its own schema (the sanitized scope name)
         mockMvc.perform(get("/wp/probe"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("rows=1,schema=wp_mod"));
+                .andExpect(content().string("rows=1,schema=wpscope"));
+    }
+
+    @Test
+    void same_scope_modules_pack_into_one_worker() throws Exception {
+        isolation.deploy(ModuleDescriptor.builder()
+                .id("wp-mod").version("1.0.0").controllerFqcn(FQCN).componentFqcns(List.of(FQCN))
+                .sources(Map.of(FQCN, SRC)).isolationMode("worker").scope("wpscope").build());
+        isolation.deploy(ModuleDescriptor.builder()
+                .id("wp-mod2").version("1.0.0").controllerFqcn(FQCN2).componentFqcns(List.of(FQCN2))
+                .sources(Map.of(FQCN2, SRC2)).isolationMode("worker").scope("wpscope").build());
+
+        // Both modules share scope "wpscope" → pack into a single worker JVM (no longer 1 JVM per module).
+        org.junit.jupiter.api.Assertions.assertEquals(1, isolation.workerCount(),
+                "same-scope modules must share one worker");
+        mockMvc.perform(get("/wp2/ping")).andExpect(status().isOk()).andExpect(content().string("wp2"));
+    }
+
+    @Test
+    void scope_admin_rest_lists_the_seeded_scope() throws Exception {
+        // The scope-admin surface (ScopeAdminController → ScopeAdminService → ScopeManager) is wired under
+        // auto-provision + admin.enabled(default) and lists the seeded scope even before any deploy.
+        mockMvc.perform(get("/platform/scopes"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("wpscope")));
+    }
+
+    @Test
+    void deploy_without_scope_is_rejected_under_auto_provision() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, () ->
+                isolation.deploy(ModuleDescriptor.builder()
+                        .id("wp-mod").version("1.0.0").controllerFqcn(FQCN).componentFqcns(List.of(FQCN))
+                        .sources(Map.of(FQCN, SRC)).isolationMode("worker").build()),
+                "auto-provision requires an explicit scope");
     }
 }

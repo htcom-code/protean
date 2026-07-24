@@ -204,6 +204,20 @@ Manage the live native-jar [shared-lib store](07-data-access.md) — the MCP ana
 | `protean.deploy_shared_lib` | `name`·`version`·`bytesBase64` (required); `signerKeyId`·`signature` (optional) | Upload a Base64 jar and publish a new generation. Runs the [shared-lib signature gate](06-promotion-gates.md#shared-lib-signature-gate) |
 | `protean.remove_shared_lib` | `name` (required) | Drop a lib from future generations (in-use generations keep it) |
 
+### Scope admin tools
+
+Manage the DB **scope** lifecycle under `worker.db.auto-provision` — the MCP analog of the `/platform/scopes` [REST endpoints](04-rest-api.md). Following the `debug.*` convention, these tools are **always listed** (so an agent can discover them) but **gated at call time**: when auto-provision is off, every call returns an `isError` pointing at `worker.db.auto-provision` rather than the tools being hidden. All classify as the `CUSTOM` authorization action.
+
+| Tool name | Input | Purpose |
+|---|---|---|
+| `protean.scope_list` | (none) | All known scopes (registry ∪ seed): name, state (ACTIVE/CLOSED/DETACHED), dialect, module count |
+| `protean.scope_get` | `name` (required) | One scope's state, dialect, and module count |
+| `protean.scope_create` | `name` (required) | Create (or reopen) a scope as ACTIVE — DB provisioned lazily on first deploy. Idempotent |
+| `protean.scope_open` | `name` (required) | Reopen a CLOSED scope back to ACTIVE |
+| `protean.scope_close` | `name` (required) | Close a scope: new deploys rejected, running modules keep serving. Reversible; data untouched |
+| `protean.scope_detach` | `name` (required) | Undeploy the scope's modules and drop its DB login; the database and data are retained (reversible) |
+| `protean.scope_destroy` | `name`·`confirm` (both required) | **Irreversibly** drop the scope's database after undeploying its modules. Guarded: needs `worker.db.allow-destroy=true` and `confirm` = the scope name |
+
 ### Deploy input formats — `files[]` and `manifest`
 
 `deploy_module`/`update_module` accept one of two input styles (mutually exclusive).

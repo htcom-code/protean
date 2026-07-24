@@ -30,7 +30,7 @@ follows the migration.
   not yet performed.
 - Worker DB admin credentials (`protean.worker.db.admin-url` / `username` /
   `password`) are now runtime-rotatable without a restart: `DbScopeProvisioner`
-  reads an `AdminCreds` snapshot per provision/deprovision and rebuilds the admin
+  reads an `AdminCreds` snapshot per provision/detach/destroy and rebuilds the admin
   `JdbcTemplate` only when the creds change (`REQUIRES_RESTART` → `APPLIED_FUTURE`).
   A rotation is validated first — one connection with the candidate creds must
   pass `Connection.isValid` before the swap; a bad rotation fails clearly and
@@ -44,6 +44,26 @@ follows the migration.
   out-of-band from the trace ring buffer (recording hot path untouched) and
   independent of `protean.trace.metrics.enabled`.
 
+- **DB scope model.** `worker.db.auto-provision` is reframed from "isolate every
+  module" to "**select a scope**". A scope (tenant / business-domain grouping) is
+  the unit of both DB provisioning and worker/container packing: same-scope modules
+  share one provisioned database and pack into that scope's worker/container(s) up
+  to `worker.modules-per-worker`, and different scopes are isolated. A deploy must
+  name a known, ACTIVE `scope` (module.yaml / deploy API / `ModuleDescriptor.scope`);
+  a startup seed allowlist `worker.db.scopes` (empty → a single `default`) plus the
+  new `ScopeStore`/`ScopeManager` registry track known scopes and survive restart.
+- **Scope admin surface.** REST `/platform/scopes` (list · get · create · close ·
+  open · detach · destroy — explicit action sub-resources, no `DELETE` verb; active
+  under `admin.enabled` + `auto-provision`) and MCP `protean.scope_*` tools (always
+  listed like `debug.*`, gated at call time — an `isError` when `auto-provision` is
+  off). Lifecycle:
+  create/open → ACTIVE, close → CLOSED, detach (drop login, keep data — reversible),
+  destroy (`DROP DATABASE/SCHEMA` — irreversible). `destroy` is guarded by the new
+  `worker.db.allow-destroy` (default `false`) + a name-confirmation, and audit-logged.
+- `DbDialect` gains `detachScope` (login-only, reversible) and `destroyScope`
+  (CASCADE, irreversible) as backward-compatible default methods; built-in MySQL /
+  PostgreSQL override both.
+
 ### Changed
 
 - Worker packing defaults raised for production density. `worker.modules-per-worker`
@@ -53,9 +73,28 @@ follows the migration.
   `512` → `1024`, and container workers now launch with `-XX:MaxRAMPercentage=75.0`.
   New `worker.jvm-args` sizes heap for the process/embed/sidecar tracks (no cgroup
   bound there, so a percentage is unsafe). Raise these together when overriding
-  `modules-per-worker`. (`worker.db.auto-provision` still forces one module per worker.)
+  `modules-per-worker`.
+- Under `worker.db.auto-provision`, **both worker and container modes now pack
+  same-scope modules** into a shared worker/container up to `worker.modules-per-worker`
+  (the isolation boundary is the scope, not the module) — container mode is no longer
+  one-container-per-module. Set `worker.modules-per-worker=1` for the strict
+  one-worker/container-per-module boundary. A scoped module routed to in-process is
+  rejected (in-process cannot bind a per-scope datasource); a scope declared with
+  auto-provision off is ignored with a warning.
+
+### Removed
+
+- `worker.db.deprovision-on-undeploy` — removed (it never had an effect under the scope
+  model: undeploy does not tear down a scope). Scope teardown is operator-driven via the
+  scope admin API (detach / destroy). Setting the key in config is now simply ignored.
 
 ### Fixed
+
+- Hot-swap drain race in the worker and container pools: after a swap the emptied old
+  worker/container was left in the pool for the grace window and could be reused by a
+  concurrent deploy, then killed by the deferred cleanup (surfacing as a worker
+  `/__admin/deploy` 500). It is now marked retiring and removed from the pool
+  immediately; only the process kill / `docker rm` is deferred.
 
 - The library no longer registers its internal RPC-bridge demo beans
   (`Echo`/`Greeting`/`Math`/`Ledger`/`Stream` `*Port`) in consumer apps. They

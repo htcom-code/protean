@@ -51,6 +51,24 @@ Both backends store the same `ModuleDescriptor` JSON but in different locations.
 - `PENDING_APPROVAL` modules are not restored — this blocks the bypass of serving an unapproved module via a restart.
 - An individual module's restore failure is only logged and skipped (it does not block restoring other modules). Check the result via the `reconcile: {restored}/{total} modules restored` log.
 - reconcile does not re-run the gates; it redeploys the stored descriptor (already passed at install time). If the store is empty, it is a no-op.
+- **With scopes** (`worker.db.auto-provision`): each restored module re-attaches to the scope named in its descriptor, and the scope's DB is (re)provisioned lazily on that first deploy. The scope registry (`ScopeStore`) is unioned with the startup seed and self-heals — a scope named in a persisted descriptor is honored even if its registry entry was lost.
+
+## Scope lifecycle (auto-provision)
+
+Under `worker.db.auto-provision`, a **scope** (tenant / business-domain grouping) is the unit of DB provisioning and worker/container packing. Deployers only *select* a scope; the operator owns its lifecycle via the [scope admin API](04-rest-api.md) (REST `/platform/scopes`, MCP `protean.scope_*`).
+
+**Registry (`ScopeStore`).** Scope metadata — `ScopeRecord(name, state, dialectId)`, never credentials — is persisted in a `ScopeStore` backed by the same `module-store.backend` (filesystem | jdbc), separate from the module store. The `ScopeManager` facade merges it with the `worker.db.scopes` seed so the known set survives restarts.
+
+**State machine.**
+
+| Action | Effect | Data | Reversible |
+| --- | --- | --- | --- |
+| create / open | scope becomes ACTIVE (deployable); DB provisioned lazily on first deploy | — | — |
+| close | removed from the deployable allowlist; running modules keep serving | untouched | ↔ open |
+| detach | undeploy the scope's modules + reclaim its workers/containers + drop **only the DB login** | retained | ↔ re-create + redeploy |
+| destroy | `DROP DATABASE`/`SCHEMA CASCADE` + login | **lost** | ✗ |
+
+**Data safety.** `detach` is the default, data-safe teardown — it stops the scope but keeps the database and all data (re-creating the scope and redeploying re-provisions the login). `destroy` is irreversible and **guarded**: it is refused unless `worker.db.allow-destroy=true` (default `false`) **and** the caller echoes the scope name as confirmation, and it is audit-logged. Data deletion is a DBA-owned action, not a routine deploy-path operation. Undeploy never tears down a scope (there is no deprovision-on-undeploy flag — teardown is only via `detach`/`destroy` above).
 
 ## Request traces / monitoring
 

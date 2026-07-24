@@ -12,6 +12,7 @@ import org.htcom.protean.autoconfigure.ProteanProperties;
 import org.htcom.protean.bridge.BridgeSecretHolder;
 import org.htcom.protean.db.DbScope;
 import org.htcom.protean.db.DbScopeProvisioner;
+import org.htcom.protean.db.ScopeManager;
 import org.htcom.protean.dynamic.DynamicEndpointRegistrar.RouteInfo;
 import org.htcom.protean.gate.ServerPortHolder;
 import org.htcom.protean.module.ModuleDescriptor;
@@ -64,7 +65,8 @@ import java.util.regex.Pattern;
  */
 @Component
 @Profile("!worker")
-public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTierTarget {
+public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTierTarget,
+        org.htcom.protean.db.ScopeReclaimable {
 
     private static final Logger log = LoggerFactory.getLogger(WorkerProcessIsolation.class);
 
@@ -92,12 +94,15 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         final Set<String> modules = ConcurrentHashMap.newKeySet();
         /** Library-module ids published into this worker's parent tier (a dependent's {@code uses} closure). */
         final Set<String> libraries = ConcurrentHashMap.newKeySet();
+        /** The DB scope this worker is bound to (its injected datasource creds); null when auto-provision is off. */
+        final String scope;
         volatile boolean retiring;   // intentional-shutdown flag (distinguished from a crash — prevents auto-restart)
 
-        WorkerHandle(UUID id, Process process, int port) {
+        WorkerHandle(UUID id, Process process, int port, String scope) {
             this.id = id;
             this.process = process;
             this.port = port;
+            this.scope = scope;
         }
     }
 
@@ -131,8 +136,10 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     private final String sharedLibDir;
     /** Present only when auto-provision is enabled (null otherwise). Auto-provisions an isolated DB scope per module. */
     private final DbScopeProvisioner provisioner;
-    /** DB scope provisioned per module (reused across hot-swap/crash recovery so the same DB is kept). */
-    private final Map<String, DbScope> moduleScopes = new ConcurrentHashMap<>();
+    /** DB scope provisioned per scope name (shared by all modules of that scope; reused across hot-swap/crash/pack). */
+    private final Map<String, DbScope> scopeProvisions = new ConcurrentHashMap<>();
+    /** Scope registry facade (allowlist + persistence); null when auto-provision / host beans are absent. */
+    private final ScopeManager scopeManager;
     /** Active debug-launch workers (for observation/leak detection). Removed when the session ends. */
     private final Set<DebugWorkerHandle> debugWorkers = ConcurrentHashMap.newKeySet();
     /** Registry of debug-active paths (main leg). Added on launch, removed on terminate → queried by the main ModuleTimeoutFilter. */
@@ -145,6 +152,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     public WorkerProcessIsolation(HttpClient client, ReverseProxy proxy, ObjectMapper mapper, ServerPortHolder portHolder,
                                   WorkerRuntimeProvider runtimeProvider,
                                   ObjectProvider<DbScopeProvisioner> provisionerProvider,
+                                  ObjectProvider<ScopeManager> scopeManagerProvider,
                                   ObjectProvider<DebugRouteRegistry> debugRoutesProvider,
                                   ObjectProvider<BridgeSecretHolder> bridgeSecretProvider,
                                   ObjectProvider<WorkerAdminSecretHolder> adminSecretProvider,
@@ -156,6 +164,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         this.portHolder = portHolder;
         this.runtimeProvider = runtimeProvider;
         this.provisioner = provisionerProvider.getIfAvailable();
+        this.scopeManager = scopeManagerProvider.getIfAvailable();
         this.debugRoutes = debugRoutesProvider.getIfAvailable();
         BridgeSecretHolder secretHolder = bridgeSecretProvider.getIfAvailable();
         this.bridgeSecret = secretHolder != null ? secretHolder.token() : null;
@@ -190,13 +199,13 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
 
     /**
      * Modules per worker, read live (Tier 2 — applies to the next spawn). With auto-provision a dedicated DB per
-     * module forces a dedicated worker per module (capacity=1); a warm worker lacks scope creds, so no reuse.
+     * With auto-provision, modules of the same scope pack into that scope's worker(s) up to this cap.
      */
     private int capacity() {
-        return provisioner != null ? 1 : Math.max(1, props.getWorker().getModulesPerWorker());
+        return Math.max(1, props.getWorker().getModulesPerWorker());
     }
 
-    /** Warm-worker target, read live (Tier 2). Zero under auto-provision (a warm worker runs without scope creds). */
+    /** Warm-worker target, read live (Tier 2). Zero under auto-provision (a warm worker has no scope creds). */
     private int minWarm() {
         return provisioner != null ? 0 : Math.max(0, props.getWorker().getMinWarm());
     }
@@ -217,13 +226,19 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         if (moduleToWorker.containsKey(descriptor.id())) {
             throw new IllegalStateException("worker module already deployed: " + descriptor.id());
         }
-        WorkerHandle handle = acquireWorkerFor(descriptor.id(), null);
-        ensureUsesClosure(handle, descriptor);   // publish the module's library `uses` closure into this worker first
-        List<RouteInfo> routes = deployToWorker(handle.port, descriptor);
-        for (RouteInfo route : routes) {
-            for (String path : route.patterns()) {
-                proxy.register(path, route.methods(), handle.port, descriptor.id());
+        WorkerHandle handle = acquireWorkerFor(resolveScope(descriptor), null);
+        List<RouteInfo> routes;
+        try {
+            ensureUsesClosure(handle, descriptor);   // publish the module's library `uses` closure into this worker first
+            routes = deployToWorker(handle.port, descriptor);
+            for (RouteInfo route : routes) {
+                for (String path : route.patterns()) {
+                    proxy.register(path, route.methods(), handle.port, descriptor.id());
+                }
             }
+        } catch (RuntimeException e) {
+            retireIfNewlySpawned(handle);   // spawned for this deploy and it failed → don't leak an empty worker
+            throw new IllegalStateException("worker module deploy failed: " + descriptor.id(), e);
         }
         List<String> paths = pathsOf(routes);
         handle.modules.add(descriptor.id());
@@ -242,7 +257,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             return;
         }
         List<String> oldPaths = modulePaths.get(descriptor.id());
-        WorkerHandle newHandle = acquireWorkerFor(descriptor.id(), descriptor.id());  // a worker that does not already have this module
+        WorkerHandle newHandle = acquireWorkerFor(resolveScope(descriptor), descriptor.id());  // a worker that does not already have this module
         try {
             ensureUsesClosure(newHandle, descriptor);   // the fresh worker needs the library `uses` closure too
             List<RouteInfo> newRoutes = deployToWorker(newHandle.port, descriptor);
@@ -292,10 +307,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         } else {
             postUndeploy(handle.port, moduleId);  // keep the worker, release only this module
         }
-        if (provisioner != null) {
-            moduleScopes.remove(moduleId);
-            provisioner.deprovision(moduleId);  // actually removed only under the deprovision-on-undeploy option
-        }
+        // Scope model: a scope's DB is shared and outlives modules — undeploying a module never deprovisions its
+        // scope (that is an explicit, operator-driven scope-admin action). The scope + data are retained.
     }
 
     /** For tests: force-kill the worker hosting the module (crash simulation). The proxy route is kept → 502. */
@@ -388,25 +401,71 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
      * dedicated worker with those creds (no pool reuse — warm workers have no scope creds).
      * Otherwise uses the existing pool-reuse logic ({@link #acquireWorker}).
      */
-    private WorkerHandle acquireWorkerFor(String moduleId, String excludeModuleId) {
+    private WorkerHandle acquireWorkerFor(String scopeName, String excludeModuleId) {
         if (provisioner != null) {
-            DbScope scope = moduleScopes.computeIfAbsent(moduleId, provisioner::provision);
-            WorkerHandle spawned = spawnAndReady(scope);
+            DbScope scope = scopeProvisions.computeIfAbsent(scopeName, name -> {
+                DbScope s = provisioner.provision(name);
+                if (scopeManager != null) {
+                    scopeManager.markActive(name, provisioner.dialect().id());
+                }
+                return s;
+            });
+            // Pack modules of the same scope into that scope's worker(s) up to capacity; else spawn a new one for it.
+            for (WorkerHandle h : pool) {
+                if (!h.retiring && h.process.isAlive() && scopeName.equals(h.scope) && h.modules.size() < capacity()
+                        && (excludeModuleId == null || !h.modules.contains(excludeModuleId))) {
+                    return h;
+                }
+            }
+            WorkerHandle spawned = spawnAndReady(scope, scopeName);
             pool.add(spawned);
             return spawned;
         }
         return acquireWorker(excludeModuleId);
     }
 
+    /**
+     * Resolves and validates the scope a module binds to under auto-provision. Null when auto-provision is off. When
+     * on, the module must declare a {@code scope} that is a known (seeded or admin-created) scope.
+     */
+    private String resolveScope(ModuleDescriptor descriptor) {
+        if (provisioner == null) {
+            String declared = descriptor.scope();
+            if (declared != null && !declared.isBlank()) {
+                log.warn("module '{}' declares scope '{}' but worker.db.auto-provision is off — the scope is ignored "
+                        + "(scopes apply only under auto-provision)", descriptor.id(), declared);
+            }
+            return null;
+        }
+        String scope = descriptor.scope();
+        if (scope == null || scope.isBlank()) {
+            throw new IllegalStateException("auto-provision is on: module '" + descriptor.id()
+                    + "' must declare a scope (see protean.worker.db.scopes / scope admin API)");
+        }
+        if (scopeManager != null && !scopeManager.isDeployable(scope)) {
+            String detail = scopeManager.isKnown(scope)
+                    ? "scope '" + scope + "' is not ACTIVE (closed/detached) — reopen it via the scope admin API"
+                    : "unknown scope '" + scope + "' — declare it in protean.worker.db.scopes or create it via the scope admin API";
+            throw new IllegalStateException(detail + " (module '" + descriptor.id() + "')");
+        }
+        return scope;
+    }
+
+    /** {@link org.htcom.protean.db.ScopeReclaimable}: drop the cached provision so a later deploy re-provisions the scope. */
+    @Override
+    public synchronized void forgetScope(String scopeName) {
+        scopeProvisions.remove(scopeName);
+    }
+
     /** Picks a live worker with spare capacity (that does not already have this module), or spawns a new one. */
     private WorkerHandle acquireWorker(String excludeModuleId) {
         for (WorkerHandle h : pool) {
-            if (h.process.isAlive() && h.modules.size() < capacity()
+            if (!h.retiring && h.process.isAlive() && h.modules.size() < capacity()
                     && (excludeModuleId == null || !h.modules.contains(excludeModuleId))) {
                 return h;
             }
         }
-        WorkerHandle spawned = spawnAndReady(null);
+        WorkerHandle spawned = spawnAndReady(null, null);
         pool.add(spawned);
         return spawned;
     }
@@ -429,20 +488,28 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         }
     }
 
-    /** After a hot-swap, drain the module from the old worker and then clean up (asynchronous outside the lock, re-synchronized during cleanup). */
+    /**
+     * After a hot-swap, drain the module from the old worker. Called while holding the isolation monitor (from
+     * {@link #hotSwap}). If the old worker is left empty it is marked retiring and pulled from the pool
+     * <b>immediately</b>, so a concurrent deploy cannot reuse a worker we are about to terminate; only the actual
+     * process kill is deferred by the grace period to let in-flight requests to the old version drain.
+     */
     private void scheduleDrainCleanup(WorkerHandle oldHandle, String moduleId) {
+        boolean retireAfterGrace = oldHandle.modules.isEmpty();
+        if (retireAfterGrace) {
+            oldHandle.retiring = true;   // stop reuse now; defer only the process kill
+            pool.remove(oldHandle);
+        }
         Thread t = new Thread(() -> {
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
             }
-            synchronized (this) {
-                if (oldHandle.modules.isEmpty()) {
-                    oldHandle.retiring = true;
-                    oldHandle.process.destroy();
-                    pool.remove(oldHandle);
-                } else {
+            if (retireAfterGrace) {
+                oldHandle.process.destroy();
+            } else {
+                synchronized (this) {
                     postUndeploy(oldHandle.port, moduleId);
                 }
             }
@@ -453,14 +520,14 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
 
     // --- worker process/communication ---
 
-    private WorkerHandle spawnAndReady(DbScope scope) {
+    private WorkerHandle spawnAndReady(DbScope scope, String scopeName) {
         UUID id = UUID.randomUUID();
         Process process = spawnWorker(scope, false, id);
         try {
             int port = awaitPort(process, 60);
             waitHealthy(port, 30);
             seedParentTier(port);   // fold the current live shared-lib generation in before any module deploys
-            WorkerHandle handle = new WorkerHandle(id, process, port);
+            WorkerHandle handle = new WorkerHandle(id, process, port, scopeName);
             // Always observe exit; whether a crash triggers a restart is decided live in onWorkerExit
             // (protean.worker.auto-restart, Tier 1) so a runtime toggle applies to every worker immediately.
             process.onExit().thenAccept(p -> onWorkerExit(handle));
@@ -502,7 +569,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         if (descriptor == null) {
             return;
         }
-        WorkerHandle handle = acquireWorkerFor(moduleId, null);
+        WorkerHandle handle = acquireWorkerFor(resolveScope(descriptor), null);
         ensureUsesClosure(handle, descriptor);   // restore the library `uses` closure on the recovery worker first
         List<String> paths = pathsOf(deployToWorker(handle.port, descriptor));
         for (String path : paths) {

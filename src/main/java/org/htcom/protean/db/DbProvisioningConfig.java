@@ -59,14 +59,13 @@ public class DbProvisioningConfig {
                     + " (available: " + registry.keySet() + " — register a DbDialect bean for a custom one)");
         }
         // Admin creds are read live: DbScopeProvisioner rebuilds (and validates) its admin connection when they change,
-        // so an admin-credential rotation applies to the next provision/deprovision without a restart.
-        // deprovision-on-undeploy is likewise read live (Tier 1). The dialect is still captured here (a live dialect
-        // swap is a separate, riskier follow-up — existing scopes were created under the old dialect's DDL/URL shape).
+        // so an admin-credential rotation applies to the next provision without a restart. The dialect is still captured
+        // here (a live dialect swap is a separate, riskier follow-up — existing scopes were created under the old
+        // dialect's DDL/URL shape).
         return new DbScopeProvisioner(d,
                 () -> new DbScopeProvisioner.AdminCreds(
                         props.getWorker().getDb().getAdminUrl(),
                         props.getWorker().getDb().getAdminUsername(),
-                        props.getWorker().getDb().getAdminPassword()),
-                () -> props.getWorker().getDb().isDeprovisionOnUndeploy());
+                        props.getWorker().getDb().getAdminPassword()));
     }
 }
