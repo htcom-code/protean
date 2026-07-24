@@ -26,7 +26,7 @@
   검증·GPG/토큰 설정·릴리스 컷은 외부 단계로 아직 미수행.
 - worker DB admin 자격증명(`protean.worker.db.admin-url` / `username` /
   `password`)을 재기동 없이 런타임 rotation 가능. `DbScopeProvisioner` 가
-  provision/deprovision 마다 `AdminCreds` 스냅샷을 읽어 자격증명이 바뀔 때만 admin
+  provision/detach/destroy 마다 `AdminCreds` 스냅샷을 읽어 자격증명이 바뀔 때만 admin
   `JdbcTemplate` 을 재구성한다(`REQUIRES_RESTART` → `APPLIED_FUTURE`). rotation 은
   먼저 검증한다 — 후보 자격증명으로 커넥션 1개를 열어 `Connection.isValid` 를 통과해야
   swap 하며, 잘못된 rotation 은 명확히 실패하고 기존 커넥션을 유지한다. (dialect 는
@@ -69,10 +69,11 @@
   `worker.modules-per-worker=1`. scope 를 선언한 모듈이 in-process 로 라우팅되면 거부되고(in-process 는
   scope 별 datasource 에 바인딩 불가), auto-provision 이 꺼진 채 선언된 scope 는 경고와 함께 무시된다.
 
-### Deprecated
+### 제거
 
-- `worker.db.deprovision-on-undeploy` — undeploy 는 scope 를 해제하지 않는다; scope 라이프사이클은
-  scope 관리 API(detach/destroy)로 운영자가 주도한다. 호환성 위해 유지되나 scope 의 DB 에 영향 없음.
+- `worker.db.deprovision-on-undeploy` — 제거(scope 모델에서 애초에 무동작: undeploy 는 scope 를
+  해제하지 않음). scope 해제는 scope 관리 API(detach/destroy)로 운영자가 주도한다. 이 키를 설정에
+  넣어도 이제 무시된다.
 
 ### 수정
 

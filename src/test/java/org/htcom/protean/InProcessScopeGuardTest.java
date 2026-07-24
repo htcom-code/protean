@@ -56,7 +56,7 @@ class InProcessScopeGuardTest {
     void rejects_a_scoped_module_routed_to_in_process_under_auto_provision() {
         // auto-provision on (provisioner present); admin creds are bogus — the reject fires before any DB call.
         DbScopeProvisioner prov = new DbScopeProvisioner(
-                new PostgresDialect(), "jdbc:postgresql://unused/db", "u", "p", false);
+                new PostgresDialect(), "jdbc:postgresql://unused/db", "u", "p");
         InProcessIsolation iso = new InProcessIsolation(null, null, provider(prov), new MockEnvironment());
 
         IllegalStateException ex = assertThrows(IllegalStateException.class,

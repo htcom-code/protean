@@ -68,7 +68,7 @@ Under `worker.db.auto-provision`, a **scope** (tenant / business-domain grouping
 | detach | undeploy the scope's modules + reclaim its workers/containers + drop **only the DB login** | retained | ↔ re-create + redeploy |
 | destroy | `DROP DATABASE`/`SCHEMA CASCADE` + login | **lost** | ✗ |
 
-**Data safety.** `detach` is the default, data-safe teardown — it stops the scope but keeps the database and all data (re-creating the scope and redeploying re-provisions the login). `destroy` is irreversible and **guarded**: it is refused unless `worker.db.allow-destroy=true` (default `false`) **and** the caller echoes the scope name as confirmation, and it is audit-logged. Data deletion is a DBA-owned action, not a routine deploy-path operation. `worker.db.deprovision-on-undeploy` is deprecated — undeploy never tears down a scope.
+**Data safety.** `detach` is the default, data-safe teardown — it stops the scope but keeps the database and all data (re-creating the scope and redeploying re-provisions the login). `destroy` is irreversible and **guarded**: it is refused unless `worker.db.allow-destroy=true` (default `false`) **and** the caller echoes the scope name as confirmation, and it is audit-logged. Data deletion is a DBA-owned action, not a routine deploy-path operation. Undeploy never tears down a scope (there is no deprovision-on-undeploy flag — teardown is only via `detach`/`destroy` above).
 
 ## Request traces / monitoring
 

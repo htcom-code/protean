@@ -38,7 +38,7 @@ class MySqlScopeProvisioningTest {
             mysql.start();
             String adminUrl = mysql.getJdbcUrl();
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new MySqlDialect(), adminUrl, "root", mysql.getPassword(), true);
+                    new MySqlDialect(), adminUrl, "root", mysql.getPassword());
 
             DbScope a = prov.provision("mod-a");
             DbScope b = prov.provision("mod-b");
@@ -55,7 +55,7 @@ class MySqlScopeProvisioningTest {
                     "module A must not access module B's DB");
 
             // deprovision -> remove A's DATABASE
-            prov.deprovision("mod-a");
+            prov.destroy("mod-a");
             JdbcTemplate admin = jdbc(adminUrl, "root", mysql.getPassword());
             Integer schemas = admin.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
@@ -73,7 +73,7 @@ class MySqlScopeProvisioningTest {
             mysql.start();
             String adminUrl = mysql.getJdbcUrl();
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new MySqlDialect(), adminUrl, "root", mysql.getPassword(), false);
+                    new MySqlDialect(), adminUrl, "root", mysql.getPassword());
 
             DbScope first = prov.provision("tenant-x");
             jdbc(first.url(), first.username(), first.password()).execute("CREATE TABLE t (x INT)");
@@ -103,7 +103,7 @@ class MySqlScopeProvisioningTest {
             mysql.start();
             String adminUrl = mysql.getJdbcUrl();
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new MySqlDialect(), adminUrl, "root", mysql.getPassword(), false);
+                    new MySqlDialect(), adminUrl, "root", mysql.getPassword());
 
             DbScope s = prov.provision("tenant-y");
             jdbc(s.url(), s.username(), s.password()).execute("CREATE TABLE t (x INT)");
@@ -129,9 +129,9 @@ class MySqlScopeProvisioningTest {
         try (MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")) {
             mysql.start();
             String adminUrl = mysql.getJdbcUrl();
-            // deprovision-on-undeploy = false → the user/DB persist across "restarts"
+            // no teardown between provisions → the user/DB persist across "restarts"
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new MySqlDialect(), adminUrl, "root", mysql.getPassword(), false);
+                    new MySqlDialect(), adminUrl, "root", mysql.getPassword());
 
             DbScope first = prov.provision("mod-a");
             JdbcTemplate j1 = jdbc(first.url(), first.username(), first.password());

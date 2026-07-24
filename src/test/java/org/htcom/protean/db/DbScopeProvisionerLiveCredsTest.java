@@ -60,7 +60,7 @@ class DbScopeProvisionerLiveCredsTest {
         AtomicReference<DbScopeProvisioner.AdminCreds> creds = new AtomicReference<>(
                 new DbScopeProvisioner.AdminCreds("jdbc:h2:mem:admin1", "sa", "old-pw"));
         CapturingDialect dialect = new CapturingDialect();
-        DbScopeProvisioner prov = new DbScopeProvisioner(dialect, creds::get, () -> true);
+        DbScopeProvisioner prov = new DbScopeProvisioner(dialect, creds::get);
 
         DbScope s1 = prov.provision("modA");
         assertEquals("jdbc:h2:mem:admin1", dialect.lastAdminUrl, "first provision uses the initial admin url");
@@ -74,7 +74,7 @@ class DbScopeProvisionerLiveCredsTest {
         assertTrue(s2.url().startsWith("jdbc:h2:mem:admin2/"));
 
         // Deprovision also uses the rebuilt (rotated) admin connection.
-        prov.deprovision("modB");
+        prov.destroy("modB");
         assertEquals("jdbc:h2:mem:admin2", dialect.lastAdminUrl, "deprovision uses the current admin connection");
     }
 
@@ -83,7 +83,7 @@ class DbScopeProvisionerLiveCredsTest {
         AtomicReference<DbScopeProvisioner.AdminCreds> creds = new AtomicReference<>(
                 new DbScopeProvisioner.AdminCreds("jdbc:h2:mem:good", "sa", "pw"));
         CapturingDialect dialect = new CapturingDialect();
-        DbScopeProvisioner prov = new DbScopeProvisioner(dialect, creds::get, () -> false);
+        DbScopeProvisioner prov = new DbScopeProvisioner(dialect, creds::get);
 
         prov.provision("m1");
         assertEquals("jdbc:h2:mem:good", dialect.lastAdminUrl);
@@ -104,7 +104,7 @@ class DbScopeProvisionerLiveCredsTest {
         DbScopeProvisioner.AdminCreds fixed = new DbScopeProvisioner.AdminCreds("jdbc:h2:mem:stable", "sa", "pw");
         CapturingDialect dialect = new CapturingDialect();
         // Supplier always returns an equal value → the admin connection is built once and reused (no rebuild churn).
-        DbScopeProvisioner prov = new DbScopeProvisioner(dialect, () -> fixed, () -> false);
+        DbScopeProvisioner prov = new DbScopeProvisioner(dialect, () -> fixed);
 
         prov.provision("m1");
         String afterFirst = dialect.lastAdminUrl;

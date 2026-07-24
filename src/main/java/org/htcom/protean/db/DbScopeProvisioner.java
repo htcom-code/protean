@@ -14,7 +14,6 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -26,8 +25,7 @@ import java.util.function.Supplier;
  *
  * <p><b>Live admin creds</b>: the admin coordinates are read through a {@link Supplier} at operation time, and the
  * admin {@link JdbcTemplate} is rebuilt only when they change, so an admin-credential rotation
- * ({@code protean.worker.db.admin-url/username/password}) applies to the next provision/deprovision without a restart.
- * This mirrors how {@code deprovisionOnUndeploy} is already re-read per undeploy.
+ * ({@code protean.worker.db.admin-url/username/password}) applies to the next provision/detach/destroy without a restart.
  *
  * <p>A rotation is <b>validated before it is adopted</b> (a liveness check on a connection opened with the new creds):
  * if the new creds cannot connect, they are rejected and the previous working admin connection is retained, so a bad
@@ -50,25 +48,20 @@ public class DbScopeProvisioner {
     private final DbDialect dialect;
     /** Read live so a runtime protean.worker.db.admin-* change rebuilds the admin connection on the next op. */
     private final Supplier<AdminCreds> credsSupplier;
-    /** Read live (Tier 1) so a runtime protean.worker.db.deprovision-on-undeploy change applies to the next undeploy. */
-    private final BooleanSupplier deprovisionOnUndeploy;
 
     // Cached admin JdbcTemplate + the creds snapshot it was built from; rebuilt lazily when the live creds change.
     private AdminCreds currentCreds;
     private JdbcTemplate admin;
 
     /** Fixed-creds constructor (tests / non-Spring use). */
-    public DbScopeProvisioner(DbDialect dialect, String adminUrl, String adminUser, String adminPassword,
-                              boolean deprovisionOnUndeploy) {
-        this(dialect, () -> new AdminCreds(adminUrl, adminUser, adminPassword), () -> deprovisionOnUndeploy);
+    public DbScopeProvisioner(DbDialect dialect, String adminUrl, String adminUser, String adminPassword) {
+        this(dialect, () -> new AdminCreds(adminUrl, adminUser, adminPassword));
     }
 
-    /** Live constructor: admin creds and the deprovision flag are re-read at operation time (Spring bean path). */
-    public DbScopeProvisioner(DbDialect dialect, Supplier<AdminCreds> credsSupplier,
-                              BooleanSupplier deprovisionOnUndeploy) {
+    /** Live constructor: admin creds are re-read at operation time (Spring bean path). */
+    public DbScopeProvisioner(DbDialect dialect, Supplier<AdminCreds> credsSupplier) {
         this.dialect = dialect;
         this.credsSupplier = credsSupplier;
-        this.deprovisionOnUndeploy = deprovisionOnUndeploy;
     }
 
     /**
@@ -114,14 +107,6 @@ public class DbScopeProvisioner {
         return new DbScope(dialect.scopedUrl(creds.url(), name), name, password);
     }
 
-    /** Removes the scope only when deprovision-on-undeploy is enabled (retained by default). */
-    public void deprovision(String moduleId) {
-        if (!deprovisionOnUndeploy.getAsBoolean()) {
-            return;
-        }
-        dialect.dropScope(adminFor(credsSupplier.get()), Identifiers.safeName(moduleId, dialect.maxNameLength()));
-    }
-
     /**
      * Detaches a scope (operator-driven, scope-admin path): removes only its login while retaining the DATABASE/SCHEMA
      * and all data. Reversible — a later {@link #provision} recreates the login with a fresh password.
@@ -136,10 +121,6 @@ public class DbScopeProvisioner {
      */
     public void destroy(String scopeName) {
         dialect.destroyScope(adminFor(credsSupplier.get()), Identifiers.safeName(scopeName, dialect.maxNameLength()));
-    }
-
-    public boolean deprovisionOnUndeploy() {
-        return deprovisionOnUndeploy.getAsBoolean();
     }
 
     /** The dialect this provisioner selected (for status responses/validation). */

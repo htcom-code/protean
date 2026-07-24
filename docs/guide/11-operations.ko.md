@@ -68,7 +68,7 @@ protean:
 | detach | scope 의 모듈 undeploy + 워커/컨테이너 회수 + **DB 로그인만** 제거 | 보존 | ↔ 재생성 + 재배포 |
 | destroy | `DROP DATABASE`/`SCHEMA CASCADE` + 로그인 | **소실** | ✗ |
 
-**데이터 안전.** `detach` 가 기본이자 데이터 안전한 해제다 — scope 를 멈추되 DB 와 데이터는 보존한다(scope 재생성 + 재배포 시 로그인 재프로비저닝). `destroy` 는 비가역이며 **가드**된다: `worker.db.allow-destroy=true`(기본 `false`) **그리고** 호출자가 scope 이름을 확인값으로 되풀이해야만 허용되고, 감사 로그가 남는다. 데이터 삭제는 배포 경로의 일상 작업이 아니라 DBA 소유 작업이다. `worker.db.deprovision-on-undeploy` 는 deprecated — undeploy 는 scope 를 해제하지 않는다.
+**데이터 안전.** `detach` 가 기본이자 데이터 안전한 해제다 — scope 를 멈추되 DB 와 데이터는 보존한다(scope 재생성 + 재배포 시 로그인 재프로비저닝). `destroy` 는 비가역이며 **가드**된다: `worker.db.allow-destroy=true`(기본 `false`) **그리고** 호출자가 scope 이름을 확인값으로 되풀이해야만 허용되고, 감사 로그가 남는다. 데이터 삭제는 배포 경로의 일상 작업이 아니라 DBA 소유 작업이다. undeploy 는 scope 를 해제하지 않는다(deprovision-on-undeploy 플래그는 없다 — 해제는 위의 `detach`/`destroy` 로만).
 
 ## 요청 트레이스 / 모니터링
 

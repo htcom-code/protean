@@ -30,7 +30,7 @@ follows the migration.
   not yet performed.
 - Worker DB admin credentials (`protean.worker.db.admin-url` / `username` /
   `password`) are now runtime-rotatable without a restart: `DbScopeProvisioner`
-  reads an `AdminCreds` snapshot per provision/deprovision and rebuilds the admin
+  reads an `AdminCreds` snapshot per provision/detach/destroy and rebuilds the admin
   `JdbcTemplate` only when the creds change (`REQUIRES_RESTART` → `APPLIED_FUTURE`).
   A rotation is validated first — one connection with the candidate creds must
   pass `Connection.isValid` before the swap; a bad rotation fails clearly and
@@ -82,11 +82,11 @@ follows the migration.
   rejected (in-process cannot bind a per-scope datasource); a scope declared with
   auto-provision off is ignored with a warning.
 
-### Deprecated
+### Removed
 
-- `worker.db.deprovision-on-undeploy` — undeploy never tears down a scope; scope
-  lifecycle is operator-driven via the scope admin API (detach / destroy). The flag
-  is retained for compatibility but no longer affects a scope's database.
+- `worker.db.deprovision-on-undeploy` — removed (it never had an effect under the scope
+  model: undeploy does not tear down a scope). Scope teardown is operator-driven via the
+  scope admin API (detach / destroy). Setting the key in config is now simply ignored.
 
 ### Fixed
 

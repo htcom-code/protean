@@ -109,7 +109,6 @@ protean:
       admin-url: jdbc:mariadb://db:3306/
       admin-username: root
       admin-password: ${DB_ADMIN_PW}
-      deprovision-on-undeploy: false
 ```
 
 ## ModuleStoreDialect — module-store DDL 벤더

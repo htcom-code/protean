@@ -188,7 +188,6 @@ Defense-in-depth auth on mutating worker admin calls (chiefly for the container 
 | `protean.worker.db.admin-password` | `String` | (none) | `future` | Admin password (rotatable at runtime without a restart; see `admin-url`). |
 | `protean.worker.db.scopes` | `List<String>` | (empty) | `future` | Startup seed allowlist of scope names. Empty → a single implicit `default` scope. A deploy must select a known scope; new scopes are added at runtime via the scope admin API (deployers cannot create scopes). |
 | `protean.worker.db.allow-destroy` | `boolean` | `false` | `live` | Whether the scope admin `destroy` (DROP DATABASE/SCHEMA — irreversible data loss) is permitted. Default `false` refuses it; when `true`, a guarded destroy is exposed (name re-confirmation + audit log). Detach (keeps data) is always available. |
-| `protean.worker.db.deprovision-on-undeploy` | `boolean` | `false` | `live` | **Deprecated.** Undeploy never removes a scope — scope lifecycle is operator-driven via the scope admin API (detach/destroy). Retained for compatibility; has no effect on the scope's database. |
 
 ### worker.sidecar — sidecar worker runtime (opt-in)
 

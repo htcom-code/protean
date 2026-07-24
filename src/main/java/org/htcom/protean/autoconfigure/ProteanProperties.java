@@ -545,8 +545,6 @@ public class ProteanProperties {
         private volatile String adminUrl;
         private volatile String adminUsername;
         private volatile String adminPassword;
-        /** Whether to remove the provisioned scope on undeploy. */
-        private boolean deprovisionOnUndeploy = false;
         /**
          * Seed allowlist of DB scopes (tenants) created at startup. A module deploy must bind to one of these via its
          * {@code scope}. Empty → a single {@code "default"} scope. New scopes are added at runtime via the scope admin
@@ -574,8 +572,6 @@ public class ProteanProperties {
         public void setAdminUsername(String adminUsername) { this.adminUsername = adminUsername; }
         public String getAdminPassword() { return adminPassword; }
         public void setAdminPassword(String adminPassword) { this.adminPassword = adminPassword; }
-        public boolean isDeprovisionOnUndeploy() { return deprovisionOnUndeploy; }
-        public void setDeprovisionOnUndeploy(boolean v) { this.deprovisionOnUndeploy = v; }
     }
 
     /** Sidecar worker runtime (opt-in). */

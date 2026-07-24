@@ -38,7 +38,7 @@ class PostgresScopeProvisioningTest {
             pg.start();
             String adminUrl = pg.getJdbcUrl();
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword(), true);
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
 
             DbScope a = prov.provision("mod-a");
             DbScope b = prov.provision("mod-b");
@@ -55,7 +55,7 @@ class PostgresScopeProvisioningTest {
                     "module A must not access module B's schema");
 
             // deprovision -> remove A's schema
-            prov.deprovision("mod-a");
+            prov.destroy("mod-a");
             JdbcTemplate admin = jdbc(adminUrl, pg.getUsername(), pg.getPassword());
             Integer schemas = admin.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?",
@@ -73,7 +73,7 @@ class PostgresScopeProvisioningTest {
             pg.start();
             String adminUrl = pg.getJdbcUrl();
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword(), false);
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
 
             DbScope first = prov.provision("tenant-x");
             JdbcTemplate j1 = jdbc(first.url(), first.username(), first.password());
@@ -109,7 +109,7 @@ class PostgresScopeProvisioningTest {
             pg.start();
             String adminUrl = pg.getJdbcUrl();
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword(), false);
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
 
             DbScope s = prov.provision("tenant-y");
             jdbc(s.url(), s.username(), s.password()).execute("CREATE TABLE t (x INT)");
@@ -135,9 +135,9 @@ class PostgresScopeProvisioningTest {
         try (PostgreSQLContainer<?> pg = new PostgreSQLContainer<>("postgres:16")) {
             pg.start();
             String adminUrl = pg.getJdbcUrl();
-            // deprovision-on-undeploy = false → the role/schema persist across "restarts"
+            // no teardown between provisions → the role/schema persist across "restarts"
             DbScopeProvisioner prov = new DbScopeProvisioner(
-                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword(), false);
+                    new PostgresDialect(), adminUrl, pg.getUsername(), pg.getPassword());
 
             DbScope first = prov.provision("mod-a");
             JdbcTemplate j1 = jdbc(first.url(), first.username(), first.password());

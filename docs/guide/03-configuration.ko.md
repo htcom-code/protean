@@ -182,7 +182,6 @@ MCP 에이전트가 모듈을 직접 배포하는 입구. RCE 표면이라 **기
 | `protean.worker.db.admin-password` | `String` | (없음) | `future` | 관리 비밀번호 (재시작 없이 런타임 교체 가능; `admin-url` 참조). |
 | `protean.worker.db.scopes` | `List<String>` | (비어 있음) | `future` | 시작 시 seed 하는 scope 이름 허용목록. 비우면 암묵적 `default` scope 하나. 배포는 알려진 scope 를 선택해야 하며, 새 scope 는 런타임에 scope 관리 API 로 추가한다(배포자는 scope 생성 불가). |
 | `protean.worker.db.allow-destroy` | `boolean` | `false` | `라이브` | scope 관리 `destroy`(DROP DATABASE/SCHEMA — 비가역 데이터 손실) 허용 여부. 기본 `false` 는 거부; `true` 면 가드된 destroy 노출(이름 재확인 + 감사 로그). detach(데이터 보존)는 항상 가능. |
-| `protean.worker.db.deprovision-on-undeploy` | `boolean` | `false` | `라이브` | **Deprecated.** undeploy 는 scope 를 제거하지 않는다 — scope 라이프사이클은 scope 관리 API(detach/destroy)로 운영자가 주도한다. 호환성 위해 유지되나 scope 의 DB 에 아무 영향 없음. |
 
 ### worker.sidecar — sidecar 워커 런타임(opt-in)
 

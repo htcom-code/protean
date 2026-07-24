@@ -206,7 +206,7 @@ Behavior details:
 - The admin-connection driver (mysql/postgres) must be on the **host (app) classpath** (see the optional caution above). It must not go in the shared-lib CL.
 - The scope user's password is generated as a 24-character random string (`SecureRandom`).
 - **Admin credentials are rotatable at runtime** (`admin-url` / `admin-username` / `admin-password`, `future` tier): a change applies to the next provision without an app restart — the provisioner rebuilds its admin connection, validating the new credentials before adopting them and keeping the previous connection if they fail. (`dialect` is **not** live — existing scopes were shaped by the current dialect; see [03. Configuration](03-configuration.md).)
-- Scope lifecycle (create / close / detach / destroy) is **operator-driven** via the scope admin API — undeploying a module never removes its scope (the scope's DB is shared and outlives individual modules). `worker.db.deprovision-on-undeploy` is **deprecated** and no longer removes a scope on undeploy. See [11. Operations](11-operations.md).
+- Scope lifecycle (create / close / detach / destroy) is **operator-driven** via the scope admin API — undeploying a module never removes its scope (the scope's DB is shared and outlives individual modules). See [11. Operations](11-operations.md).
 
 ### Vendor extension is a `DbDialect` bean
 

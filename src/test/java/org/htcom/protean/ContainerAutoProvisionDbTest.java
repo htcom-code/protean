@@ -53,7 +53,6 @@ class ContainerAutoProvisionDbTest {
         registry.add("protean.worker.db.admin-url", pg::getJdbcUrl);
         registry.add("protean.worker.db.admin-username", pg::getUsername);
         registry.add("protean.worker.db.admin-password", pg::getPassword);
-        registry.add("protean.worker.db.deprovision-on-undeploy", () -> "true");
         // db-host defaults to host.docker.internal (container -> host published port)
     }
 

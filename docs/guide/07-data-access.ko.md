@@ -206,7 +206,7 @@ protean:
 - admin 접속 드라이버(mysql/postgres)는 **호스트(앱) 클래스패스**에 있어야 한다(위 optional 주의 참조). shared-lib CL 에 두면 안 된다.
 - scope 유저의 비밀번호는 24자 난수(`SecureRandom`)로 생성된다.
 - **admin 자격증명은 런타임 교체(rotation) 가능**(`admin-url` / `admin-username` / `admin-password`, `future` tier): 변경은 앱 재시작 없이 다음 provision 에 반영된다 — provisioner 가 admin 연결을 다시 만들되, 채택 전 새 자격증명을 검증하고 실패하면 기존 연결을 유지한다. (`dialect` 는 라이브 아님 — 기존 scope 가 현재 dialect 형태로 만들어졌기 때문. [03. 설정 레퍼런스](03-configuration.ko.md) 참조.)
-- scope 라이프사이클(create/close/detach/destroy)은 **운영자 주도**로 scope 관리 API 를 통해 이뤄진다 — 모듈 undeploy 는 그 scope 를 절대 제거하지 않는다(scope 의 DB 는 공유되며 개별 모듈보다 오래 산다). `worker.db.deprovision-on-undeploy` 는 **deprecated** 이며 더 이상 undeploy 시 scope 를 제거하지 않는다. [11. 운영](11-operations.ko.md) 참조.
+- scope 라이프사이클(create/close/detach/destroy)은 **운영자 주도**로 scope 관리 API 를 통해 이뤄진다 — 모듈 undeploy 는 그 scope 를 절대 제거하지 않는다(scope 의 DB 는 공유되며 개별 모듈보다 오래 산다). [11. 운영](11-operations.ko.md) 참조.
 
 ### 벤더 확장은 `DbDialect` 빈
 

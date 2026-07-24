@@ -55,7 +55,6 @@ class WorkerAutoProvisionDbTest {
         registry.add("protean.worker.db.admin-url", pg::getJdbcUrl);
         registry.add("protean.worker.db.admin-username", pg::getUsername);
         registry.add("protean.worker.db.admin-password", pg::getPassword);
-        registry.add("protean.worker.db.deprovision-on-undeploy", () -> "true");
     }
 
     @Autowired MockMvc mockMvc;
