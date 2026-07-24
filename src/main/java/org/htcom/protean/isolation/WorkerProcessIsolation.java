@@ -412,7 +412,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             });
             // Pack modules of the same scope into that scope's worker(s) up to capacity; else spawn a new one for it.
             for (WorkerHandle h : pool) {
-                if (h.process.isAlive() && scopeName.equals(h.scope) && h.modules.size() < capacity()
+                if (!h.retiring && h.process.isAlive() && scopeName.equals(h.scope) && h.modules.size() < capacity()
                         && (excludeModuleId == null || !h.modules.contains(excludeModuleId))) {
                     return h;
                 }
@@ -460,7 +460,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     /** Picks a live worker with spare capacity (that does not already have this module), or spawns a new one. */
     private WorkerHandle acquireWorker(String excludeModuleId) {
         for (WorkerHandle h : pool) {
-            if (h.process.isAlive() && h.modules.size() < capacity()
+            if (!h.retiring && h.process.isAlive() && h.modules.size() < capacity()
                     && (excludeModuleId == null || !h.modules.contains(excludeModuleId))) {
                 return h;
             }

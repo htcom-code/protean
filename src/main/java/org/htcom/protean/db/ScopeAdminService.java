@@ -146,8 +146,14 @@ public class ScopeAdminService {
         }
         int undeployed = takeDownModules(name);
         // Detach first (drop the login) so no new connection can be opened to the scope during teardown, then drop the
-        // database itself — the documented "detached-first" ordering.
-        provisioner.detach(name);
+        // database itself — the documented "detached-first" ordering. Best-effort: a custom dialect may not implement
+        // login-only detach (the DbDialect default throws), so destroy must not depend on it — the full drop below
+        // still runs, keeping destroy available for such dialects.
+        try {
+            provisioner.detach(name);
+        } catch (UnsupportedOperationException ignored) {
+            // dialect has no login-only detach — skip straight to the full destroy
+        }
         provisioner.destroy(name);
         scopes.remove(name);
         log.warn("scope admin: DESTROYED scope '{}' — {} module(s) undeployed, DATABASE/SCHEMA dropped (irreversible)",
