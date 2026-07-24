@@ -92,8 +92,8 @@ class OsIsolationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string("write_blocked=true"));
 
-        // memory cap (cgroup): the 256m limit is actually applied to the container
-        assertEquals(256L * 1024 * 1024, isolation.inspectMemoryLimit("os-mod"),
+        // memory cap (cgroup): the 512m limit is actually applied to the container
+        assertEquals(512L * 1024 * 1024, isolation.inspectMemoryLimit("os-mod"),
                 "a cgroup memory limit must be applied to the container");
     }
 

@@ -72,11 +72,14 @@ new ModuleDescriptor(
 ```yaml
 protean:
   worker:
-    modules-per-worker: 4   # 워커당 최대 모듈 수(1 = 모듈당 전용 JVM=완전 격리). 기본 4
+    modules-per-worker: 128 # 워커 JVM 하나에 패킹할 최대 모듈 수(1 = 모듈당 전용 JVM=완전 격리). 기본 128
+    jvm-args: []            # 워커별 추가 JVM 인자, 예: ["-Xmx512m"] — process/embed/sidecar 트랙 heap 사이징
     min-warm: 0             # 빈 워커를 따뜻하게 유지할 수(재사용). 기본 0
 ```
 
-`modules-per-worker=1` 이면 모듈마다 전용 JVM 이라 완전 격리되지만 JVM 수가 늘고, `>1` 이면 같은 워커 내 모듈은 크래시 시 운명을 공유한다. 빈 워커는 `min-warm` 개까지 유지해 재사용하고 초과분은 정리한다.
+`modules-per-worker=1` 이면 모듈마다 전용 JVM 이라 완전 격리되지만 JVM 수가 늘고, `>1` 이면 같은 워커 내 모듈은 크래시 시 운명을 공유한다. 기본 `128`은 운영 밀도 우선(검증된 코드·낮은 크래시 위험 + 작은 값에선 워커 JVM 베이스 오버헤드 ~200~300MB가 지배) — 개발계에선 낮춰 크래시 격리를 강화한다. 빈 워커는 `min-warm` 개까지 유지해 재사용하고 초과분은 정리한다.
+
+**사이징 주의(함께 스케일).** `modules-per-worker`·메모리·heap은 한 세트로 움직인다. **컨테이너** 트랙은 워커가 `worker.container.memory` cgroup cap(128모듈용 기본 `512m`) 안에서 `-XX:MaxRAMPercentage=75.0`을 받음 → `modules-per-worker`를 키우면 `container.memory`도 비례 상향. **process/embed/sidecar** 트랙은 메모리 경계가 없어(퍼센트는 host 전체 기준이 됨) `worker.jvm-args`(예: `["-Xmx512m"]`)로 heap을 명시 지정 — 운영자 책임.
 
 ### 감독(auto-restart)
 
@@ -135,8 +138,8 @@ protean:
   worker:
     container:
       image: eclipse-temurin:21-jdk   # 기본
-      memory: 256m                     # cgroup 메모리 cap. 기본 256m
-      pids-limit: 512                  # fork-bomb 방어 PID 한도. 기본 512
+      memory: 512m                     # cgroup 메모리 cap(modules-per-worker=128 수용). 기본 512m
+      pids-limit: 1024                 # fork-bomb 방어 PID 한도. 기본 1024
       network: ""                      # egress 격리용 네트워크(예: internal). 비면 docker 기본
       seccomp: ""                      # 프로파일 경로 | "bundled" | 비면 docker 기본
       auto-restart: false              # 컨테이너 크래시 감지 → 재배포

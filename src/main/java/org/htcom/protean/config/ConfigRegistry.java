@@ -91,6 +91,8 @@ public class ConfigRegistry {
                 p -> p.getWorker().getModulesPerWorker(), (p, v) -> p.getWorker().setModulesPerWorker(v));
         intNum("worker.min-warm", ConfigTier.FUTURE, 0,
                 p -> p.getWorker().getMinWarm(), (p, v) -> p.getWorker().setMinWarm(v));
+        stringList("worker.jvm-args", ConfigTier.FUTURE,
+                p -> p.getWorker().getJvmArgs(), (p, v) -> p.getWorker().setJvmArgs(v));
         str("worker.datasource.url", ConfigTier.FUTURE,
                 p -> p.getWorker().getDatasource().getUrl(), (p, v) -> p.getWorker().getDatasource().setUrl(v));
         str("worker.container.image", ConfigTier.FUTURE,

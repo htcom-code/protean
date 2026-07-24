@@ -72,11 +72,14 @@ One worker hosts multiple modules to cut JVM count and startup cost.
 ```yaml
 protean:
   worker:
-    modules-per-worker: 4   # max modules per worker (1 = a dedicated JVM per module = full isolation). Default 4
+    modules-per-worker: 128 # max modules packed per worker JVM (1 = a dedicated JVM per module = full isolation). Default 128
+    jvm-args: []            # extra JVM args per worker, e.g. ["-Xmx512m"] — size heap for the process/embed/sidecar tracks
     min-warm: 0             # number of empty workers to keep warm (reuse). Default 0
 ```
 
-With `modules-per-worker=1` each module gets a dedicated JVM and is fully isolated, but the JVM count grows; with `>1`, modules within the same worker share their fate on a crash. Empty workers are kept up to `min-warm` for reuse and the excess is cleaned up.
+With `modules-per-worker=1` each module gets a dedicated JVM and is fully isolated, but the JVM count grows; with `>1`, modules within the same worker share their fate on a crash. The default `128` favors production density (verified code, low crash risk, and a worker JVM's ~200–300 MB base overhead dominates at small values); lower it in development for tighter crash isolation. Empty workers are kept up to `min-warm` for reuse and the excess is cleaned up.
+
+**Sizing note (scale together).** `modules-per-worker`, memory, and heap move as a set. For the **container** track, a worker gets `-XX:MaxRAMPercentage=75.0` inside a `worker.container.memory` cgroup cap (default `512m` for 128 modules) — raise `container.memory` proportionally if you raise `modules-per-worker`. For the **process/embed/sidecar** tracks there is no memory bound (a percentage would size against the whole host), so size heap explicitly with `worker.jvm-args` (e.g. `["-Xmx512m"]`) — this is the operator's responsibility.
 
 ### Supervision (auto-restart)
 
@@ -135,8 +138,8 @@ protean:
   worker:
     container:
       image: eclipse-temurin:21-jdk   # default
-      memory: 256m                     # cgroup memory cap. Default 256m
-      pids-limit: 512                  # fork-bomb-defense PID limit. Default 512
+      memory: 512m                     # cgroup memory cap (holds modules-per-worker=128). Default 512m
+      pids-limit: 1024                 # fork-bomb-defense PID limit. Default 1024
       network: ""                      # network for egress isolation (e.g. internal). Empty = docker default
       seccomp: ""                      # profile path | "bundled" | empty = docker default
       auto-restart: false              # container crash detection → redeploy

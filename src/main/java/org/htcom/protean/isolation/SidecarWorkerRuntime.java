@@ -55,7 +55,9 @@ public class SidecarWorkerRuntime implements WorkerRuntimeProvider {
                 isWindows() ? "java.exe" : "java").toString();
         String cp = sharedApi.isBlank() ? sidecarJar
                 : sidecarJar + File.pathSeparator + sharedApi;
-        return List.of(javaBin, "-cp", cp, ProteanWorkerLauncher.MAIN_CLASS);
+        // Process track has no memory bound, so no cgroup-relative heap default — operator sizes heap via jvm-args.
+        return WorkerRuntimeProvider.javaCommand(javaBin, false, props.getWorker().getJvmArgs(),
+                List.of("-cp", cp, ProteanWorkerLauncher.MAIN_CLASS));
     }
 
     @Override
@@ -68,7 +70,8 @@ public class SidecarWorkerRuntime implements WorkerRuntimeProvider {
         // The dedicated image bundles app + shared-api itself → no host mount. Assumes /app/* as the classpath.
         return new ContainerLaunchSpec(sidecarImage,
                 List.of(),
-                List.of("java", "-cp", "/app/*", ProteanWorkerLauncher.MAIN_CLASS));
+                WorkerRuntimeProvider.javaCommand("java", true, props.getWorker().getJvmArgs(),
+                        List.of("-cp", "/app/*", ProteanWorkerLauncher.MAIN_CLASS)));
     }
 
     private static boolean isWindows() {

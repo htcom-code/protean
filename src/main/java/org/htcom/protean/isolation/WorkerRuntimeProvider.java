@@ -8,6 +8,7 @@
 
 package org.htcom.protean.isolation;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -43,5 +44,30 @@ public interface WorkerRuntimeProvider {
      *                      {@code ["java","-cp","/app/BOOT-INF/classes:/app/BOOT-INF/lib/*", mainClass]}).
      */
     record ContainerLaunchSpec(String image, List<String> mountArgs, List<String> commandPrefix) {
+    }
+
+    /**
+     * Assembles a worker JVM launch command with heap/JVM options in the correct position (after the java binary,
+     * before {@code -cp}/main class): an optional cgroup-relative heap default for the container track, then the
+     * operator's {@code protean.worker.jvm-args}, then the caller's {@code tail} ({@code [-cp, <cp>, <mainClass>]}).
+     *
+     * @param javaBin           the java executable (or {@code "java"} inside a container)
+     * @param containerHeapDefault when true, inserts {@code -XX:MaxRAMPercentage=75.0} — only for the container track,
+     *                             which has a cgroup memory bound (a percentage on an unbounded process would size
+     *                             heap against the whole host)
+     * @param jvmArgs           operator-supplied extra JVM args ({@code protean.worker.jvm-args}); may be empty/null
+     * @param tail              the classpath + main-class portion
+     */
+    static List<String> javaCommand(String javaBin, boolean containerHeapDefault, List<String> jvmArgs, List<String> tail) {
+        List<String> cmd = new ArrayList<>();
+        cmd.add(javaBin);
+        if (containerHeapDefault) {
+            cmd.add("-XX:MaxRAMPercentage=75.0");
+        }
+        if (jvmArgs != null) {
+            cmd.addAll(jvmArgs);
+        }
+        cmd.addAll(tail);
+        return List.copyOf(cmd);
     }
 }

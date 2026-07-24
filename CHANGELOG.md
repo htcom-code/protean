@@ -44,6 +44,17 @@ follows the migration.
   out-of-band from the trace ring buffer (recording hot path untouched) and
   independent of `protean.trace.metrics.enabled`.
 
+### Changed
+
+- Worker packing defaults raised for production density. `worker.modules-per-worker`
+  `4` → `128` (a worker JVM's ~200–300 MB base overhead dominates cost at small
+  values; verified code has low crash risk in production). Container-track companions
+  scaled to hold them: `worker.container.memory` `256m` → `512m`, `worker.container.pids-limit`
+  `512` → `1024`, and container workers now launch with `-XX:MaxRAMPercentage=75.0`.
+  New `worker.jvm-args` sizes heap for the process/embed/sidecar tracks (no cgroup
+  bound there, so a percentage is unsafe). Raise these together when overriding
+  `modules-per-worker`. (`worker.db.auto-provision` still forces one module per worker.)
+
 ### Fixed
 
 - The library no longer registers its internal RPC-bridge demo beans

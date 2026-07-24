@@ -58,8 +58,9 @@ public class EmbeddedWorkerRuntime implements WorkerRuntimeProvider {
     public List<String> processLaunchPrefix() {
         String javaBin = Path.of(System.getProperty("java.home"), "bin",
                 isWindows() ? "java.exe" : "java").toString();
-        return List.of(javaBin, "-cp", System.getProperty("java.class.path"),
-                ProteanWorkerLauncher.MAIN_CLASS);
+        // Process track has no memory bound, so no cgroup-relative heap default — operator sizes heap via jvm-args.
+        return WorkerRuntimeProvider.javaCommand(javaBin, false, props.getWorker().getJvmArgs(),
+                List.of("-cp", System.getProperty("java.class.path"), ProteanWorkerLauncher.MAIN_CLASS));
     }
 
     @Override
@@ -69,8 +70,9 @@ public class EmbeddedWorkerRuntime implements WorkerRuntimeProvider {
         // (META-INF/spring/...AutoConfiguration.imports), so BOOT-INF/classes alone cannot find it.
         return new ContainerLaunchSpec(props.getWorker().getContainer().getImage(),
                 List.of("-v", appDir + ":/app:ro"),
-                List.of("java", "-cp", "/app:/app/BOOT-INF/classes:/app/BOOT-INF/lib/*",
-                        ProteanWorkerLauncher.MAIN_CLASS));
+                WorkerRuntimeProvider.javaCommand("java", true, props.getWorker().getJvmArgs(),
+                        List.of("-cp", "/app:/app/BOOT-INF/classes:/app/BOOT-INF/lib/*",
+                                ProteanWorkerLauncher.MAIN_CLASS)));
     }
 
     // --- bootJar explode (embed-only) ---
