@@ -227,12 +227,18 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             throw new IllegalStateException("worker module already deployed: " + descriptor.id());
         }
         WorkerHandle handle = acquireWorkerFor(resolveScope(descriptor), null);
-        ensureUsesClosure(handle, descriptor);   // publish the module's library `uses` closure into this worker first
-        List<RouteInfo> routes = deployToWorker(handle.port, descriptor);
-        for (RouteInfo route : routes) {
-            for (String path : route.patterns()) {
-                proxy.register(path, route.methods(), handle.port, descriptor.id());
+        List<RouteInfo> routes;
+        try {
+            ensureUsesClosure(handle, descriptor);   // publish the module's library `uses` closure into this worker first
+            routes = deployToWorker(handle.port, descriptor);
+            for (RouteInfo route : routes) {
+                for (String path : route.patterns()) {
+                    proxy.register(path, route.methods(), handle.port, descriptor.id());
+                }
             }
+        } catch (RuntimeException e) {
+            retireIfNewlySpawned(handle);   // spawned for this deploy and it failed → don't leak an empty worker
+            throw new IllegalStateException("worker module deploy failed: " + descriptor.id(), e);
         }
         List<String> paths = pathsOf(routes);
         handle.modules.add(descriptor.id());

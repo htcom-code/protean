@@ -145,13 +145,17 @@ public class ScopeAdminService {
                     + "' to acknowledge irreversible deletion of scope '" + name + "'");
         }
         int undeployed = takeDownModules(name);
+        // Detach first (drop the login) so no new connection can be opened to the scope during teardown, then drop the
+        // database itself — the documented "detached-first" ordering.
+        provisioner.detach(name);
         provisioner.destroy(name);
         scopes.remove(name);
         log.warn("scope admin: DESTROYED scope '{}' — {} module(s) undeployed, DATABASE/SCHEMA dropped (irreversible)",
                 name, undeployed);
         if (scopes.seedNames().contains(name)) {
-            log.warn("scope '{}' is still listed in protean.worker.db.scopes — it will reappear as an empty ACTIVE "
-                    + "scope on the next restart; remove it from config to retire it permanently", name);
+            log.warn("scope '{}' is still listed in protean.worker.db.scopes — it becomes deployable again immediately "
+                    + "(the next deploy re-provisions it as an empty ACTIVE scope); remove it from that list to retire "
+                    + "it permanently", name);
         }
     }
 

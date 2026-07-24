@@ -20,10 +20,10 @@ import java.util.Set;
 
 /**
  * Host-side facade over the {@link ScopeStore} registry — the single point the deploy path, reconcile, and the scope
- * admin API consult for "which scopes exist / are they deployable". The authoritative set is
- * {@code ScopeStore.list()} unioned with the startup seed ({@code worker.db.scopes}, defaulting to a single
- * {@code "default"} scope), so a scope named in a persisted module descriptor is honored even if the registry entry
- * was lost (self-heal).
+ * admin API consult for "which scopes exist / are they deployable". The known set is {@code ScopeStore.list()} unioned
+ * with the startup seed ({@code worker.db.scopes}, defaulting to a single {@code "default"} scope). A seeded scope is
+ * therefore always known even if its registry record was never written or was lost — the seed acts as the durable
+ * floor, so a restart re-establishes the allowlist from config regardless of store state.
  *
  * <p>Provisioning/worker wiring is not owned here (that lives in the isolation strategies); this only tracks the
  * registry + allowlist.
