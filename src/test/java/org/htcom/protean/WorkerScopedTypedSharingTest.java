@@ -219,6 +219,25 @@ class WorkerScopedTypedSharingTest {
         org.junit.jupiter.api.Assertions.assertEquals(host1, platform.runtimeId("ss-consumer-2"));
     }
 
+    /**
+     * The scoped DB password must not reach the process table: it is what makes a tenant's database that tenant's, and
+     * {@code ps} is world-readable, so a local user could otherwise read another tenant's credential.
+     */
+    @Test
+    void the_scope_password_never_appears_on_the_worker_command_line() throws Exception {
+        platform.install(library("v1", "1.0.0"));
+        platform.install(consumer(1, "1.0.0"));
+        mockMvc.perform(get("/ss/1/label")).andExpect(status().isOk());   // the worker is up and using the creds
+
+        String commandLine = isolation.workerCommandLine("ss-consumer-1");
+        org.junit.jupiter.api.Assertions.assertFalse(commandLine.isBlank(),
+                "could not read the worker command line — the assertion below would be vacuous");
+        org.junit.jupiter.api.Assertions.assertFalse(commandLine.contains("spring.datasource.password"),
+                "the datasource password must travel in the secrets file, not on argv: " + commandLine);
+        org.junit.jupiter.api.Assertions.assertTrue(commandLine.contains("spring.config.import"),
+                "the worker must be pointed at its secrets file: " + commandLine);
+    }
+
     @Test
     void shared_lib_consumer_runs_in_a_scoped_worker() throws Exception {
         // ext.Widget is not on the host classpath — this succeeds only if the scoped worker resolves it via shared-lib-dir.

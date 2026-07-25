@@ -184,6 +184,8 @@ worker·container 격리에서 **scope 단위로 격리된 DB**를 자동 생성
 
 켜면 `DbScopeProvisioner` 가 admin 커넥션으로 **scope 마다** 전용 DB/스키마 + 전용 유저/롤 + 자기 영역으로 한정된 `GRANT` 를 만들고, 그 scope 접속 정보(url/username/password)를 worker/container 에 `spring.datasource.*` 로 주입한다. 워커는 그 자격으로만 접속하므로 다른 scope 의 DB 를 볼 수 없다.
 
+> **크리덴셜이 전달되는 방식.** 커맨드라인이 아니다. 프로세스 테이블은 누구나 읽을 수 있어 argv 에 scope 비밀번호가 있으면 같은 호스트의 다른 사용자가 읽을 수 있고, 컨테이너는 더 나쁘다 — `docker run` 인자가 컨테이너 수명 내내 `docker inspect` 에 남는다. 그래서 소유자 전용(`rw-------`) 파일에 쓰고 워커에는 `--spring.config.import=optional:file:…` 만 넘기며, 컨테이너에는 그 파일을 read-only 로 bind-mount 한다. 외부에 보이는 것은 경로뿐이다. 파일은 그 워커가 은퇴할 때 삭제되고, 이전 실행이 남긴 것은 기동 시 정리된다.
+
 ```yaml
 protean:
   worker:

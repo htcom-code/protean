@@ -184,6 +184,8 @@ Under worker or container isolation, Protean can auto-provision an **isolated DB
 
 When on, `DbScopeProvisioner` uses an admin connection to create, **per scope**, a dedicated DB/schema + a dedicated user/role + a `GRANT` scoped to its own area, and injects that scope's connection info (url/username/password) into the worker/container as `spring.datasource.*`. A worker connects only with those credentials, so one scope cannot see another scope's DB.
 
+> **How the credentials travel.** Not on the command line. The process table is world-readable, so a scoped password on argv could be read by any local user — and for a container it would be worse, since `docker run` arguments stay visible to `docker inspect` for the container's whole life. Protean writes them to an owner-only (`rw-------`) file and hands the worker `--spring.config.import=optional:file:…`; a container gets that file bind-mounted read-only. Only a path is ever visible externally. The file is deleted when its worker retires, and any left by a previous run is purged at startup.
+
 ```yaml
 protean:
   worker:

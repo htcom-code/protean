@@ -206,6 +206,26 @@ class ContainerScopedTypedSharingTest {
                 "co-located dependents that both adopted the update must report the same generation");
     }
 
+    /**
+     * Same contract as the worker track, one degree worse if broken: {@code docker run} arguments and environment are
+     * kept in the container's metadata, so a leaked credential stays readable via {@code docker inspect} for the
+     * container's whole life.
+     */
+    @Test
+    void the_scope_password_never_appears_in_the_container_metadata() throws Exception {
+        platform.install(library("v1", "1.0.0"));
+        platform.install(consumer(1, "1.0.0"));
+        mockMvc.perform(get("/cs/1/label")).andExpect(status().isOk());   // the container is up and using the creds
+
+        String metadata = isolation.inspectArgsAndEnv("cs-consumer-1");
+        org.junit.jupiter.api.Assertions.assertFalse(metadata.isBlank(),
+                "could not read the container metadata — the assertion below would be vacuous");
+        org.junit.jupiter.api.Assertions.assertFalse(metadata.contains("spring.datasource.password"),
+                "the datasource password must travel in the mounted secrets file, not in run args/env: " + metadata);
+        org.junit.jupiter.api.Assertions.assertTrue(metadata.contains("spring.config.import"),
+                "the container worker must be pointed at its mounted secrets file: " + metadata);
+    }
+
     @Test
     void shared_lib_consumer_runs_in_a_scoped_container() throws Exception {
         // ext.Widget is only in the bind-mounted shared-lib dir — succeeds only if the scoped container resolves it there.
