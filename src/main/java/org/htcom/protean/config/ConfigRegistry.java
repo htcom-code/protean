@@ -117,8 +117,10 @@ public class ConfigRegistry {
                 p -> p.getWorker().getDb().getAdminUrl(), (p, v) -> p.getWorker().getDb().setAdminUrl(v));
         str("worker.db.admin-username", ConfigTier.FUTURE,
                 p -> p.getWorker().getDb().getAdminUsername(), (p, v) -> p.getWorker().getDb().setAdminUsername(v));
+        // Masked on read (the admin credential can create/drop scope schemas and roles), but still settable so
+        // credential rotation works over the live surface — the setter keeps the real value.
         str("worker.db.admin-password", ConfigTier.FUTURE,
-                p -> p.getWorker().getDb().getAdminPassword(), (p, v) -> p.getWorker().getDb().setAdminPassword(v));
+                p -> mask(p.getWorker().getDb().getAdminPassword()), (p, v) -> p.getWorker().getDb().setAdminPassword(v));
         str("worker.sidecar.jar", ConfigTier.FUTURE,
                 p -> p.getWorker().getSidecar().getJar(), (p, v) -> p.getWorker().getSidecar().setJar(v));
         str("worker.sidecar.image", ConfigTier.FUTURE,
