@@ -82,7 +82,9 @@ public class RoleBasedAuthorizer implements ModuleActionAuthorizer {
 - `hmac`(기본) — 요청마다 timestamp + nonce + body 에 대한 HMAC-SHA256(메인↔워커 RPC 브리지의 `BridgeHmac` 프리미티브 재사용, 자체 토글/시크릿). 시계 오차 창(`protean.worker.admin-auth.hmac-window-ms`, 기본 30000ms) 밖 요청과 재사용된 nonce(워커별 in-memory 추적, 창 만료 시 정리)를 거부한다.
 - `token` — 정적 `Authorization: Bearer <secret>` 토큰.
 
-두 방식 모두 상수시간 비교(`MessageDigest.isEqual`)라 시크릿이 타이밍으로 새지 않는다. 시크릿(`protean.worker.admin-auth.secret`)은 명시적으로 고정(외부 관리)하거나, 비워두면 메인에서 JVM 수명당 한 번 랜덤 256-bit 토큰으로 자동 생성해 spawn 되는 각 워커/컨테이너에 주입한다. 전송 기밀성(TLS)은 범위 밖이다 — 이 플레인은 localhost/호스트 범위로 가정한다. 전체 키 표는 [03. 설정](03-configuration.ko.md) 참고.
+두 방식 모두 상수시간 비교(`MessageDigest.isEqual`)라 시크릿이 타이밍으로 새지 않는다. 시크릿(`protean.worker.admin-auth.secret`)은 명시적으로 고정(외부 관리)하거나, 비워두면 메인에서 JVM 수명당 한 번 랜덤 256-bit 토큰으로 자동 생성해 spawn 되는 각 워커/컨테이너에 주입한다. **시크릿은 커맨드라인이 아니라 파일로 전달된다** — 아래 주의 참고. 전송 기밀성(TLS)은 범위 밖이다 — 이 플레인은 localhost/호스트 범위로 가정한다. 전체 키 표는 [03. 설정](03-configuration.ko.md) 참고.
+
+> **시크릿은 워커 커맨드라인으로 넘기지 않는다.** 프로세스 테이블은 누구나 읽을 수 있어 argv 에 인증 시크릿이나 scope DB 비밀번호가 있으면 같은 호스트의 다른 사용자가 읽을 수 있고, 컨테이너는 더 나쁘다 — `docker run` 인자가 컨테이너 수명 내내 `docker inspect` 에 남는다. protean 은 소유자 전용(`rw-------`) 파일에 쓰고 워커에는 `--spring.config.import=optional:file:…` 만 넘기며, 컨테이너에는 그 파일을 read-only 로 bind-mount 한다. 외부에 보이는 것은 경로뿐이다. 파일은 워커 은퇴 시 삭제되고 이전 실행이 남긴 것은 기동 시 정리된다. scope DB 쪽은 [07. 데이터 접근](07-data-access.ko.md) 참고.
 
 ## 프로덕션 배포 권고
 

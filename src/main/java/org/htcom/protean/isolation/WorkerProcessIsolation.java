@@ -118,6 +118,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     private final Map<String, WorkerHandle> moduleToWorker = new ConcurrentHashMap<>();
     /** Argument list of the most recent spawn, handed to that worker's handle (spawn goes through one path). */
     private volatile List<String> lastLaunchCommand = List.of();
+    /** Per-worker secrets file (owner-only, handed over via --spring.config.import); removed when the worker retires. */
+    private final Map<UUID, Path> secretFiles = new ConcurrentHashMap<>();
     /** Bindings as reported by the worker that hosts each module — the main cannot observe them itself. */
     private final Map<String, org.htcom.protean.module.ModuleBindings> reportedBindings = new ConcurrentHashMap<>();
     private final Map<String, List<String>> modulePaths = new ConcurrentHashMap<>();
@@ -198,6 +200,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             if (reaped > 0) {
                 log.warn("startup: reaped {} orphan worker JVM(s) left by a previous unclean exit", reaped);
             }
+            WorkerSecretsFile.purgeStale();   // secrets files of workers from a previous run — reconcile respawns them
         } catch (RuntimeException e) {
             log.warn("startup orphan-worker reap failed (ignored): {}", e.toString());
         }
@@ -407,6 +410,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
                 h.retiring = true;   // intentional shutdown — suppress auto-restart on the exit callback
                 processes.add(h.process);
                 reaper.forget(h.id);   // graceful teardown → drop the orphan marker (no reap needed next start)
+                WorkerSecretsFile.delete(secretFiles.remove(h.id));
             }
             pool.clear();
             for (DebugWorkerHandle h : debugWorkers) {
@@ -536,6 +540,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             handle.retiring = true;     // intentional shutdown — no auto-restart
             handle.process.destroy();
             pool.remove(handle);
+            WorkerSecretsFile.delete(secretFiles.remove(handle.id));
         }
         // else: keep empty workers warm up to min-warm (for reuse)
     }
@@ -545,6 +550,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             handle.retiring = true;
             handle.process.destroyForcibly();
             pool.remove(handle);
+            WorkerSecretsFile.delete(secretFiles.remove(handle.id));
         }
     }
 
@@ -568,6 +574,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             }
             if (retireAfterGrace) {
                 oldHandle.process.destroy();
+                WorkerSecretsFile.delete(secretFiles.remove(oldHandle.id));
             } else {
                 synchronized (this) {
                     postUndeploy(oldHandle.port, moduleId);
@@ -668,11 +675,15 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             // The worker is also a protean app → it reads the same dir (shared host FS) as its own ModuleSharedLibs to compile/load shared-lib.
             command.add("--protean.module.shared-lib-dir=" + sharedLibDir);
         }
+        // Secrets never go on the command line: the process table is world-readable, so a scoped DB password or a
+        // shared auth secret on argv is readable by any local user. They are written to an owner-only file and handed
+        // over as --spring.config.import; only the path appears in argv (see WorkerSecretsFile).
+        Map<String, String> secrets = new LinkedHashMap<>();
         if (adminAuthEnabled && adminAuthSecret != null) {
             // Turn on the worker's /__admin/* auth filter and hand it the shared secret so it verifies the main's calls.
             command.add("--protean.worker.admin-auth.enabled=true");
-            command.add("--protean.worker.admin-auth.secret=" + adminAuthSecret);
             command.add("--protean.worker.admin-auth.mode=" + adminAuthMode);
+            secrets.put("protean.worker.admin-auth.secret", adminAuthSecret);
         }
         if (rpcBridge) {
             // Pass the bridge URL the worker will call the main shared beans through + the active flag
@@ -680,15 +691,15 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             command.add("--protean.bridge.url=http://localhost:" + portHolder.port());
             if (bridgeSecret != null) {
                 // Inject the shared secret + auth scheme so the worker can authenticate its calls to main /__bridge/*.
-                command.add("--protean.bridge.secret=" + bridgeSecret);
                 command.add("--protean.bridge.auth-mode=" + bridgeAuthMode);
+                secrets.put("protean.bridge.secret", bridgeSecret);
             }
         }
         if (scope != null) {
-            // auto-provision: pass the module-dedicated isolated DB scope creds (dedicated DB/schema + restricted user).
-            command.add("--spring.datasource.url=" + scope.url());
-            command.add("--spring.datasource.username=" + scope.username());
-            command.add("--spring.datasource.password=" + scope.password());
+            // auto-provision: hand over the scope-dedicated DB creds (dedicated DB/schema + restricted user).
+            secrets.put("spring.datasource.url", scope.url());
+            secrets.put("spring.datasource.username", scope.username());
+            secrets.put("spring.datasource.password", scope.password());
         } else {
             // Manual global scope, read live (Tier 2). If unset, the worker uses its own default H2 (separate JVM = isolation).
             String workerDatasourceUrl = props.getWorker().getDatasource().getUrl();
@@ -696,6 +707,12 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
                 command.add("--spring.datasource.url=" + workerDatasourceUrl);
             }
         }
+        if (!secrets.isEmpty()) {
+            Path secretsFile = WorkerSecretsFile.write(id.toString(), secrets);
+            secretFiles.put(id, secretsFile);
+            command.add("--spring.config.import=optional:file:" + secretsFile.toAbsolutePath());
+        }
+        // Snapshot after every argument is in place, so what a verification reads is exactly what was launched.
         lastLaunchCommand = List.copyOf(command);   // picked up by spawnAndReady for this worker's handle
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
