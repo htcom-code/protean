@@ -126,7 +126,7 @@ public class ProteanProperties {
         private java.util.List<String> authorizationServers = new java.util.ArrayList<>();
         /** Supported scopes (optional). */
         private java.util.List<String> scopesSupported = new java.util.ArrayList<>();
-        /** Bearer token delivery method (RFC 9728 {@code bearer_methods_supported}, default header). */
+        /** Bearer token delivery method (RFC 9728 bearer_methods_supported, default header). */
         private java.util.List<String> bearerMethodsSupported = new java.util.ArrayList<>(java.util.List.of("header"));
         public String getResource() { return resource; }
         public void setResource(String resource) { this.resource = resource; }
@@ -161,7 +161,7 @@ public class ProteanProperties {
         /** The main bridge URL to which the worker forwards shared-bean calls (injected into the worker process). */
         private String url;
         /**
-         * Require a shared-secret bearer token on {@code /__bridge/*} (opt-in, default off to preserve
+         * Require a shared-secret bearer token on /__bridge/* (opt-in, default off to preserve
          * existing behavior). When on, the main side generates/uses a token and injects it into spawned
          * workers, and unauthenticated calls are rejected with 401.
          */
@@ -173,7 +173,7 @@ public class ProteanProperties {
          */
         private String secret;
         /**
-         * Authentication scheme: {@code token} (a static bearer token, default) or {@code hmac}
+         * Authentication scheme: "token" (a static bearer token, default) or "hmac"
          * (per-request HMAC-SHA256 over timestamp + nonce + body, which additionally defends against
          * replay and body tampering). Both share the same symmetric secret.
          */
@@ -219,7 +219,7 @@ public class ProteanProperties {
             /**
              * When true, live shared-lib uploads (the put-jar surface) must be signed with a trusted key — the opt-in
              * Ed25519 seam for untrusted/relay submissions. Off by default (the trusted-developer
-             * model relies on consumer authz). Reuses {@link #keys} as the trust store.
+             * model relies on consumer authz). Reuses protean.gate.signature.keys as the trust store.
              */
             private volatile boolean sharedLibRequired = false;
             /** Trusted public keys: keyId -> Base64(X.509 Ed25519 public key). */
@@ -269,23 +269,23 @@ public class ProteanProperties {
         private String sharedLibDir = "";
         /**
          * Directory for the server-managed live shared-lib store (the put-jar surface). Jars uploaded at runtime are
-         * persisted here (separate from the read-only {@link #sharedLibDir} seed) and folded, on top of the seed, into
-         * each new shared-lib generation. Empty = default ({@code java.io.tmpdir/protean-shared-libs}). The path is a
+         * persisted here (separate from the read-only protean.module.shared-lib-dir seed) and folded, on top of the
+         * seed, into each new shared-lib generation. Empty = default (java.io.tmpdir/protean-shared-libs). The path is a
          * restart artifact; the jar set it holds is live.
          */
         private String sharedLibStoreDir = "";
         /**
          * When a shared-lib generation is published (a put-jar deploy/remove changed a jar in use), eagerly rebind the
-         * ACTIVE modules that use the changed jar onto the new generation (Plan A). {@code true}
-         * (default) keeps the live system consistent (zero-downtime principle); {@code false} leaves modules on their
+         * ACTIVE modules that use the changed jar onto the new generation (Plan A). true
+         * (default) keeps the live system consistent (zero-downtime principle); false leaves modules on their
          * bound generation until they redeploy (lazy). Read live.
          */
         private volatile boolean eagerSharedLibInvalidation = true;
         /**
          * When a library module republishes its generation (shared-module typed sharing), eagerly propagate it to the
-         * ACTIVE dependents that {@code use} it — Plan A1 (retarget onto the new generation without recompiling when
-         * the change is binary-compatible) or Plan A2 (recompile). {@code true} (default) keeps the live system
-         * consistent (zero-downtime principle); {@code false} leaves dependents on their bound generation until they
+         * ACTIVE dependents that declare it in "uses" — Plan A1 (retarget onto the new generation without recompiling
+         * when the change is binary-compatible) or Plan A2 (recompile). true (default) keeps the live system
+         * consistent (zero-downtime principle); false leaves dependents on their bound generation until they
          * redeploy. Read live.
          */
         private volatile boolean eagerSharedModuleInvalidation = true;
@@ -318,8 +318,8 @@ public class ProteanProperties {
          * Thread-pool size for the parallel pre-compile phase of startup reconcile. On boot the platform
          * recompiles every ACTIVE module from source (javac dominates — ~96% of per-module cost); pre-compiling
          * into the shared compile cache in parallel lets the subsequent serial deploy hit the fast-path (no javac).
-         * {@code 0} = auto ({@link Runtime#availableProcessors()}), {@code 1} = fully serial (legacy behavior,
-         * kill switch), {@code N} = cap at N threads. Boot-time only (not live-reloadable).
+         * 0 = auto (Runtime.availableProcessors()), 1 = fully serial (legacy behavior,
+         * kill switch), N = cap at N threads. Boot-time only (not live-reloadable).
          */
         private int compileParallelism = 0;
         public int getCompileParallelism() { return compileParallelism; }
@@ -328,9 +328,9 @@ public class ProteanProperties {
         /**
          * Reuse one javac file manager per worker thread across the parallel pre-compile phase. The compile
          * classpath is identical and read-only for every module, so its jar index is scanned once per thread
-         * instead of once per compile — cutting the classpath rescan that caps parallel efficiency. {@code true}
-         * (default) enables it; {@code false} restores the per-call file manager (kill switch). Only takes
-         * effect when {@link #compileParallelism} runs the parallel phase. Boot-time only (not live-reloadable).
+         * instead of once per compile — cutting the classpath rescan that caps parallel efficiency. true
+         * (default) enables it; false restores the per-call file manager (kill switch). Only takes effect when
+         * protean.reconcile.compile-parallelism runs the parallel phase. Boot-time only (not live-reloadable).
          */
         private boolean reuseFileManager = true;
         public boolean isReuseFileManager() { return reuseFileManager; }
@@ -344,9 +344,9 @@ public class ProteanProperties {
         /** Storage directory for the filesystem backend. */
         private String dir = System.getProperty("java.io.tmpdir") + "/protean-modules";
         /**
-         * JDBC dialect id for the jdbc backend ({@code h2}|{@code mysql}|{@code postgresql}|custom). Empty (the
+         * JDBC dialect id for the jdbc backend (h2|mysql|postgresql|custom). Empty (the
          * default) auto-detects from the database product name; set it to override detection or to select a custom
-         * {@code ModuleStoreDialect} bean. Only relevant when {@code backend=jdbc}.
+         * ModuleStoreDialect bean. Only relevant when protean.module-store.backend=jdbc.
          */
         private String dialect = "";
         public String getBackend() { return backend; }
@@ -363,10 +363,10 @@ public class ProteanProperties {
         /** Ring buffer capacity (most recent N requests). */
         private volatile int capacity = 200;
         /**
-         * Rolling window (ms) for the console summary aggregate pushed on the SSE {@code summary} event: the current
-         * window is {@code [now-windowMs, now]} and its trend compares against the previous equal window
-         * {@code [now-2*windowMs, now-windowMs]}. Read live. Independent of {@code metrics.enabled} (computed from the
-         * trace ring buffer, not the per-module aggregator), so window accuracy is bounded by {@link #capacity}.
+         * Rolling window (ms) for the console summary aggregate pushed on the SSE "summary" event: the current
+         * window is [now-windowMs, now] and its trend compares against the previous equal window
+         * [now-2*windowMs, now-windowMs]. Read live. Independent of protean.metrics.enabled (computed from the
+         * trace ring buffer, not the per-module aggregator), so window accuracy is bounded by protean.trace.capacity.
          */
         private volatile long summaryWindowMs = 60_000;
 
@@ -408,12 +408,13 @@ public class ProteanProperties {
          * Maximum modules packed into one worker JVM (1 = a dedicated JVM per module). Default 128 — sized for
          * production density (a worker JVM's ~200-300MB base overhead dominates cost at small values, so few workers
          * each packing many modules is far cheaper). Crash blast-radius grows with this, so lower it in development.
-         * Note: {@code worker.db.auto-provision=true} currently forces this to 1 (a dedicated DB scope per module).
+         * Applies to both worker and container modes; under protean.worker.db.auto-provision it is the per-scope
+         * packing capacity (1 = one worker/container per module).
          */
         private int modulesPerWorker = 128;
         /**
-         * Extra JVM arguments prepended to each spawned worker JVM (e.g. {@code ["-Xmx512m"]}). Container workers get a
-         * cgroup-relative default ({@code -XX:MaxRAMPercentage=75.0}) already; use this to size heap for the
+         * Extra JVM arguments prepended to each spawned worker JVM (e.g. ["-Xmx512m"]). Container workers get a
+         * cgroup-relative default (-XX:MaxRAMPercentage=75.0) already; use this to size heap for the
          * process/embed/sidecar tracks, which have no memory bound (a percentage would be relative to the whole host).
          * Applied to the next worker spawn.
          */
@@ -424,7 +425,7 @@ public class ProteanProperties {
         private boolean autoRestart = false;
         /**
          * Grace period (ms) each worker JVM is given to shut down gracefully (SIGTERM) on main shutdown before it is
-         * force-killed. Default 5000. {@code 0} = force-kill immediately (skip the graceful wait); negative is invalid
+         * force-killed. Default 5000. 0 = force-kill immediately (skip the graceful wait); negative is invalid
          * and is treated as 0.
          */
         private long shutdownGraceMs = 5000;
@@ -474,14 +475,14 @@ public class ProteanProperties {
      * but on its own toggle/secret, independent of {@code protean.bridge.*}.
      */
     public static class AdminAuth {
-        /** Require auth on mutating {@code /__admin/*} calls. When on, the main generates/uses a secret and injects it
+        /** Require auth on mutating /__admin/* calls. When on, the main generates/uses a secret and injects it
          * (with this flag and the mode) into spawned workers; unauthenticated mutating calls are rejected with 401. */
         private boolean enabled = false;
         /** The shared secret. Blank + enabled → the main auto-generates one per JVM lifetime and injects it into workers.
          * Set explicitly to pin a stable, externally managed secret. On a worker it is the injected value. */
         private String secret;
-        /** {@code hmac} (per-request HMAC-SHA256 over timestamp + nonce + body, with replay/tamper defense — the default,
-         * strongest option) or {@code token} (a static bearer token). */
+        /** "hmac" (per-request HMAC-SHA256 over timestamp + nonce + body, with replay/tamper defense — the default,
+         * strongest option) or "token" (a static bearer token). */
         private volatile String mode = "hmac";
         /** hmac mode: max accepted clock skew (ms) between the sender timestamp and the worker clock. */
         private volatile long hmacWindowMs = 30_000;
@@ -547,7 +548,7 @@ public class ProteanProperties {
         private volatile String adminPassword;
         /**
          * Seed allowlist of DB scopes (tenants) created at startup. A module deploy must bind to one of these via its
-         * {@code scope}. Empty → a single {@code "default"} scope. New scopes are added at runtime via the scope admin
+         * declared scope. Empty → a single "default" scope. New scopes are added at runtime via the scope admin
          * API; the deployer cannot create scopes.
          */
         private List<String> scopes = List.of();

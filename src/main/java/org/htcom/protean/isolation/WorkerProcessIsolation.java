@@ -198,8 +198,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     }
 
     /**
-     * Modules per worker, read live (Tier 2 — applies to the next spawn). With auto-provision a dedicated DB per
-     * With auto-provision, modules of the same scope pack into that scope's worker(s) up to this cap.
+     * Modules per worker, read live (Tier 2 — applies to the next spawn). With auto-provision, modules of the same
+     * scope pack into that scope's worker(s) up to this cap (the isolation boundary is the scope, not the module).
      */
     private int capacity() {
         return Math.max(1, props.getWorker().getModulesPerWorker());
