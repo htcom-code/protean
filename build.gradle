@@ -348,7 +348,11 @@ if (group == 'org.htcom') {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    // The PoC gate is a separate task (below) with its own CI job: it crosses isolation modes with auto-provision and
+    // needs Docker + a real database, so it must not lengthen the regression suite or fail it on a missing prerequisite.
+    useJUnitPlatform {
+        excludeTags 'poc'
+    }
     retry {
         // CI only: retry a failed test up to twice. Locally maxRetries=0 so flakiness stays visible to devs.
         maxRetries = providers.environmentVariable('CI').isPresent() ? 2 : 0
@@ -364,6 +368,30 @@ tasks.named('test') {
     testLogging {
         events 'passed', 'failed', 'skipped'
         showStandardStreams = true
+    }
+}
+
+// The PoC application gate. Runs the criteria suite across isolation-mode x auto-provision combinations and writes
+// build/poc/poc-report.md — the verdict that authorizes applying a change. Separate from `test` on purpose: it is a
+// gate, not a regression suite, and a SKIPPED criterion in it means "unverified", never "fine".
+//   ./gradlew poc
+tasks.register('poc', Test) {
+    group = 'verification'
+    description = 'PoC application gate: criteria x combinations, verdict in build/poc/poc-report.md'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'poc'
+    }
+    // No retries: a flaky verdict is not a verdict. A criterion that only passes on the second try is a finding.
+    jvmArgs '-XX:SoftRefLRUPolicyMSPerMB=0'
+    maxHeapSize = '512m'
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+    doFirst {
+        delete layout.buildDirectory.dir('poc')   // last run's verdict must never be mistaken for this run's
     }
 }
 

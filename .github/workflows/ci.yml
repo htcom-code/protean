@@ -11,7 +11,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "poc/**"]
     paths:
       - "**/*.java"
       - "**/*.gradle"
@@ -25,6 +25,10 @@ on:
   # check stuck "Expected — waiting for status" and block the merge. The
   # ci-complete job below is the single stable status to mark required.
   pull_request:
+  # The PoC gate is deliberately not on every PR: it crosses isolation modes with auto-provision, needs Docker plus a
+  # real database, and is a release-style gate rather than a per-commit check. Run it on demand, or by pushing the
+  # branch that carries a candidate batch as poc/<name>.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -89,6 +93,32 @@ jobs:
           ./gradlew :test --console=plain
           --tests "org.htcom.protean.OsIsolationTest"
           --tests "org.htcom.protean.Container*"
+
+  # The PoC application gate (knowledge/rules/poc-first-application-gate). Runs only when asked: manually, or on a
+  # poc/** branch carrying a candidate batch. Uploads the verdict table as an artifact — a SKIPPED criterion in it means
+  # UNVERIFIED, so the verdict is read, not assumed from a green checkmark.
+  poc:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/poc/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: bootJar (container combinations mount the host boot jar)
+        run: ./gradlew bootJar --console=plain
+      - name: PoC gate
+        run: ./gradlew poc --console=plain
+      - name: upload the verdict
+        if: always()   # a failed gate is exactly when the verdict must be readable
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc-verdict
+          path: build/poc/
 
   # publish the library to GitHub Packages. Only on pushes to main (never on PRs,
   # never on forks), and only after both gates pass. build.gradle registers the
