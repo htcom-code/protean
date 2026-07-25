@@ -12,12 +12,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.htcom.protean.autoconfigure.ProteanProperties;
 import org.htcom.protean.bridge.BridgeHmac;
 import org.htcom.protean.dynamic.DynamicEndpointRegistrar;
+import org.htcom.protean.module.ModuleBindings;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModuleStore;
 import org.htcom.protean.module.SharedLibStore;
 import org.htcom.protean.worker.WorkerSharedLibReceiver;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -32,6 +35,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -46,6 +50,8 @@ import java.util.Set;
 @Component
 @Profile("!worker")
 public class WorkerAdminClient {
+
+    private static final Logger log = LoggerFactory.getLogger(WorkerAdminClient.class);
 
     /**
      * Per-request ceiling on a worker control-plane call. The heaviest operation is a redeploy that recompiles a
@@ -117,6 +123,32 @@ public class WorkerAdminClient {
     /** POST {@code /__admin/redeploy}: recompile+hot-swap a module in place against the worker's current generation. */
     public List<DynamicEndpointRegistrar.RouteInfo> redeploy(int port, ModuleDescriptor descriptor) {
         return postForRoutes(port, "/__admin/redeploy", descriptor);
+    }
+
+    /**
+     * GET {@code /__admin/bindings}: the generation bindings of every module loaded in that worker, as the worker
+     * itself observes them. One call covers the whole worker. Never throws — an unreachable or shutting-down worker
+     * yields an empty map, so the caller keeps whatever it already knew rather than replacing it with a guess.
+     */
+    public Map<String, ModuleBindings> bindings(int port) {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/__admin/bindings"))
+                .timeout(REQUEST_TIMEOUT)
+                .GET();
+        applyAdminAuth(b, new byte[0]);
+        try {
+            HttpResponse<String> resp = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() / 100 != 2) {
+                log.warn("worker /__admin/bindings response {} on port {} — generation reporting left unchanged",
+                        resp.statusCode(), port);
+                return Map.of();
+            }
+            return mapper.readValue(resp.body(), mapper.getTypeFactory()
+                    .constructMapType(LinkedHashMap.class, String.class, ModuleBindings.class));
+        } catch (Exception e) {
+            log.warn("worker /__admin/bindings request failed on port {} — generation reporting left unchanged: {}",
+                    port, e.toString());
+            return Map.of();
+        }
     }
 
     /** POST {@code /__admin/undeploy/{id}} (no body): release a single module in the worker. */

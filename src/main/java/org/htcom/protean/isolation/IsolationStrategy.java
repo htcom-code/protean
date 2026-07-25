@@ -10,6 +10,8 @@ package org.htcom.protean.isolation;
 
 import org.htcom.protean.module.ModuleDescriptor;
 
+import java.util.List;
+
 /**
  * SPI for module isolation/execution strategies. The library consumer selects the mode.
  *
@@ -78,6 +80,23 @@ public interface IsolationStrategy {
      * @return an opaque host id, or null if unknown
      */
     default String runtimeId(String moduleId) {
+        return null;
+    }
+
+    /**
+     * The shared-lib (jar) parent-tier generation the module is <b>actually</b> bound to in the runtime that hosts it,
+     * or null when this strategy does not know (not deployed here, or the hosting runtime has not reported yet). The
+     * strategy owns this because only the hosting JVM observes it — the main knows what it pushed, not what stuck.
+     */
+    default Long boundGeneration(String moduleId) {
+        return null;
+    }
+
+    /**
+     * The library generations the module is actually bound to via {@code uses} in the runtime that hosts it, or null
+     * when this strategy does not know. Empty list = it uses no libraries; null = unknown (do not present as "none").
+     */
+    default List<Long> boundLibraryGenerations(String moduleId) {
         return null;
     }
 }

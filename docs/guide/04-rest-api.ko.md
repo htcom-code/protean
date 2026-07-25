@@ -71,15 +71,15 @@ ACTIVE 모듈 상태 목록.
 | `kind` | `NORMAL` \| `LIBRARY` — descriptor 를 그대로 반영(항상 존재). `LIBRARY` 는 라우트를 등록하지 않고 `exports` 를 parent-tier generation 으로 발행 |
 | `exports` | 이 모듈이 공유 타입으로 발행하는 패키지(`LIBRARY` 일 때만 비어있지 않음) |
 | `uses` | 이 모듈이 링크하는 `LIBRARY` 모듈들의 id |
-| `boundGeneration` | 라이브 ClassLoader 가 바인딩된 shared-lib(네이티브 jar) generation id(로드 안 됐으면 `null`). **in-process 모듈에만 유효** — 아래 주의 참고 |
-| `boundLibraryGenerations` | `uses` 를 통해 바인딩된 라이브러리 generation id들(sticky fallback 시 라이브러리 현재 generation 보다 뒤처질 수 있음; 없거나 미로드면 빈 배열). **in-process 모듈에만 유효** — 아래 주의 참고 |
-| `libraryGeneration` | `LIBRARY` 전용: 자신이 현재 발행 중인 generation id(그 외 `null`). `LIBRARY` 는 항상 in-process 라 이 값은 늘 정확하다 |
+| `boundGeneration` | 라이브 ClassLoader 가 바인딩된 shared-lib(네이티브 jar) generation id(로드 안 됐으면 `null`) |
+| `boundLibraryGenerations` | `uses` 를 통해 바인딩된 라이브러리 generation id들(sticky fallback 시 라이브러리 현재 generation 보다 뒤처질 수 있음; 없거나 미로드면 빈 배열) |
+| `libraryGeneration` | `LIBRARY` 전용: 자신이 현재 발행 중인 generation id(그 외 `null`) |
 | `scope` | 이 모듈이 선언한 DB scope(tenant)를 descriptor 에서 그대로 반영(미선언이면 `null` — `worker.db.auto-provision` 하에서는 필수) |
 | `runtimeId` | 모듈을 호스팅하는 런타임의 불투명(opaque) id: in-process 는 `main`, 그 외는 worker/container 식별자. **같은 값을 보고하는 두 모듈은 한 JVM 을 공유한다** — 이 값으로 묶으면 플랫폼이 어떻게 패킹했는지 보인다(auto-provision 하에서는 그 묶음이 곧 scope 경계). 미배포면 `null`. 값을 파싱해 쓰지 말 것 |
 
 `kind`/`exports`/`uses`/`scope` 는 descriptor 반영이라 항상 존재한다. `boundGeneration`/`boundLibraryGenerations`/`libraryGeneration`/`runtimeId` 은 라이브 런타임 관측 필드로, `GET /platform/modules` 와 `GET /platform/modules/{id}` 에서는 채워지지만 deploy/update/rollback/approve 응답(로드 이전의 descriptor 를 보고)에서는 `null`/빈 값이다.
 
-> **두 generation 필드는 in-process 모듈만 서술한다.** 이 값은 main JVM 의 컴파일러 상태에서 읽는데, worker·container 격리 모듈은 **자기 JVM 안에서** 컴파일·링크한다 — 그래서 라이브 rebind 후 라우트는 새 generation 을 서비스하는데 이 필드는 install 시점 게이트 컴파일 값을 그대로 보고한다. worker/container 모드에서 전파를 확인하려면 이 필드가 아니라 **라우트 동작**이나 서버 로그(`SharedModuleInvalidator`/`SharedLibInvalidator` 라인)를 봐라. 타입 공유 모델은 [02. 모듈 작성 §8](02-module-authoring.ko.md) 참고.
+> **두 generation 필드는 그 모듈을 호스팅하는 런타임이 보고한 값**이라 모든 격리 모드에서 정확하다. in-process 는 main JVM 자신의 컴파일러가 그 런타임이고, worker·container 격리 모듈은 **자기 JVM 안에서** 컴파일·링크한 뒤 제어평면으로 자기 바인딩을 보고하며 main 이 deploy·hot-swap·generation 전파 직후 그것을 갱신한다. 따라서 **실제로 무엇이 남았는지**를 보여준다 — 같은 워커의 형제 모듈은 전진했는데 자기 게이트가 실패해 이전 generation 에 고정된(Plan B) dependent 도 그대로 드러난다. 호스팅 런타임이 아직 보고하지 않았거나 도달 불가하면 추측 대신 `null`/빈 배열이 된다. 타입 공유 모델은 [02. 모듈 작성 §8](02-module-authoring.ko.md) 참고.
 
 ### GET `/platform/modules/{id}`
 

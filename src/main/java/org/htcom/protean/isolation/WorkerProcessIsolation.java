@@ -114,6 +114,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
 
     private final List<WorkerHandle> pool = new ArrayList<>();              // guarded by this
     private final Map<String, WorkerHandle> moduleToWorker = new ConcurrentHashMap<>();
+    /** Bindings as reported by the worker that hosts each module — the main cannot observe them itself. */
+    private final Map<String, org.htcom.protean.module.ModuleBindings> reportedBindings = new ConcurrentHashMap<>();
     private final Map<String, List<String>> modulePaths = new ConcurrentHashMap<>();
     private final Map<String, ModuleDescriptor> moduleDescriptors = new ConcurrentHashMap<>();
 
@@ -245,6 +247,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         moduleToWorker.put(descriptor.id(), handle);
         modulePaths.put(descriptor.id(), paths);
         moduleDescriptors.put(descriptor.id(), descriptor);
+        refreshBindings(handle);
         log.info("worker module deploy: {} → port {} ({} workers, {} modules in this worker)",
                 descriptor.id(), handle.port, pool.size(), handle.modules.size());
     }
@@ -279,6 +282,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             modulePaths.put(descriptor.id(), newPaths);
             moduleDescriptors.put(descriptor.id(), descriptor);
             oldHandle.modules.remove(descriptor.id());
+            refreshBindings(newHandle);
             log.info("worker hot-swap: {} → port {} (draining old port {})",
                     descriptor.id(), newHandle.port, oldHandle.port);
         } catch (RuntimeException e) {
@@ -296,6 +300,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         }
         List<String> paths = modulePaths.remove(moduleId);
         moduleDescriptors.remove(moduleId);
+        reportedBindings.remove(moduleId);
         if (paths != null) {
             for (String path : paths) {
                 proxy.unregister(path);
@@ -316,6 +321,38 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
     public String runtimeId(String moduleId) {
         WorkerHandle handle = moduleToWorker.get(moduleId);
         return handle == null ? null : "worker:" + handle.id;
+    }
+
+    /**
+     * Refreshes the reported bindings of every module in this worker. Called after each control-plane write (deploy,
+     * hot-swap, generation propagation), so the admin surface is accurate without putting a worker call on the read
+     * path. One call per worker, not per module. A worker that cannot answer leaves the previous values in place.
+     */
+    private void refreshBindings(WorkerHandle handle) {
+        Map<String, org.htcom.protean.module.ModuleBindings> reported = admin.bindings(handle.port);
+        if (reported.isEmpty()) {
+            return;
+        }
+        for (String moduleId : List.copyOf(handle.modules)) {
+            org.htcom.protean.module.ModuleBindings b = reported.get(moduleId);
+            if (b != null) {
+                reportedBindings.put(moduleId, b);
+            }
+        }
+    }
+
+    /** The jar generation the hosting worker reports for the module (null until it has reported). */
+    @Override
+    public Long boundGeneration(String moduleId) {
+        org.htcom.protean.module.ModuleBindings b = reportedBindings.get(moduleId);
+        return b == null ? null : b.boundGeneration();
+    }
+
+    /** The library generations the hosting worker reports for the module (null until it has reported). */
+    @Override
+    public List<Long> boundLibraryGenerations(String moduleId) {
+        org.htcom.protean.module.ModuleBindings b = reportedBindings.get(moduleId);
+        return b == null ? null : b.boundLibraryGenerations();
     }
 
     /** For tests: force-kill the worker hosting the module (crash simulation). The proxy route is kept → 502. */
@@ -766,6 +803,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
                         + "prior generation. cause: {}", moduleId, handle.port, e.toString());
             }
         }
+        refreshBindings(handle);   // jar generations moved per module — re-read which ones actually rebound
     }
 
     /**
@@ -834,6 +872,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
                         + "on its prior generation. cause: {}", moduleId, handle.port, e.toString());
             }
         }
+        refreshBindings(handle);   // some dependents moved, some stayed sticky — re-read what actually stuck
     }
 
     /** Snapshot of the live worker pool taken under the monitor; the HTTP fan-out then runs lock-free. */

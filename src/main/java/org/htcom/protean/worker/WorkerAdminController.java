@@ -9,9 +9,11 @@
 package org.htcom.protean.worker;
 
 import org.htcom.protean.bridge.WorkerBridgeRegistrar;
+import org.htcom.protean.compiler.RuntimeCompiler;
 import org.htcom.protean.dynamic.DynamicEndpointRegistrar;
 import org.htcom.protean.gate.PromotionPipeline;
 import org.htcom.protean.isolation.InProcessIsolation;
+import org.htcom.protean.module.ModuleBindings;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
@@ -21,7 +23,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Admin API of the worker JVM (active only on the worker profile).
@@ -38,16 +42,35 @@ public class WorkerAdminController {
     private final ObjectProvider<WorkerBridgeRegistrar> bridgeRegistrar;
     private final WorkerSharedLibReceiver sharedLibReceiver;
     private final PromotionPipeline promotionPipeline;
+    private final RuntimeCompiler compiler;
 
     public WorkerAdminController(InProcessIsolation isolation, DynamicEndpointRegistrar registrar,
                                  ObjectProvider<WorkerBridgeRegistrar> bridgeRegistrar,
                                  WorkerSharedLibReceiver sharedLibReceiver,
-                                 PromotionPipeline promotionPipeline) {
+                                 PromotionPipeline promotionPipeline, RuntimeCompiler compiler) {
         this.isolation = isolation;
         this.registrar = registrar;
         this.bridgeRegistrar = bridgeRegistrar;
         this.sharedLibReceiver = sharedLibReceiver;
         this.promotionPipeline = promotionPipeline;
+        this.compiler = compiler;
+    }
+
+    /**
+     * Reports the generation bindings of every module loaded in this worker. The main cannot observe them — a worker
+     * module compiles and links here, not there — so the main refreshes this after each control-plane write and serves
+     * it on the admin surface. Read-only and cheap (two map lookups per module), and returns the whole worker at once
+     * so a propagation fan-out costs one call per worker rather than one per module.
+     */
+    @GetMapping("/__admin/bindings")
+    public Map<String, ModuleBindings> bindings() {
+        Map<String, ModuleBindings> out = new LinkedHashMap<>();
+        for (String moduleId : compiler.boundModuleIds()) {
+            out.put(moduleId, new ModuleBindings(
+                    compiler.boundGeneration(moduleId).stream().boxed().findFirst().orElse(null),
+                    compiler.boundLibraryGenerations(moduleId)));
+        }
+        return out;
     }
 
     @GetMapping("/__admin/health")

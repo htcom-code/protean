@@ -193,10 +193,25 @@ class WorkerScopedTypedSharingTest {
                 org.htcom.protean.web.ModuleStatus.from(platform.find("ss-consumer-1").orElseThrow(), "worker").scope(),
                 "the declared scope must be visible on the status surface");
 
+        // The generations are reported by the worker that hosts the modules, not guessed from the main's own compile.
+        List<Long> before1 = platform.boundLibraryGenerations("ss-consumer-1");
+        org.junit.jupiter.api.Assertions.assertFalse(before1.isEmpty(),
+                "a worker consumer of a library must report the library generation it is bound to");
+
         // A live library update propagates to BOTH co-located dependents in the packed worker — no restart, no manual redeploy.
         platform.update(library("v2", "2.0.0"));
         mockMvc.perform(get("/ss/1/label")).andExpect(status().isOk()).andExpect(content().string("c1:v2"));
         mockMvc.perform(get("/ss/2/label")).andExpect(status().isOk()).andExpect(content().string("c2:v2"));
+
+        // …and the admin surface follows the rebind instead of freezing at the install-time value: the route serving v2
+        // while the status still reported the old generation is the reporting defect this asserts against.
+        List<Long> after1 = platform.boundLibraryGenerations("ss-consumer-1");
+        List<Long> after2 = platform.boundLibraryGenerations("ss-consumer-2");
+        org.junit.jupiter.api.Assertions.assertTrue(after1.stream().mapToLong(Long::longValue).max().orElse(-1)
+                        > before1.stream().mapToLong(Long::longValue).max().orElse(-1),
+                "the reported library generation must advance with the rebind: " + before1 + " → " + after1);
+        org.junit.jupiter.api.Assertions.assertEquals(after1, after2,
+                "co-located dependents that both adopted the update must report the same generation");
 
         // The rebind kept them co-located (in-place recompile, same worker) — a regression here would mean a silent
         // re-placement, which is exactly what the runtimeId grouping exists to make visible.

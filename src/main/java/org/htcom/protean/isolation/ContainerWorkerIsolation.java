@@ -112,6 +112,8 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
 
     private final List<Container> pool = new ArrayList<>();               // guarded by this
     private final Map<String, Container> moduleToContainer = new ConcurrentHashMap<>();
+    /** Bindings as reported by the container that hosts each module — the main cannot observe them itself. */
+    private final Map<String, org.htcom.protean.module.ModuleBindings> reportedBindings = new ConcurrentHashMap<>();
     private final Map<String, List<String>> modulePaths = new ConcurrentHashMap<>();
     private final Map<String, ModuleDescriptor> moduleDescriptors = new ConcurrentHashMap<>();
     private final AtomicInteger seq = new AtomicInteger();
@@ -202,6 +204,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         moduleToContainer.put(descriptor.id(), c);
         modulePaths.put(descriptor.id(), paths);
         moduleDescriptors.put(descriptor.id(), descriptor);
+        refreshBindings(c);
         log.info("container module deploy: {} → {} (host port {}, {} containers, {} modules in this container)",
                 descriptor.id(), c.name, c.hostPort, pool.size(), c.modules.size());
     }
@@ -246,11 +249,13 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             throw new IllegalStateException("container hot-swap failed (previous version retained): " + descriptor.id(), e);
         }
         scheduleDrainCleanup(oldC, descriptor.id());
+        refreshBindings(newC);
         log.info("container zero-downtime hot-swap: {} → {} (draining old {})", descriptor.id(), newC.name, oldC.name);
     }
 
     @Override
     public synchronized void undeploy(String moduleId) {
+        reportedBindings.remove(moduleId);
         Container c = moduleToContainer.remove(moduleId);
         if (c == null) {
             return;
@@ -300,6 +305,38 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     public String runtimeId(String moduleId) {
         String name = containerName(moduleId);
         return name == null ? null : "container:" + name;
+    }
+
+    /** The jar generation the hosting container reports for the module (null until it has reported). */
+    @Override
+    public Long boundGeneration(String moduleId) {
+        org.htcom.protean.module.ModuleBindings b = reportedBindings.get(moduleId);
+        return b == null ? null : b.boundGeneration();
+    }
+
+    /** The library generations the hosting container reports for the module (null until it has reported). */
+    @Override
+    public List<Long> boundLibraryGenerations(String moduleId) {
+        org.htcom.protean.module.ModuleBindings b = reportedBindings.get(moduleId);
+        return b == null ? null : b.boundLibraryGenerations();
+    }
+
+    /**
+     * Refreshes the reported bindings of every module in this container, after each control-plane write. See
+     * {@code WorkerProcessIsolation.refreshBindings} — same contract: one call per container, and a container that
+     * cannot answer leaves the previous values in place.
+     */
+    private void refreshBindings(Container c) {
+        Map<String, org.htcom.protean.module.ModuleBindings> reported = admin.bindings(c.hostPort);
+        if (reported.isEmpty()) {
+            return;
+        }
+        for (String moduleId : List.copyOf(c.modules)) {
+            org.htcom.protean.module.ModuleBindings b = reported.get(moduleId);
+            if (b != null) {
+                reportedBindings.put(moduleId, b);
+            }
+        }
     }
 
     /** For tests: number of live containers in the pool. */
@@ -684,6 +721,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             }
             try {
                 admin.redeploy(c.hostPort, descriptor);   // Plan A2: in-place recompile against the new generation
+                refreshBindings(c);
             } catch (RuntimeException e) {
                 log.warn("container shared-lib rebind failed for '{}' in {} — Plan B (sticky): it stays on its "
                         + "prior generation. cause: {}", moduleId, c.name, e.toString());
@@ -714,6 +752,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             }
             try {
                 admin.redeploy(c.hostPort, dependent);   // recompile the dependent against the new library gen
+                refreshBindings(c);
             } catch (RuntimeException e) {
                 log.warn("container library-dependent rebind failed for '{}' in {} — Plan B (sticky): it stays "
                         + "on its prior generation. cause: {}", moduleId, c.name, e.toString());

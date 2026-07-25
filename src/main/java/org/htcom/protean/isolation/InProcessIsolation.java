@@ -180,4 +180,16 @@ public class InProcessIsolation implements IsolationStrategy {
     public String runtimeId(String moduleId) {
         return "main";
     }
+
+    /** This JVM hosts the module, so its own compiler state is the authoritative binding. */
+    @Override
+    public Long boundGeneration(String moduleId) {
+        return compiler.boundGeneration(moduleId).stream().boxed().findFirst().orElse(null);
+    }
+
+    /** As above: read from the compiler that actually linked the module. */
+    @Override
+    public java.util.List<Long> boundLibraryGenerations(String moduleId) {
+        return compiler.boundLibraryGenerations(moduleId);
+    }
 }
