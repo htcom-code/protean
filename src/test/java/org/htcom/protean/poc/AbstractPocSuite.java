@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
@@ -64,6 +65,15 @@ public abstract class AbstractPocSuite {
     /** The isolation mode modules of this combination land in — asserted, so a mis-wired combination cannot pass. */
     protected abstract String expectedMode();
 
+    /**
+     * The DB scope this combination's consumers declare, or null for none. Under auto-provision a module that lands in a
+     * separate runtime must declare one, while a module that stays in-process must not — the same descriptor is legal in
+     * one combination and rejected in the other, which is why this is per-combination rather than a fixture constant.
+     */
+    protected String scope() {
+        return null;
+    }
+
     /** Criteria that do not exist for this combination (settled, not unverified). Default: none. */
     protected Set<PocCriterion> notApplicable() {
         return EnumSet.noneOf(PocCriterion.class);
@@ -80,7 +90,7 @@ public abstract class AbstractPocSuite {
     void route() {
         run(PocCriterion.ROUTE, () -> {
             install(library("v1"));
-            install(consumer());
+            install(consumer(scope()));
             assertEquals(expectedMode(), platform.effectiveMode(platform.find(CONSUMER).orElseThrow()),
                     "the combination did not place the module in the mode it declares");
             mockMvc.perform(get("/poc/label")).andExpect(status().isOk()).andExpect(content().string("c:v1"));
@@ -91,8 +101,8 @@ public abstract class AbstractPocSuite {
     void propagation() {
         run(PocCriterion.PROPAGATION, () -> {
             install(library("v1"));
-            install(consumer());
-            install(strictConsumer());
+            install(consumer(scope()));
+            install(strictConsumer(scope()));
             mockMvc.perform(get("/poc/label")).andExpect(content().string("c:v1"));
             mockMvc.perform(get("/poc/strict")).andExpect(content().string("s:v1"));
 
@@ -108,7 +118,7 @@ public abstract class AbstractPocSuite {
     void reporting() {
         run(PocCriterion.REPORTING, () -> {
             install(library("v1"));
-            install(consumer());
+            install(consumer(scope()));
             List<Long> before = platform.boundLibraryGenerations(CONSUMER);
             assertFalse(before.isEmpty(), "a consumer of a library must report the generation it is bound to");
             String host = platform.runtimeId(CONSUMER);
@@ -144,7 +154,7 @@ public abstract class AbstractPocSuite {
     void reconcile() {
         run(PocCriterion.RECONCILE, () -> {
             install(library("v1"));
-            install(consumer());
+            install(consumer(scope()));
             mockMvc.perform(get("/poc/label")).andExpect(status().isOk());
 
             // Simulated restart: tear the deployments down without touching the store, then let reconcile restore them.
@@ -174,7 +184,7 @@ public abstract class AbstractPocSuite {
 
             // S2/S3 — library + a consumer using BOTH tiers; the composite proves each half resolved.
             install(library("v1"));
-            install(bothConsumer());
+            install(bothConsumer(scope()));
             mockMvc.perform(get("/poc/both")).andExpect(status().isOk())
                     .andExpect(content().string("quote=80 label=v1"));
             // Generation ids are a JVM-wide counter, so their absolute value depends on what ran before. Only movement
@@ -261,6 +271,22 @@ public abstract class AbstractPocSuite {
         }
     }
 
+    /**
+     * Whether the host boot jar a container worker mounts has been built. Reimplemented here rather than reached for
+     * across packages: the harness owning its own prerequisite check is what lets it be the ruler for everything else.
+     */
+    protected static boolean bootJarExists() {
+        Path libs = Path.of("build", "libs");
+        if (!Files.isDirectory(libs)) {
+            return false;
+        }
+        try (var entries = Files.list(libs)) {
+            return entries.anyMatch(entry -> entry.toString().endsWith("-boot.jar"));   // the bootJar classifier
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     protected interface ThrowingRunnable {
         void run() throws Exception;
     }
@@ -322,10 +348,10 @@ public abstract class AbstractPocSuite {
     }
 
     /** Version-stable consumer: its gate checks the shape, so a library value change propagates to it. */
-    protected static ModuleDescriptor consumer() {
+    protected static ModuleDescriptor consumer(String scope) {
         String fqcn = "runtime.poc.PocConsumer";
         return ModuleDescriptor.builder()
-                .id(CONSUMER).version("1.0.0").uses(List.of(LIB))
+                .id(CONSUMER).version("1.0.0").uses(List.of(LIB)).scope(scope)
                 .controllerFqcn(fqcn).componentFqcns(List.of(fqcn))
                 .sources(Map.of(fqcn, """
                         package runtime.poc;
@@ -349,10 +375,10 @@ public abstract class AbstractPocSuite {
     }
 
     /** Strict consumer: its gate pins the current value, so a library change must leave it on its old generation. */
-    protected static ModuleDescriptor strictConsumer() {
+    protected static ModuleDescriptor strictConsumer(String scope) {
         String fqcn = "runtime.poc.PocStrict";
         return ModuleDescriptor.builder()
-                .id(STRICT).version("1.0.0").uses(List.of(LIB))
+                .id(STRICT).version("1.0.0").uses(List.of(LIB)).scope(scope)
                 .controllerFqcn(fqcn).componentFqcns(List.of(fqcn))
                 .sources(Map.of(fqcn, """
                         package runtime.poc;
@@ -379,10 +405,10 @@ public abstract class AbstractPocSuite {
      * Consumer of BOTH tiers — the jar's {@code ext.pricing.Discount} and the library's exported type. Its gate checks
      * the shape, so both a jar generation swap and a library update are allowed to reach it.
      */
-    protected static ModuleDescriptor bothConsumer() {
+    protected static ModuleDescriptor bothConsumer(String scope) {
         String fqcn = "runtime.poc.PocBoth";
         return ModuleDescriptor.builder()
-                .id(BOTH).version("1.0.0").uses(List.of(LIB))
+                .id(BOTH).version("1.0.0").uses(List.of(LIB)).scope(scope)
                 .controllerFqcn(fqcn).componentFqcns(List.of(fqcn))
                 .sources(Map.of(fqcn, """
                         package runtime.poc;
