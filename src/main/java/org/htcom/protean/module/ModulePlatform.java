@@ -14,6 +14,7 @@ import org.htcom.protean.compiler.UsedSharedLib;
 import org.htcom.protean.gate.PromotionPipeline;
 import org.htcom.protean.gate.VerificationGate;
 import org.htcom.protean.isolation.IsolationStrategy;
+import org.htcom.protean.isolation.RuntimeInfo;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -418,6 +419,28 @@ public class ModulePlatform {
     public String runtimeId(String moduleId) {
         IsolationStrategy strategy = strategyOf(moduleId);
         return strategy == null ? null : strategy.runtimeId(moduleId);
+    }
+
+    /**
+     * Every runtime that can host modules right now — the main JVM plus each strategy's workers/containers, including
+     * ones hosting nothing (warm, or retiring while they drain). Membership is attached here by grouping the ACTIVE
+     * modules on their {@code runtimeId}, so what this reports can never disagree with what module status reports.
+     */
+    public List<RuntimeInfo> runtimes() {
+        Map<String, List<String>> hosted = new LinkedHashMap<>();
+        for (ModuleDescriptor d : store.listActive()) {
+            String host = runtimeId(d.id());
+            if (host != null) {
+                hosted.computeIfAbsent(host, k -> new ArrayList<>()).add(d.id());
+            }
+        }
+        List<RuntimeInfo> all = new ArrayList<>();
+        for (IsolationStrategy strategy : strategies.values()) {
+            for (RuntimeInfo runtime : strategy.runtimes()) {
+                all.add(runtime.withModules(hosted.getOrDefault(runtime.runtimeId(), List.of())));
+            }
+        }
+        return all;
     }
 
     /** The strategy that owns a deployed module's runtime, or null when the module/mode is unknown. */

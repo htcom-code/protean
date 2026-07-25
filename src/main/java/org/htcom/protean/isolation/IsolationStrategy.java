@@ -99,4 +99,13 @@ public interface IsolationStrategy {
     default List<Long> boundLibraryGenerations(String moduleId) {
         return null;
     }
+
+    /**
+     * Every runtime this strategy currently holds, <b>including ones hosting no modules</b> (a warm worker kept for
+     * reuse, or one retiring while it drains) — those are invisible to any module-centric view. Membership is left
+     * empty here: the caller attaches it by grouping modules on {@link #runtimeId}, so the two can never disagree.
+     */
+    default List<RuntimeInfo> runtimes() {
+        return List.of();
+    }
 }

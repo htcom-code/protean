@@ -37,6 +37,8 @@ public class InProcessIsolation implements IsolationStrategy {
     private static final Logger log = LoggerFactory.getLogger(InProcessIsolation.class);
 
     private final RuntimeCompiler compiler;
+    /** When this JVM's in-process runtime became available (bean construction ≈ app start). */
+    private final long startedAt = System.currentTimeMillis();
     private final ModuleContainer container;
     /** True on the host when auto-provision is on (a {@link DbScopeProvisioner} bean is present). */
     private final boolean autoProvision;
@@ -179,6 +181,13 @@ public class InProcessIsolation implements IsolationStrategy {
     @Override
     public String runtimeId(String moduleId) {
         return "main";
+    }
+
+    /** The main JVM is always a runtime, whether or not it currently hosts anything. */
+    @Override
+    public java.util.List<RuntimeInfo> runtimes() {
+        return java.util.List.of(new RuntimeInfo("main", mode(), null, RuntimeInfo.State.LIVE, startedAt,
+                java.util.List.of()));
     }
 
     /** This JVM hosts the module, so its own compiler state is the authoritative binding. */

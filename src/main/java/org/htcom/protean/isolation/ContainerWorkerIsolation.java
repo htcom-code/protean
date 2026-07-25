@@ -93,6 +93,8 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     private static final class Container {
         final String name;
         final int hostPort;
+        /** When this container was started (host clock), reported as its uptime. */
+        final long startedAt = System.currentTimeMillis();
         /** The DB scope this container is bound to (its injected datasource creds); null when auto-provision is off. */
         final String scope;
         final Set<String> modules = ConcurrentHashMap.newKeySet();
@@ -310,6 +312,15 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     public String containerName(String moduleId) {
         Container c = moduleToContainer.get(moduleId);
         return c == null ? null : c.name;
+    }
+
+    /** Every container in the pool, retiring ones included (membership is attached by the caller). */
+    @Override
+    public synchronized List<RuntimeInfo> runtimes() {
+        return pool.stream()
+                .map(c -> new RuntimeInfo("container:" + c.name, mode(), c.scope,
+                        c.retiring ? RuntimeInfo.State.RETIRING : RuntimeInfo.State.LIVE, c.startedAt, List.of()))
+                .toList();
     }
 
     /**
