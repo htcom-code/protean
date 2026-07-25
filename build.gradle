@@ -393,6 +393,18 @@ tasks.register('poc', Test) {
     doFirst {
         delete layout.buildDirectory.dir('poc')   // last run's verdict must never be mistaken for this run's
     }
+    doLast {
+        // A combination whose context never started reports nothing at all, and a table with a missing row reads as
+        // "fine" to anyone skimming it. Fail instead: every combination the gate claims to cover must have answered.
+        def report = layout.buildDirectory.file('poc/poc-report.md').get().asFile
+        def expected = ['in-process × ap-off', 'in-process × ap-on']
+        def text = report.exists() ? report.text : ''
+        def missing = expected.findAll { !text.contains(it) }
+        if (missing) {
+            throw new GradleException("PoC verdict is incomplete — no result for: ${missing.join(', ')}. "
+                    + "A combination that did not run is unverified, not passed. Report: ${report}")
+        }
+    }
 }
 
 // Opt-in restart-scale benchmark (not part of the regression suite). Runs a real cold boot with many

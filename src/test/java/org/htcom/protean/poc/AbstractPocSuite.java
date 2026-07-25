@@ -14,7 +14,6 @@ import org.htcom.protean.module.ModulePlatform;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
 import org.opentest4j.TestAbortedException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
@@ -53,7 +52,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * back without a redeploy) but not a真 cold boot; the runbook remains the place a real restart is exercised.
  */
 @Tag("poc")
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class AbstractPocSuite {
 
     @Autowired protected MockMvc mockMvc;
