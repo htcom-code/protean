@@ -71,15 +71,15 @@ List of ACTIVE module statuses.
 | `kind` | `NORMAL` \| `LIBRARY` — echoes the descriptor (always present). A `LIBRARY` registers no routes; it publishes `exports` as a parent-tier generation |
 | `exports` | Packages this module publishes as shared types (non-empty only for a `LIBRARY`) |
 | `uses` | Ids of the `LIBRARY` modules whose exported types this module links against |
-| `boundGeneration` | The shared-lib (native-jar) generation id the live ClassLoader is bound to (`null` when not loaded). **In-process modules only** — see the note below |
-| `boundLibraryGenerations` | The library-generation ids this module is bound to via `uses` (can lag a library's current generation under a sticky fallback; empty when none/not loaded). **In-process modules only** — see the note below |
-| `libraryGeneration` | For a `LIBRARY` only: the id of its own currently-published generation (`null` otherwise). A `LIBRARY` always runs in-process, so this is always accurate |
+| `boundGeneration` | The shared-lib (native-jar) generation id the live ClassLoader is bound to (`null` when not loaded) |
+| `boundLibraryGenerations` | The library-generation ids this module is bound to via `uses` (can lag a library's current generation under a sticky fallback; empty when none/not loaded) |
+| `libraryGeneration` | For a `LIBRARY` only: the id of its own currently-published generation (`null` otherwise) |
 | `scope` | The DB scope (tenant) this module declared, echoed from the descriptor (`null` when it declares none — required under `worker.db.auto-provision`) |
 | `runtimeId` | Opaque id of the runtime hosting the module: `main` in-process, else the worker/container identity. **Two modules reporting the same id share one JVM** — group by it to see how the platform packed them (under auto-provision that grouping is the scope boundary). `null` when the module is not deployed. Do not parse it |
 
 `kind`/`exports`/`uses`/`scope` echo the descriptor and are always present. `boundGeneration`/`boundLibraryGenerations`/`libraryGeneration`/`runtimeId` are live runtime-observability fields: populated on `GET /platform/modules` and `GET /platform/modules/{id}`, but `null`/empty on deploy/update/rollback/approve responses (which report the descriptor before it is loaded).
 
-> **The two generation fields describe in-process modules only.** They are read from the main JVM's compiler state, but a worker- or container-isolated module compiles and links inside *its own* JVM — so after a live rebind its route serves the new generation while these fields still report the value from its install-time gate compile. To confirm propagation in worker or container mode, compare the route's behavior or read the server log (`SharedModuleInvalidator` / `SharedLibInvalidator` lines), not these fields. See [02. Module Authoring §8](02-module-authoring.md#8-library-modules-shared-module-typed-sharing) for the typed-sharing model.
+> **Both generation fields come from the runtime that hosts the module**, so they are accurate in every isolation mode. In-process that is the main JVM's own compiler; a worker- or container-isolated module compiles and links inside *its own* JVM and reports its bindings back over the control plane, which the main refreshes after each deploy, hot-swap, and generation propagation. They therefore show what actually *stuck* — including a dependent left on its prior generation because its test gate failed on rebind (Plan B) while its co-located siblings moved on. A module whose hosting runtime has not reported yet (or is unreachable) reads `null`/empty rather than a guess. See [02. Module Authoring §8](02-module-authoring.md#8-library-modules-shared-module-typed-sharing) for the typed-sharing model.
 
 ### GET `/platform/modules/{id}`
 

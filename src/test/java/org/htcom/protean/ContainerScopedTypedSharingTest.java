@@ -182,10 +182,28 @@ class ContainerScopedTypedSharingTest {
         mockMvc.perform(get("/cs/1/label")).andExpect(status().isOk()).andExpect(content().string("c1:v1"));
         mockMvc.perform(get("/cs/2/label")).andExpect(status().isOk()).andExpect(content().string("c2:v1"));
 
+        // Placement and bindings are reported by the container that hosts them, not inferred on the main.
+        String host1 = platform.runtimeId("cs-consumer-1");
+        org.junit.jupiter.api.Assertions.assertEquals(host1, platform.runtimeId("cs-consumer-2"),
+                "same-scope consumers share one container, so they must report the same runtimeId");
+        org.junit.jupiter.api.Assertions.assertTrue(host1 != null && host1.startsWith("container:"),
+                "unexpected container host id: " + host1);
+        List<Long> before1 = platform.boundLibraryGenerations("cs-consumer-1");
+        org.junit.jupiter.api.Assertions.assertFalse(before1.isEmpty(),
+                "a container consumer of a library must report the library generation it is bound to");
+
         // A live library update propagates to BOTH co-located dependents in the packed container.
         platform.update(library("v2", "2.0.0"));
         mockMvc.perform(get("/cs/1/label")).andExpect(status().isOk()).andExpect(content().string("c1:v2"));
         mockMvc.perform(get("/cs/2/label")).andExpect(status().isOk()).andExpect(content().string("c2:v2"));
+
+        // …and the reported generation follows the rebind rather than freezing at the install-time value.
+        List<Long> after1 = platform.boundLibraryGenerations("cs-consumer-1");
+        org.junit.jupiter.api.Assertions.assertTrue(after1.stream().mapToLong(Long::longValue).max().orElse(-1)
+                        > before1.stream().mapToLong(Long::longValue).max().orElse(-1),
+                "the reported library generation must advance with the rebind: " + before1 + " → " + after1);
+        org.junit.jupiter.api.Assertions.assertEquals(after1, platform.boundLibraryGenerations("cs-consumer-2"),
+                "co-located dependents that both adopted the update must report the same generation");
     }
 
     @Test

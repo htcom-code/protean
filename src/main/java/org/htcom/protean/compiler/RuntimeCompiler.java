@@ -475,6 +475,16 @@ public class RuntimeCompiler {
     }
 
     /**
+     * Every module id this JVM currently holds a generation binding for. Used inside a worker to report its own
+     * bindings back to the main, which cannot observe them (the worker compiles and links in its own JVM).
+     */
+    public Set<String> boundModuleIds() {
+        Set<String> ids = new java.util.LinkedHashSet<>(boundGeneration.keySet());
+        ids.addAll(boundLibGenerations.keySet());
+        return ids;
+    }
+
+    /**
      * The shared-lib jars ({name, sha256}) the last compile of this module actually opened, or an empty list when
      * none were observed (no shared lib configured, or not yet compiled under this id). Sorted, deduplicated.
      * Produced/stored only — the consumer that acts on jar changes (rebind/deactivate) lives elsewhere.

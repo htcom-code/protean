@@ -416,29 +416,45 @@ public class ModulePlatform {
      * therefore the scope boundary) is observable on the control plane. Null when the module is not deployed.
      */
     public String runtimeId(String moduleId) {
+        IsolationStrategy strategy = strategyOf(moduleId);
+        return strategy == null ? null : strategy.runtimeId(moduleId);
+    }
+
+    /** The strategy that owns a deployed module's runtime, or null when the module/mode is unknown. */
+    private IsolationStrategy strategyOf(String moduleId) {
         String mode = moduleMode.get(moduleId);
         if (mode == null) {
             mode = store.load(moduleId).map(this::resolveMode).orElse(null);
         }
-        if (mode == null || !strategies.containsKey(mode)) {
-            return null;
-        }
-        return strategyFor(mode).runtimeId(moduleId);
+        return mode == null || !strategies.containsKey(mode) ? null : strategyFor(mode);
     }
 
     /**
-     * The parent-tier shared-lib generation the module's live ClassLoader is currently bound to, or null when it is
-     * not loaded (INACTIVE/PENDING, or worker mode). For status responses (observability).
+     * The parent-tier shared-lib generation the module's live ClassLoader is currently bound to, or null when it is not
+     * loaded. Asked of the runtime that <b>hosts</b> the module: in-process that is this JVM's compiler, for a
+     * worker/container it is what that runtime reported over the control plane. Never reports the main's own compile of
+     * a remote module — that value is the install-time gate artifact, not the module's live binding, and the two
+     * diverge exactly when a rebind went sticky (Plan B). For status responses (observability).
      */
     public Long boundGeneration(String moduleId) {
+        IsolationStrategy strategy = strategyOf(moduleId);
+        if (strategy != null) {
+            return strategy.boundGeneration(moduleId);
+        }
         return compiler.boundGeneration(moduleId).stream().boxed().findFirst().orElse(null);
     }
 
     /**
      * The library-module generation ids a dependent's live ClassLoader is bound to via {@code uses} (shared-module
-     * typed sharing), or empty when it uses no libraries / is not loaded. For status responses.
+     * typed sharing), or empty when it uses no libraries / is not loaded. Sourced from the hosting runtime — see
+     * {@link #boundGeneration}. Empty also covers "the hosting runtime has not reported yet".
      */
     public List<Long> boundLibraryGenerations(String moduleId) {
+        IsolationStrategy strategy = strategyOf(moduleId);
+        if (strategy != null) {
+            List<Long> reported = strategy.boundLibraryGenerations(moduleId);
+            return reported == null ? List.of() : reported;
+        }
         return compiler.boundLibraryGenerations(moduleId);
     }
 
