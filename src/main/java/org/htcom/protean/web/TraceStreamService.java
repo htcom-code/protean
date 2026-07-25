@@ -181,7 +181,7 @@ public class TraceStreamService {
     private List<ModuleStatus> moduleStatuses() {
         return platform.list().stream()
                 .map(d -> ModuleStatus.from(d, platform.effectiveMode(d), platform.boundGeneration(d.id()),
-                        platform.boundLibraryGenerations(d.id()), platform.libraryGeneration(d.id())))
+                        platform.boundLibraryGenerations(d.id()), platform.libraryGeneration(d.id()), platform.runtimeId(d.id())))
                 .toList();
     }
 

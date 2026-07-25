@@ -89,7 +89,7 @@ public class GetModuleTool implements McpTool {
         ModuleDescriptor d = found.get();
         JsonNode structured = mapper.valueToTree(
                 ModuleStatus.from(d, platform.effectiveMode(d), platform.boundGeneration(id),
-                        platform.boundLibraryGenerations(id), platform.libraryGeneration(id)));
+                        platform.boundLibraryGenerations(id), platform.libraryGeneration(id), platform.runtimeId(id)));
         return McpToolResult.ok("Module " + id, structured);
     }
 }

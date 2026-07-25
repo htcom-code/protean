@@ -292,6 +292,16 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         return c == null ? null : c.name;
     }
 
+    /**
+     * The container hosting the module; modules packed into one container (same scope) report the same id. Carries the
+     * container name — enough to reach it with {@code docker logs} — but never the published host port.
+     */
+    @Override
+    public String runtimeId(String moduleId) {
+        String name = containerName(moduleId);
+        return name == null ? null : "container:" + name;
+    }
+
     /** For tests: number of live containers in the pool. */
     public synchronized int containerCount() {
         return pool.size();

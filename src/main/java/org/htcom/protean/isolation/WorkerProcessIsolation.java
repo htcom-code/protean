@@ -311,6 +311,13 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         // scope (that is an explicit, operator-driven scope-admin action). The scope + data are retained.
     }
 
+    /** The worker JVM hosting the module; modules packed into one worker (same scope) report the same id. */
+    @Override
+    public String runtimeId(String moduleId) {
+        WorkerHandle handle = moduleToWorker.get(moduleId);
+        return handle == null ? null : "worker:" + handle.id;
+    }
+
     /** For tests: force-kill the worker hosting the module (crash simulation). The proxy route is kept → 502. */
     public synchronized void simulateCrash(String moduleId) {
         WorkerHandle handle = moduleToWorker.get(moduleId);
