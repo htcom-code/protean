@@ -214,6 +214,43 @@ class ProteanConfigServiceTest {
         assertEquals("***", entry.value());
     }
 
+    /**
+     * No credential-valued key may echo its value on the read surfaces (REST {@code GET /platform/config} and the MCP
+     * config tools both render {@link ProteanConfigService#list()} / {@link ProteanConfigService#get}). The inventory
+     * assertion is deliberate: adding a new credential key fails this test until it is seeded and masked here, so the
+     * whole class of leak stays closed rather than this one instance.
+     */
+    @Test
+    void credentialKeysAreNeverEchoedOnReadSurfaces() {
+        List<String> credentialKeys = registry.view().keySet().stream()
+                .filter(k -> k.endsWith("password") || k.endsWith("secret") || k.endsWith("token"))
+                .sorted()
+                .toList();
+        assertEquals(List.of("bridge.secret", "worker.db.admin-password"), credentialKeys,
+                "a credential-valued key was added or renamed — seed it below and confirm it reads masked");
+
+        props.getBridge().setSecret("sentinel-bridge-secret");
+        props.getWorker().getDb().setAdminPassword("sentinel-admin-password");
+
+        List<String> leaked = service.list().stream()
+                .filter(e -> credentialKeys.contains(e.key()))
+                .filter(e -> String.valueOf(e.value()).startsWith("sentinel-"))
+                .map(ProteanConfigService.ConfigEntry::key)
+                .toList();
+        assertTrue(leaked.isEmpty(), "credential values echoed on the read surface: " + leaked);
+        for (String key : credentialKeys) {
+            assertEquals("***", service.get(key).orElseThrow().value(), key + " must read as masked");
+        }
+    }
+
+    @Test
+    void adminPasswordStaysRotatableWhileMasked() {
+        ApplyResult r = service.apply(patch("worker.db.admin-password", "rotated-password"));
+        assertTrue(r.applied());
+        assertEquals("rotated-password", props.getWorker().getDb().getAdminPassword(), "the setter must keep the real value");
+        assertEquals("***", service.get("worker.db.admin-password").orElseThrow().value());
+    }
+
     @Test
     void signatureKeysMapApplies() {
         ApplyResult r = service.apply(patch("gate.signature.keys", Map.of("k1", "base64key")));
