@@ -96,6 +96,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         final Set<String> libraries = ConcurrentHashMap.newKeySet();
         /** The DB scope this worker is bound to (its injected datasource creds); null when auto-provision is off. */
         final String scope;
+        /** The argument list this worker was launched with — see {@link WorkerProcessIsolation#launchCommand}. */
+        volatile List<String> launchCommand = List.of();
         volatile boolean retiring;   // intentional-shutdown flag (distinguished from a crash — prevents auto-restart)
 
         WorkerHandle(UUID id, Process process, int port, String scope) {
@@ -114,6 +116,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
 
     private final List<WorkerHandle> pool = new ArrayList<>();              // guarded by this
     private final Map<String, WorkerHandle> moduleToWorker = new ConcurrentHashMap<>();
+    /** Argument list of the most recent spawn, handed to that worker's handle (spawn goes through one path). */
+    private volatile List<String> lastLaunchCommand = List.of();
     /** Bindings as reported by the worker that hosts each module — the main cannot observe them itself. */
     private final Map<String, org.htcom.protean.module.ModuleBindings> reportedBindings = new ConcurrentHashMap<>();
     private final Map<String, List<String>> modulePaths = new ConcurrentHashMap<>();
@@ -355,6 +359,18 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         return b == null ? null : b.boundLibraryGenerations();
     }
 
+    /**
+     * The exact argument list the platform launched the module's worker with — what any local user sees in the process
+     * table. Exposed so a verification can assert that <b>no credential travels there</b>, which is otherwise only
+     * observable through OS facilities that differ between a developer machine and a CI container: reading the live
+     * process table returns a value locally and nothing in a container, so a check built on it passes vacuously exactly
+     * where it matters. Read-only, and empty when the module is not hosted.
+     */
+    public List<String> launchCommand(String moduleId) {
+        WorkerHandle handle = moduleToWorker.get(moduleId);
+        return handle == null ? List.of() : handle.launchCommand;
+    }
+
     /** For tests: force-kill the worker hosting the module (crash simulation). The proxy route is kept → 502. */
     public synchronized void simulateCrash(String moduleId) {
         WorkerHandle handle = moduleToWorker.get(moduleId);
@@ -572,6 +588,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
             waitHealthy(port, 30);
             seedParentTier(port);   // fold the current live shared-lib generation in before any module deploys
             WorkerHandle handle = new WorkerHandle(id, process, port, scopeName);
+            handle.launchCommand = lastLaunchCommand;
             // Always observe exit; whether a crash triggers a restart is decided live in onWorkerExit
             // (protean.worker.auto-restart, Tier 1) so a runtime toggle applies to every worker immediately.
             process.onExit().thenAccept(p -> onWorkerExit(handle));
@@ -679,6 +696,7 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
                 command.add("--spring.datasource.url=" + workerDatasourceUrl);
             }
         }
+        lastLaunchCommand = List.copyOf(command);   // picked up by spawnAndReady for this worker's handle
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
         try {
