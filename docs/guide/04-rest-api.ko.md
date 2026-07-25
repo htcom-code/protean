@@ -301,6 +301,35 @@ POST /platform/modules/cp-mod/approve?approver=alice
 
 ---
 
+---
+
+## 런타임 — base path `/platform/runtimes`
+
+### GET `/platform/runtimes`
+
+모듈을 호스팅할 수 있는 모든 런타임: main JVM, 각 워커 JVM, 각 워커 컨테이너.
+
+모듈 상태에 이미 `runtimeId` 가 있어 `GET /platform/modules` 를 그 값으로 묶으면 *어느 모듈들이 한 JVM 을 공유하는지* 는 알 수 있다. 이 엔드포인트는 그 묶기로는 알 수 없는 것을 답한다 — **모듈을 하나도 안 가진** 런타임(재사용을 위해 warm 으로 유지되거나, 마지막 요청을 drain 하며 은퇴 중인 것), 그리고 각 런타임의 scope·가동 시작 시각. `worker.db.auto-provision` 하에서는 런타임이 최대 하나의 scope 에 묶이므로 **scope 별 용량 뷰**도 된다.
+
+```json
+[
+  { "runtimeId": "main", "mode": "in-process", "scope": null, "state": "LIVE", "sinceEpochMs": 1753420000000, "moduleIds": ["lib-geometry"] },
+  { "runtimeId": "worker:a30d5c4e-0462-4844-bbed-98c6ad571ffa", "mode": "worker", "scope": "tenant-a", "state": "LIVE", "sinceEpochMs": 1753420100000, "moduleIds": ["id-a1", "id-a2"] },
+  { "runtimeId": "worker:39f0ee3a-28fd-4a71-9f0e-6b1c2d4e5f60", "mode": "worker", "scope": "tenant-b", "state": "LIVE", "sinceEpochMs": 1753420105000, "moduleIds": [] }
+]
+```
+
+| 필드 | 의미 |
+|---|---|
+| `runtimeId` | 불투명 host id — 모듈이 보고하는 값과 **동일**하므로 두 뷰를 잇는 조인 키다. 워커 포트는 절대 담지 않는다. 파싱해 쓰지 말 것 |
+| `mode` | 이 런타임이 구현하는 격리 모드(`in-process` \| `worker` \| `container`) |
+| `scope` | auto-provision 하에서 이 런타임이 묶인 DB scope, 프로비저닝이 꺼져 있으면 `null` |
+| `state` | `LIVE` — 모듈을 받는 상태 / `RETIRING` — 풀에서 빠져 teardown 전 drain 중 |
+| `sinceEpochMs` | 런타임이 시작된 시각(호스트 시계), 가동시간 계산용 |
+| `moduleIds` | 여기서 호스팅 중인 모듈 — ACTIVE 모듈을 `runtimeId` 로 묶어 도출하므로 모듈 상태와 어긋날 수 없다. warm/retiring 런타임은 빈 배열 |
+
+읽기 전용이 의도다 — 특정 워커를 drain·은퇴시키는 동작은 scope 라이프사이클(`/platform/scopes`) 및 플랫폼의 패킹 보장과 겹치므로, 관측용 엔드포인트에 덧붙일 일이 아니라 별개 결정이다. MCP 쌍은 `protean.list_runtimes` 다.
+
 ## 런타임 trace — 베이스 경로 `/platform/traces`
 
 ### GET `/platform/traces`

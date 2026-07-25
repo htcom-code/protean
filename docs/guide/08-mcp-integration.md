@@ -124,6 +124,7 @@ Most built-in tools use the `protean.` prefix; the configuration tools are the e
 |---|---|---|
 | `protean.list_modules` | all optional: `query`·`mode`·`trustTier`·`limit`·`cursor` | Status list of deployed (ACTIVE) modules (id·version·state·isolation mode). Called with no arguments, returns all. See [below](#list_modules-search--paging) for search & paging |
 | `protean.get_module` | `id` (required) | Look up a single module's status by id |
+| `protean.list_runtimes` | all optional: `mode`·`scope` | The runtimes hosting modules (main JVM / worker JVMs / worker containers) with scope, state (`LIVE`\|`RETIRING`), uptime, and hosted module ids — **including runtimes hosting nothing**, which `list_modules` cannot reveal. Join to a module's `runtimeId` to see the packing |
 | `protean.module_versions` | `id` (required) | Version history (newest-first, for identifying a rollback target) |
 | `protean.get_module_source` | `id` (required)·`className`·`version`·`includeTests` | Read a deployed module's stored source (FQCN→text) — one class or the full map, a history `version`, optionally merging test sources |
 

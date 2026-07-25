@@ -301,6 +301,35 @@ Uninstall a module.
 
 ---
 
+---
+
+## Runtimes — base path `/platform/runtimes`
+
+### GET `/platform/runtimes`
+
+Every runtime that can host modules: the main JVM, each worker JVM, each worker container.
+
+Module status already carries a `runtimeId`, so grouping `GET /platform/modules` by it answers *which modules share a JVM*. This endpoint answers what that grouping cannot: a runtime hosting **nothing** — kept warm for reuse, or retiring while its last requests drain — plus each runtime's scope and uptime. Under `worker.db.auto-provision` it doubles as the per-scope capacity view, since a runtime is bound to at most one scope.
+
+```json
+[
+  { "runtimeId": "main", "mode": "in-process", "scope": null, "state": "LIVE", "sinceEpochMs": 1753420000000, "moduleIds": ["lib-geometry"] },
+  { "runtimeId": "worker:a30d5c4e-0462-4844-bbed-98c6ad571ffa", "mode": "worker", "scope": "tenant-a", "state": "LIVE", "sinceEpochMs": 1753420100000, "moduleIds": ["id-a1", "id-a2"] },
+  { "runtimeId": "worker:39f0ee3a-28fd-4a71-9f0e-6b1c2d4e5f60", "mode": "worker", "scope": "tenant-b", "state": "LIVE", "sinceEpochMs": 1753420105000, "moduleIds": [] }
+]
+```
+
+| Field | Meaning |
+|---|---|
+| `runtimeId` | Opaque host id — the **same value** a module reports, so it is the join key between the two views. Never carries the worker's port. Do not parse it |
+| `mode` | Isolation mode this runtime implements (`in-process` \| `worker` \| `container`) |
+| `scope` | DB scope the runtime is bound to under auto-provision; `null` when provisioning is off |
+| `state` | `LIVE` — accepting modules; `RETIRING` — pulled from the pool, draining before teardown |
+| `sinceEpochMs` | When the runtime started (host clock), for uptime |
+| `moduleIds` | Modules hosted here, derived by grouping the ACTIVE modules on `runtimeId` — so it cannot disagree with module status. Empty for a warm or retiring runtime |
+
+Read-only by design: draining or retiring a specific worker overlaps with the scope lifecycle (`/platform/scopes`) and with the platform's packing guarantees, so it is a separate decision rather than an action bolted onto an observability endpoint. The MCP twin is `protean.list_runtimes`.
+
 ## Runtime traces — base path `/platform/traces`
 
 ### GET `/platform/traces`

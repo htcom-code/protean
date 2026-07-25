@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.htcom.protean.isolation.RuntimeInfo;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -47,6 +49,7 @@ class WorkerPoolTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired WorkerProcessIsolation isolation;
+    @Autowired org.htcom.protean.module.ModulePlatform platform;
 
     static ModuleDescriptor module(int n) {
         String fqcn = "runtime.pool.P" + n + "Controller";
@@ -63,6 +66,27 @@ class WorkerPoolTest {
         return ModuleDescriptor.builder()
                 .id("pool-m" + n).version("1.0.0").trustTier(ModuleDescriptor.TrustTier.UNTRUSTED)
                 .controllerFqcn(fqcn).componentFqcns(List.of(fqcn)).sources(Map.of(fqcn, src))
+                .build();
+    }
+
+    /**
+     * {@link #module(int)} plus the bundled test the promotion gate requires, for the cases that install through
+     * {@link org.htcom.protean.module.ModulePlatform} (which runs the gates) rather than straight onto the strategy.
+     */
+    static ModuleDescriptor gatedModule(int n) {
+        String fqcn = "runtime.pool.P" + n + "Controller";
+        ModuleDescriptor base = module(n);
+        return ModuleDescriptor.builder()
+                .id(base.id()).version(base.version()).trustTier(base.trustTier())
+                .controllerFqcn(fqcn).componentFqcns(List.of(fqcn)).sources(base.sources())
+                .tests(Map.of(fqcn + "Test", """
+                        package runtime.pool;
+                        import org.junit.jupiter.api.Test;
+                        import static org.junit.jupiter.api.Assertions.assertTrue;
+                        class P%dControllerTest {
+                            @Test void ping() { assertTrue(new P%dController().ping().startsWith("m")); }
+                        }
+                        """.formatted(n, n)))
                 .build();
     }
 
@@ -88,6 +112,13 @@ class WorkerPoolTest {
     @AfterEach
     void cleanup() {
         for (int n = 1; n <= 3; n++) {
+            try {
+                if (platform.find("pool-m" + n).isPresent()) {
+                    platform.uninstall("pool-m" + n);
+                }
+            } catch (RuntimeException ignored) {
+                // fall through to the direct strategy teardown below
+            }
             try {
                 isolation.undeploy("pool-m" + n);
             } catch (RuntimeException ignored) {
@@ -119,6 +150,42 @@ class WorkerPoolTest {
         isolation.undeploy("pool-m2");
         assertEquals(1, isolation.workerCount(), "empty workers are cleaned up (min-warm=0)");
         mockMvc.perform(get("/p3/ping")).andExpect(status().isOk()).andExpect(content().string("m3"));
+    }
+
+    /**
+     * A runtime hosting nothing is invisible to any module-centric view, and an operator cannot add the surface that
+     * reveals it — so the platform reports it. Uses the pool's own packing: with capacity 2 and three modules there are
+     * two workers, and emptying one of them (min-warm keeps it) must still show up as a runtime with no modules.
+     */
+    @Test
+    void runtimes_report_a_worker_that_hosts_no_modules() throws Exception {
+        // Installed through the platform (not straight onto the strategy) so the modules exist in the store — that is
+        // where membership is grouped from, which is what keeps this surface consistent with module status.
+        platform.install(gatedModule(1));
+        platform.install(gatedModule(2));
+        platform.install(gatedModule(3));
+
+        List<RuntimeInfo> runtimes = platform.runtimes();
+        List<RuntimeInfo> workers = runtimes.stream().filter(r -> "worker".equals(r.mode())).toList();
+        assertEquals(2, workers.size(), "two workers are in the pool, so both must be reported: " + runtimes);
+        assertTrue(runtimes.stream().anyMatch(r -> "main".equals(r.runtimeId())),
+                "the main JVM is always a runtime: " + runtimes);
+        assertTrue(workers.stream().allMatch(r -> r.state() == RuntimeInfo.State.LIVE), "pool workers are LIVE");
+        assertTrue(workers.stream().allMatch(r -> r.sinceEpochMs() > 0), "each runtime reports when it started");
+
+        // Membership comes from grouping modules on runtimeId, so it cannot disagree with module status.
+        RuntimeInfo hostOfM3 = workers.stream()
+                .filter(r -> r.runtimeId().equals(platform.runtimeId("pool-m3")))
+                .findFirst().orElseThrow(() -> new AssertionError("no runtime claims pool-m3: " + runtimes));
+        assertTrue(hostOfM3.moduleIds().contains("pool-m3"), "hosted modules must be listed: " + hostOfM3);
+
+        // Empty the second worker (m3 was the only module on it) → the worker is gone, and the surface says so.
+        int before = workers.size();
+        platform.uninstall("pool-m3");
+        List<RuntimeInfo> after = platform.runtimes().stream().filter(r -> "worker".equals(r.mode())).toList();
+        assertEquals(before - 1, after.size(), "a retired worker must disappear from the runtime list: " + after);
+        assertTrue(after.stream().allMatch(r -> !r.moduleIds().isEmpty()),
+                "the remaining worker still hosts its modules: " + after);
     }
 
     @Test

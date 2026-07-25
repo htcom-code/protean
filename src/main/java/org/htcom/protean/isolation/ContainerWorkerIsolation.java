@@ -26,6 +26,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
@@ -37,6 +38,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,6 +81,8 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     /** When protean.worker.container.seccomp equals this value, use the bundled default profile (resource extracted to a temp file). */
     private static final String BUNDLED_SECCOMP = "bundled";
     private static final String BUNDLED_SECCOMP_RESOURCE = "/seccomp/protean-default.json";
+    /** In-container mount target for the per-container secrets file (bind-mounted read-only, see WorkerSecretsFile). */
+    private static final String CONTAINER_SECRETS = "/etc/protean/secrets.properties";
     /** In-container mount target for the shared-lib dir. The host path is bind-mounted here (read-only). */
     private static final String CONTAINER_SHARED_LIB = "/shared-lib";
 
@@ -90,6 +94,8 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
     private static final class Container {
         final String name;
         final int hostPort;
+        /** When this container was started (host clock), reported as its uptime. */
+        final long startedAt = System.currentTimeMillis();
         /** The DB scope this container is bound to (its injected datasource creds); null when auto-provision is off. */
         final String scope;
         final Set<String> modules = ConcurrentHashMap.newKeySet();
@@ -112,6 +118,8 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
 
     private final List<Container> pool = new ArrayList<>();               // guarded by this
     private final Map<String, Container> moduleToContainer = new ConcurrentHashMap<>();
+    /** Per-container secrets file (owner-only, bind-mounted read-only); removed when the container is retired. */
+    private final Map<String, Path> secretFiles = new ConcurrentHashMap<>();
     /** Bindings as reported by the container that hosts each module — the main cannot observe them itself. */
     private final Map<String, org.htcom.protean.module.ModuleBindings> reportedBindings = new ConcurrentHashMap<>();
     private final Map<String, List<String>> modulePaths = new ConcurrentHashMap<>();
@@ -301,10 +309,38 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         return inspect(moduleId, "{{.HostConfig.SecurityOpt}}").trim();
     }
 
+    /**
+     * {@code uid:gid} of the file's owner, or null on a filesystem that does not report POSIX ownership.
+     *
+     * <p>Read from the file rather than from the process: the requirement is "whoever can read this", and asking the
+     * file removes the assumption that the two are the same. Where Docker remaps ownership for bind mounts (Docker
+     * Desktop) passing this changes nothing observable; on Linux, where the uid and mode come through unchanged, it is
+     * what makes the mount readable at all.
+     */
+    private String ownerOf(Path file) {
+        try {
+            Map<String, Object> ids = Files.readAttributes(file, "unix:uid,gid");
+            return ids.get("uid") + ":" + ids.get("gid");
+        } catch (IOException | UnsupportedOperationException | IllegalArgumentException e) {
+            log.warn("could not read the owner of {} — the container worker will run as the image's default user, which "
+                    + "cannot read an owner-only secrets file where bind mounts preserve ownership: {}", file, e.toString());
+            return null;
+        }
+    }
+
     /** For tests: the container name hosting the module (for supervision/crash simulation). */
     public String containerName(String moduleId) {
         Container c = moduleToContainer.get(moduleId);
         return c == null ? null : c.name;
+    }
+
+    /** Every container in the pool, retiring ones included (membership is attached by the caller). */
+    @Override
+    public synchronized List<RuntimeInfo> runtimes() {
+        return pool.stream()
+                .map(c -> new RuntimeInfo("container:" + c.name, mode(), c.scope,
+                        c.retiring ? RuntimeInfo.State.RETIRING : RuntimeInfo.State.LIVE, c.startedAt, List.of()))
+                .toList();
     }
 
     /**
@@ -454,6 +490,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         c.retiring = true;   // intentional shutdown — the watcher will not treat the exit as a crash
         pool.remove(c);
         dockerRemoveQuiet(c.name);
+        WorkerSecretsFile.delete(secretFiles.remove(c.name));
     }
 
     private void retireIfEmpty(Container c) {
@@ -483,6 +520,7 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             }
             if (retireAfterGrace) {
                 dockerRemoveQuiet(oldC.name);
+                WorkerSecretsFile.delete(secretFiles.remove(oldC.name));
             } else {
                 synchronized (this) {
                     postUndeploy(oldC.hostPort, moduleId);
@@ -536,6 +574,36 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             run.add("-v");
             run.add(Path.of(sharedLibDir).toAbsolutePath() + ":" + CONTAINER_SHARED_LIB + ":ro");
         }
+        // Secrets (scoped DB creds, admin-auth secret) go into an owner-only host file bind-mounted read-only, so the
+        // container's metadata carries a mount path instead of the values. That file is only readable by its owner, and
+        // a bind mount on Linux carries the host's uid and mode through unchanged — while the container drops every
+        // capability, so not even its root can override file permissions. The container therefore has to run *as* the
+        // owner: see runAsHostUser() below.
+        Map<String, String> secrets = new LinkedHashMap<>();
+        if (adminAuthEnabled && adminAuthSecret != null) {
+            secrets.put("protean.worker.admin-auth.secret", adminAuthSecret);
+        }
+        if (scope != null) {
+            // Inside a container localhost is the container itself → rewrite the DB host to db-host (read live) first.
+            secrets.put("spring.datasource.url", rewriteHost(scope.url(), c.getDbHost()));
+            secrets.put("spring.datasource.username", scope.username());
+            secrets.put("spring.datasource.password", scope.password());
+        }
+        Path secretsFile = secrets.isEmpty() ? null : WorkerSecretsFile.write(name, secrets);
+        if (secretsFile != null) {
+            secretFiles.put(name, secretsFile);
+            run.add("-v");
+            run.add(secretsFile.toAbsolutePath() + ":" + CONTAINER_SECRETS + ":ro");
+            String owner = ownerOf(secretsFile);
+            if (owner != null) {
+                // Run as the file's owner. The two protections around these credentials pull against each other: the
+                // file is owner-only, and the container drops every capability — so its root cannot read a file it does
+                // not own and the worker never starts. Matching the owner satisfies both instead of relaxing either,
+                // and as a side effect the worker stops being root inside its container.
+                run.add("--user");
+                run.add(owner);
+            }
+        }
         // The image, mounts, and in-container command prefix (embed = bootJar-explode mount / sidecar = dedicated image) are decided by the provider.
         WorkerRuntimeProvider.ContainerLaunchSpec spec = runtimeProvider.containerLaunchSpec();
         run.add("-p");
@@ -554,17 +622,14 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             run.add("--protean.module.shared-lib-dir=" + CONTAINER_SHARED_LIB);
         }
         if (adminAuthEnabled && adminAuthSecret != null) {
-            // Turn on the container worker's /__admin/* auth filter and hand it the shared secret (docker CMD args,
-            // as with the process worker's bridge secret). Matters most here: the published port is host-reachable.
+            // Turn on the container worker's /__admin/* auth filter. The secret itself travels in the mounted file, not
+            // in the run arguments: docker keeps those in the container's metadata, where `docker inspect` shows them
+            // for as long as the container exists. Matters most here — the published port is host-reachable.
             run.add("--protean.worker.admin-auth.enabled=true");
-            run.add("--protean.worker.admin-auth.secret=" + adminAuthSecret);
             run.add("--protean.worker.admin-auth.mode=" + adminAuthMode);
         }
-        if (scope != null) {
-            // Inside a container localhost is the container itself → rewrite the DB host to db-host (read live) before passing it.
-            run.add("--spring.datasource.url=" + rewriteHost(scope.url(), c.getDbHost()));
-            run.add("--spring.datasource.username=" + scope.username());
-            run.add("--spring.datasource.password=" + scope.password());
+        if (secretsFile != null) {
+            run.add("--spring.config.import=optional:file:" + CONTAINER_SECRETS);
         }
         exec(run, 120);
 
