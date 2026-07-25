@@ -26,6 +26,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
@@ -308,6 +309,25 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         return inspect(moduleId, "{{.HostConfig.SecurityOpt}}").trim();
     }
 
+    /**
+     * {@code uid:gid} of the file's owner, or null on a filesystem that does not report POSIX ownership.
+     *
+     * <p>Read from the file rather than from the process: the requirement is "whoever can read this", and asking the
+     * file removes the assumption that the two are the same. Where Docker remaps ownership for bind mounts (Docker
+     * Desktop) passing this changes nothing observable; on Linux, where the uid and mode come through unchanged, it is
+     * what makes the mount readable at all.
+     */
+    private String ownerOf(Path file) {
+        try {
+            Map<String, Object> ids = Files.readAttributes(file, "unix:uid,gid");
+            return ids.get("uid") + ":" + ids.get("gid");
+        } catch (IOException | UnsupportedOperationException | IllegalArgumentException e) {
+            log.warn("could not read the owner of {} — the container worker will run as the image's default user, which "
+                    + "cannot read an owner-only secrets file where bind mounts preserve ownership: {}", file, e.toString());
+            return null;
+        }
+    }
+
     /** For tests: the container name hosting the module (for supervision/crash simulation). */
     public String containerName(String moduleId) {
         Container c = moduleToContainer.get(moduleId);
@@ -555,7 +575,10 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             run.add(Path.of(sharedLibDir).toAbsolutePath() + ":" + CONTAINER_SHARED_LIB + ":ro");
         }
         // Secrets (scoped DB creds, admin-auth secret) go into an owner-only host file bind-mounted read-only, so the
-        // container's metadata carries a mount path instead of the values.
+        // container's metadata carries a mount path instead of the values. That file is only readable by its owner, and
+        // a bind mount on Linux carries the host's uid and mode through unchanged — while the container drops every
+        // capability, so not even its root can override file permissions. The container therefore has to run *as* the
+        // owner: see runAsHostUser() below.
         Map<String, String> secrets = new LinkedHashMap<>();
         if (adminAuthEnabled && adminAuthSecret != null) {
             secrets.put("protean.worker.admin-auth.secret", adminAuthSecret);
@@ -571,6 +594,15 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
             secretFiles.put(name, secretsFile);
             run.add("-v");
             run.add(secretsFile.toAbsolutePath() + ":" + CONTAINER_SECRETS + ":ro");
+            String owner = ownerOf(secretsFile);
+            if (owner != null) {
+                // Run as the file's owner. The two protections around these credentials pull against each other: the
+                // file is owner-only, and the container drops every capability — so its root cannot read a file it does
+                // not own and the worker never starts. Matching the owner satisfies both instead of relaxing either,
+                // and as a side effect the worker stops being root inside its container.
+                run.add("--user");
+                run.add(owner);
+            }
         }
         // The image, mounts, and in-container command prefix (embed = bootJar-explode mount / sidecar = dedicated image) are decided by the provider.
         WorkerRuntimeProvider.ContainerLaunchSpec spec = runtimeProvider.containerLaunchSpec();
