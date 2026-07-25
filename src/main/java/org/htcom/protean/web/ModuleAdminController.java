@@ -73,7 +73,7 @@ public class ModuleAdminController {
     public List<ModuleStatus> list() {
         return platform.list().stream()
                 .map(d -> ModuleStatus.from(d, platform.effectiveMode(d), platform.boundGeneration(d.id()),
-                        platform.boundLibraryGenerations(d.id()), platform.libraryGeneration(d.id())))
+                        platform.boundLibraryGenerations(d.id()), platform.libraryGeneration(d.id()), platform.runtimeId(d.id())))
                 .toList();
     }
 
@@ -83,7 +83,7 @@ public class ModuleAdminController {
         ModuleDescriptor d = platform.find(id)
                 .orElseThrow(() -> new ProteanException(ErrorCode.MODULE_NOT_FOUND, id).with("moduleId", id));
         return ModuleStatus.from(d, platform.effectiveMode(d), platform.boundGeneration(id),
-                platform.boundLibraryGenerations(id), platform.libraryGeneration(id));
+                platform.boundLibraryGenerations(id), platform.libraryGeneration(id), platform.runtimeId(id));
     }
 
     /** Deploy a module. On passing the gates/validation, returns 201 + Location. */

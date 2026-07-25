@@ -68,4 +68,16 @@ public interface IsolationStrategy {
     default boolean retargetLibraries(ModuleDescriptor descriptor) {
         return false;
     }
+
+    /**
+     * Identifies the runtime currently hosting the module — the grouping key that makes packing observable: two
+     * modules reporting the same value share one JVM (or container), so they share its fate on a crash and see the
+     * same shared-type identity. <b>Opaque</b>: the form differs per strategy and must not be parsed. Null when the
+     * module is not deployed under this strategy.
+     *
+     * @return an opaque host id, or null if unknown
+     */
+    default String runtimeId(String moduleId) {
+        return null;
+    }
 }

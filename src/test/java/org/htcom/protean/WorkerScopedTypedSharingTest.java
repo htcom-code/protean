@@ -179,10 +179,29 @@ class WorkerScopedTypedSharingTest {
         mockMvc.perform(get("/ss/1/label")).andExpect(status().isOk()).andExpect(content().string("c1:v1"));
         mockMvc.perform(get("/ss/2/label")).andExpect(status().isOk()).andExpect(content().string("c2:v1"));
 
+        // The packing is reported on the control plane, not just inferrable from the process table: co-located modules
+        // share one runtimeId, and the in-process library reports the main JVM.
+        String host1 = platform.runtimeId("ss-consumer-1");
+        String host2 = platform.runtimeId("ss-consumer-2");
+        org.junit.jupiter.api.Assertions.assertNotNull(host1, "a deployed worker module must report its host runtime");
+        org.junit.jupiter.api.Assertions.assertEquals(host1, host2,
+                "same-scope consumers share one worker, so they must report the same runtimeId");
+        org.junit.jupiter.api.Assertions.assertTrue(host1.startsWith("worker:"), "unexpected worker host id: " + host1);
+        org.junit.jupiter.api.Assertions.assertEquals("main", platform.runtimeId(LIB),
+                "a LIBRARY publishes types in the main JVM, so it must report main");
+        org.junit.jupiter.api.Assertions.assertEquals("sharedscope",
+                org.htcom.protean.web.ModuleStatus.from(platform.find("ss-consumer-1").orElseThrow(), "worker").scope(),
+                "the declared scope must be visible on the status surface");
+
         // A live library update propagates to BOTH co-located dependents in the packed worker — no restart, no manual redeploy.
         platform.update(library("v2", "2.0.0"));
         mockMvc.perform(get("/ss/1/label")).andExpect(status().isOk()).andExpect(content().string("c1:v2"));
         mockMvc.perform(get("/ss/2/label")).andExpect(status().isOk()).andExpect(content().string("c2:v2"));
+
+        // The rebind kept them co-located (in-place recompile, same worker) — a regression here would mean a silent
+        // re-placement, which is exactly what the runtimeId grouping exists to make visible.
+        org.junit.jupiter.api.Assertions.assertEquals(host1, platform.runtimeId("ss-consumer-1"));
+        org.junit.jupiter.api.Assertions.assertEquals(host1, platform.runtimeId("ss-consumer-2"));
     }
 
     @Test

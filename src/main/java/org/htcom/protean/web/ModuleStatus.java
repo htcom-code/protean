@@ -32,7 +32,9 @@ public record ModuleStatus(
         List<String> exports,
         List<String> uses,
         List<Long> boundLibraryGenerations,
-        Long libraryGeneration
+        Long libraryGeneration,
+        String scope,
+        String runtimeId
 ) {
     /** Status without any runtime generation binding (jar/library generations null/empty). */
     public static ModuleStatus from(ModuleDescriptor d, String effectiveMode) {
@@ -56,9 +58,20 @@ public record ModuleStatus(
      */
     public static ModuleStatus from(ModuleDescriptor d, String effectiveMode, Long boundGeneration,
                                     List<Long> boundLibraryGenerations, Long libraryGeneration) {
+        return from(d, effectiveMode, boundGeneration, boundLibraryGenerations, libraryGeneration, null);
+    }
+
+    /**
+     * Full status plus {@code runtimeId} — the opaque id of the runtime hosting the module ({@code main} in-process,
+     * else the worker/container identity). Modules reporting the same id share one JVM, so grouping by it shows how
+     * the platform packed them; under auto-provision that grouping is the scope boundary. Null when the module is not
+     * deployed (INACTIVE/PENDING). {@code scope} echoes the descriptor's declared scope (null when it declares none).
+     */
+    public static ModuleStatus from(ModuleDescriptor d, String effectiveMode, Long boundGeneration,
+                                    List<Long> boundLibraryGenerations, Long libraryGeneration, String runtimeId) {
         return new ModuleStatus(
                 d.id(), d.version(), d.trustTier(), d.desiredState(),
                 d.controllerFqcn(), effectiveMode, d.needsSharedBeans(), d.bridgedInterfaces(), boundGeneration,
-                d.kind(), d.exports(), d.uses(), boundLibraryGenerations, libraryGeneration);
+                d.kind(), d.exports(), d.uses(), boundLibraryGenerations, libraryGeneration, d.scope(), runtimeId);
     }
 }

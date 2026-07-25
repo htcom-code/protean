@@ -411,6 +411,22 @@ public class ModulePlatform {
     }
 
     /**
+     * Opaque id of the runtime hosting the module, asked of the strategy that deployed it: {@code main} in-process,
+     * else the worker/container identity. Two modules reporting the same id share one JVM — which is how packing (and
+     * therefore the scope boundary) is observable on the control plane. Null when the module is not deployed.
+     */
+    public String runtimeId(String moduleId) {
+        String mode = moduleMode.get(moduleId);
+        if (mode == null) {
+            mode = store.load(moduleId).map(this::resolveMode).orElse(null);
+        }
+        if (mode == null || !strategies.containsKey(mode)) {
+            return null;
+        }
+        return strategyFor(mode).runtimeId(moduleId);
+    }
+
+    /**
      * The parent-tier shared-lib generation the module's live ClassLoader is currently bound to, or null when it is
      * not loaded (INACTIVE/PENDING, or worker mode). For status responses (observability).
      */

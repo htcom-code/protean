@@ -174,4 +174,10 @@ public class InProcessIsolation implements IsolationStrategy {
         container.hotSwap(descriptor.id(), loader, descriptor.componentFqcns(), descriptor.controllerFqcn());
         return true;
     }
+
+    /** In-process modules all run in this JVM, so they share one host id — and one shared-type identity. */
+    @Override
+    public String runtimeId(String moduleId) {
+        return "main";
+    }
 }

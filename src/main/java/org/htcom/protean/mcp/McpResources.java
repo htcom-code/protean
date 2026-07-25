@@ -114,7 +114,7 @@ public class McpResources {
             // list_modules tool (the 2-arg form left boundGeneration/boundLibraryGenerations/libraryGeneration null).
             return platform.list().stream()
                     .map(d -> ModuleStatus.from(d, platform.effectiveMode(d), platform.boundGeneration(d.id()),
-                            platform.boundLibraryGenerations(d.id()), platform.libraryGeneration(d.id())))
+                            platform.boundLibraryGenerations(d.id()), platform.libraryGeneration(d.id()), platform.runtimeId(d.id())))
                     .toList();
         }
         if (uri.equals("protean://traces")) {
