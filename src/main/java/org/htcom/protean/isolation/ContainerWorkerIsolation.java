@@ -286,6 +286,16 @@ public class ContainerWorkerIsolation implements IsolationStrategy, WorkerParent
         return Long.parseLong(inspect(moduleId, "{{.HostConfig.PidsLimit}}"));
     }
 
+    /**
+     * The container's recorded run arguments and environment, as docker reports them. Exposed so a verification can
+     * assert that <b>no credential sits there</b>: unlike a process command line, which the OS forgets when the process
+     * ends, these are container metadata and stay readable via {@code docker inspect} for as long as the container
+     * exists — the longer-lived half of the same exposure. Read-only; returns {@code -1} when the module is not hosted.
+     */
+    public String inspectArgsAndEnv(String moduleId) {
+        return inspect(moduleId, "{{.Args}} {{.Config.Env}}").trim();
+    }
+
     /** For tests: the applied security-opt list (no-new-privileges/seccomp verification). */
     public String inspectSecurityOpt(String moduleId) {
         return inspect(moduleId, "{{.HostConfig.SecurityOpt}}").trim();

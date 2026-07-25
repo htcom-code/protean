@@ -66,7 +66,7 @@ class WorkerApOffPocTest extends AbstractPocSuite {
     @Override
     protected void verifySecrets() {
         install(library("v1"));
-        install(consumer());
+        install(consumer(scope()));
 
         List<String> command = workers.launchCommand(CONSUMER);
         assertFalse(command.isEmpty(), "no launch command recorded — the criterion would pass without checking anything");
