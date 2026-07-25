@@ -24,6 +24,7 @@ import org.htcom.protean.mcp.tools.GetSharedLibTool;
 import org.htcom.protean.mcp.tools.ListSharedLibsTool;
 import org.htcom.protean.mcp.tools.RemoveSharedLibTool;
 import org.htcom.protean.mcp.tools.ListModulesTool;
+import org.htcom.protean.mcp.tools.ListRuntimesTool;
 import org.htcom.protean.mcp.tools.ModuleMetricsTool;
 import org.htcom.protean.mcp.tools.ModuleVersionsTool;
 import org.htcom.protean.mcp.tools.QueryTracesTool;
@@ -140,6 +141,11 @@ public class McpConfiguration {
     @Bean
     McpTool getModuleTool(ObjectMapper mapper, ModulePlatform platform) {
         return new GetModuleTool(mapper, platform);
+    }
+
+    @Bean
+    McpTool listRuntimesTool(ObjectMapper mapper, ModulePlatform platform) {
+        return new ListRuntimesTool(mapper, platform);
     }
 
     @Bean

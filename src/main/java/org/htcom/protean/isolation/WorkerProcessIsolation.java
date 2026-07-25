@@ -96,6 +96,8 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         final Set<String> libraries = ConcurrentHashMap.newKeySet();
         /** The DB scope this worker is bound to (its injected datasource creds); null when auto-provision is off. */
         final String scope;
+        /** When this worker JVM was spawned (host clock), reported as its uptime. */
+        final long startedAt = System.currentTimeMillis();
         volatile boolean retiring;   // intentional-shutdown flag (distinguished from a crash — prevents auto-restart)
 
         WorkerHandle(UUID id, Process process, int port, String scope) {
@@ -317,6 +319,15 @@ public class WorkerProcessIsolation implements IsolationStrategy, WorkerParentTi
         }
         // Scope model: a scope's DB is shared and outlives modules — undeploying a module never deprovisions its
         // scope (that is an explicit, operator-driven scope-admin action). The scope + data are retained.
+    }
+
+    /** Every worker in the pool, warm and retiring ones included (membership is attached by the caller). */
+    @Override
+    public synchronized List<RuntimeInfo> runtimes() {
+        return pool.stream()
+                .map(h -> new RuntimeInfo("worker:" + h.id, mode(), h.scope,
+                        h.retiring ? RuntimeInfo.State.RETIRING : RuntimeInfo.State.LIVE, h.startedAt, List.of()))
+                .toList();
     }
 
     /** The worker JVM hosting the module; modules packed into one worker (same scope) report the same id. */

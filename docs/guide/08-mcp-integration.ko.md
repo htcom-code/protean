@@ -124,6 +124,7 @@ MCP 클라이언트(에이전트) 설정 예:
 |---|---|---|
 | `protean.list_modules` | 모두 선택: `query`·`mode`·`trustTier`·`limit`·`cursor` | 배포된(ACTIVE) 모듈 상태 목록(id·version·상태·격리모드). 인자 없이 부르면 전량. 검색·페이징은 [아래](#list_modules-검색·페이징) 참고 |
 | `protean.get_module` | `id`(필수) | id 로 단일 모듈 상태 조회 |
+| `protean.list_runtimes` | 전부 선택: `mode`·`scope` | 모듈을 호스팅하는 런타임 목록(main JVM / 워커 JVM / 워커 컨테이너) — scope, 상태(`LIVE`\|`RETIRING`), 가동 시작 시각, 호스팅 중인 모듈 id. **모듈을 하나도 안 가진 런타임까지 포함**되며 이는 `list_modules` 로는 볼 수 없다. 모듈의 `runtimeId` 와 조인하면 패킹이 보인다 |
 | `protean.module_versions` | `id`(필수) | 버전 히스토리(최신순, 롤백 대상 확인용) |
 | `protean.get_module_source` | `id`(필수)·`className`·`version`·`includeTests` | 배포된 모듈의 저장 소스 조회(FQCN→텍스트) — 한 클래스 또는 전체 맵, 히스토리 `version`, 선택적으로 테스트 소스 병합 |
 
