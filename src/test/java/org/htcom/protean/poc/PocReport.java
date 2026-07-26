@@ -42,6 +42,15 @@ public final class PocReport {
         NOT_APPLICABLE
     }
 
+    /**
+     * What was judged. Without it a verdict file is indistinguishable from an older one for a different commit — which
+     * happened: a report from the previous day was read as a fresh judgment because nothing in the file said otherwise.
+     * The Gradle task also refuses to be skipped, so the two together make a stale verdict both unlikely and obvious.
+     */
+    private static final String COMMIT = System.getProperty("poc.commit", "unknown");
+    private static final String STARTED = java.time.ZonedDateTime.now().format(
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z"));
+
     /** combination -> criterion -> outcome (+ note). Insertion-ordered so the table reads in execution order. */
     private static final Map<String, Map<PocCriterion, String>> ROWS =
             Collections.synchronizedMap(new LinkedHashMap<>());
@@ -61,6 +70,8 @@ public final class PocReport {
     private static synchronized void flush() {
         StringBuilder md = new StringBuilder();
         md.append("# PoC verdict\n\n")
+                .append("- commit judged: `").append(COMMIT).append("`\n")
+                .append("- run started: ").append(STARTED).append("\n\n")
                 .append("One row per combination, one column per criterion. `SKIPPED` means the criterion was **not "
                         + "verified** (prerequisite missing) — it is not a pass. `N/A` means the criterion does not "
                         + "exist for that combination.\n\n")
