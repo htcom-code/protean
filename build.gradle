@@ -383,8 +383,21 @@ tasks.register('poc', Test) {
     useJUnitPlatform {
         includeTags 'poc'
     }
+    // Never skipped. Gradle would call this task up to date whenever the classpath and test classes are unchanged, and
+    // a skipped task runs neither doFirst nor doLast — so the previous run's verdict file survives and reads as this
+    // run's. That is the same "unverified looks like passed" failure the SKIPPED/N-A split and the missing-row check
+    // exist to prevent, and it was observed: a verdict from the day before was mistaken for a fresh judgment on a
+    // different commit. A gate is worth re-running by definition; the cache saving is not worth that risk.
+    outputs.upToDateWhen { false }
     // No retries: a flaky verdict is not a verdict. A criterion that only passes on the second try is a finding.
     jvmArgs '-XX:SoftRefLRUPolicyMSPerMB=0'
+    // Stamped into the verdict so the file itself says what was judged, rather than relying on whoever reads it to
+    // remember which commit and which run produced it.
+    // `-dirty` matters: a verdict produced from an edited tree is not a verdict on that commit, and the file should
+    // say so rather than let a reader assume the two are the same.
+    systemProperty 'poc.commit', providers.exec {
+        commandLine 'git', 'describe', '--always', '--abbrev=7', '--dirty=-dirty'
+    }.standardOutput.asText.map { it.trim() }.getOrElse('unknown')
     maxHeapSize = '512m'
     testLogging {
         events 'passed', 'failed', 'skipped'
