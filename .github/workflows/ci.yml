@@ -115,7 +115,7 @@ jobs:
         run: ./gradlew poc --console=plain
       - name: upload the verdict
         if: always()   # a failed gate is exactly when the verdict must be readable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: poc-verdict
           path: build/poc/
