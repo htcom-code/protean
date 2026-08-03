@@ -53,7 +53,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
       - name: validate version input
         run: |
           v='${{ inputs.version }}'

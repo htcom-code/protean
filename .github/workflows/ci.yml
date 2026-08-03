@@ -48,7 +48,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
       - name: test
         run: ./gradlew clean test --console=plain
 
@@ -65,7 +65,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
       - name: bootJar
         run: ./gradlew bootJar --console=plain
 
@@ -85,7 +85,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
       - name: bootJar (isolation-test prerequisite)
         run: ./gradlew bootJar --console=plain
       - name: isolation + container tests
@@ -108,7 +108,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
       - name: bootJar (container combinations mount the host boot jar)
         run: ./gradlew bootJar --console=plain
       - name: PoC gate
@@ -141,7 +141,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
       - name: publish to GitHub Packages
         run: ./gradlew publishLibraryPublicationToGitHubPackagesRepository --console=plain
         env:
@@ -170,7 +170,7 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6.2.0
       - name: build + push worker image (jib → ghcr.io)
         run: ./gradlew jib --console=plain
         env:
