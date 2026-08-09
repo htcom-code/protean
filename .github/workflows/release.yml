@@ -1,4 +1,5 @@
-# GitHub Actions Release — publishes the library to Maven Central (Sonatype Central Portal).
+# GitHub Actions Release — publishes the library to Maven Central (Sonatype Central Portal) and pushes the sidecar
+# worker container image to GHCR at the same version.
 #
 # Trigger: MANUAL (workflow_dispatch), not a tag push. This is deliberate. Our release policy makes v* tags and
 # release/* markers immutable (branch/tag rulesets forbid deletion). If a tag triggered the upload, the immutable
@@ -45,6 +46,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # the worker image push below writes to GHCR (ci.yml's publish-worker-image needs the same).
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - name: set up JDK 21
@@ -74,8 +77,21 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.ORG_GRADLE_PROJECT_signingInMemoryKeyPassword }}
           ORG_GRADLE_PROJECT_mavenCentralUsername:       ${{ secrets.ORG_GRADLE_PROJECT_mavenCentralUsername }}
           ORG_GRADLE_PROJECT_mavenCentralPassword:       ${{ secrets.ORG_GRADLE_PROJECT_mavenCentralPassword }}
+      # The container isolation track tells consumers to run ghcr.io/<owner>/protean-worker:<version>, so a release
+      # that only ships the library leaves that track with no image to pull: ci.yml pushes the image on main, but at
+      # the development version (0.0.1-SNAPSHOT), never at the release coordinate. Same -Pversion as the upload, so
+      # jib's `tags = [version]` stamps the release tag. Runs AFTER the Central upload deliberately — the upload is
+      # the gated, expensive half, and a GHCR tag pushed for a deployment that is later Dropped is deletable, while
+      # the reverse (image missing for a published library) is what consumers actually trip over.
+      - name: push the worker image at the release version (jib → ghcr.io)
+        run: ./gradlew jib -Pversion=${{ inputs.version }} --console=plain
+        env:
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: next steps
         run: |
+          echo "Pushed ghcr.io/${{ github.repository_owner }}/protean-worker:${{ inputs.version }}."
           echo "Uploaded org.htcom:protean:${{ inputs.version }} to the Central Portal."
           echo "It should now be VALIDATED (not yet public). Review it at https://central.sonatype.com → Deployments."
           echo "If good: tag v${{ inputs.version }} + create release/${{ inputs.version }}, then click Publish on the Portal."
