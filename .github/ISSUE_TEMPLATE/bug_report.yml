@@ -49,7 +49,7 @@ body:
     attributes:
       label: Protean version / commit
       description: Release tag (e.g. v0.0.1) or commit SHA. Coordinate is `org.htcom:protean`.
-      placeholder: "0.0.1-SNAPSHOT or abc1234"
+      placeholder: "0.0.1 or abc1234"
     validations:
       required: true
   - type: input

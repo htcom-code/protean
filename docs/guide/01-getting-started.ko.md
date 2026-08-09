@@ -7,20 +7,19 @@ Protean 을 기존 Spring Boot 애플리케이션에 의존성으로 넣고, 재
 
 ## 1. 의존성 추가
 
-Protean 좌표는 `org.htcom:protean:0.0.1-SNAPSHOT` 이다(`group = org.htcom`, artifactId = `protean`,
-Spring Boot 3.5.x / Java 21). 현재는 로컬 Maven 저장소(`~/.m2`)로 발행되므로 소비자 빌드에
-`mavenLocal()` 을 추가한다.
+Protean 좌표는 `org.htcom:protean:0.0.1` 이다(`group = org.htcom`, artifactId = `protean`,
+Spring Boot 3.5.x / Java 21). Maven Central 에 발행되므로 Spring Boot 빌드가 이미 갖고 있는
+`mavenCentral()` 외에 추가할 저장소가 없다.
 
 Gradle:
 
 ```groovy
 repositories {
     mavenCentral()
-    mavenLocal()   // Protean 이 publishToMavenLocal 로 올라간 곳
 }
 
 dependencies {
-    implementation 'org.htcom:protean:0.0.1-SNAPSHOT'
+    implementation 'org.htcom:protean:0.0.1'
 }
 ```
 
@@ -30,7 +29,7 @@ Maven:
 <dependency>
     <groupId>org.htcom</groupId>
     <artifactId>protean</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.1</version>
 </dependency>
 ```
 

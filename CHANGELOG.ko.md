@@ -8,12 +8,12 @@
 
 버전이 `0.x` 인 동안 공개 API 는 마이너 릴리스 사이에 바뀔 수 있다.
 
-## [Unreleased]
+## [0.0.1] - 2026-08-09
 
-**Protean** 의 발행 전 baseline — Spring Boot 를 런타임 플랫폼으로 쓰는 라이브러리.
+**Protean** 첫 공개 릴리스 — Spring Boot 를 런타임 플랫폼으로 쓰는 라이브러리.
 실행 중에 Java 소스를 받아 컴파일 → 전용 ClassLoader 로드 → REST 엔드포인트 등록 →
-무중단 교체·롤백·해제까지 한다. 좌표 `org.htcom:protean`, Spring Boot 3.5.x / Java 21.
-현재는 `mavenLocal` 로만 발행하며, 원격 발행(GitHub Packages)은 이관 이후다.
+무중단 교체·롤백·해제까지 한다. 좌표 `org.htcom:protean:0.0.1`, Spring Boot 3.5.x / Java 21.
+Maven Central 에 발행하고, sidecar worker 이미지는 `ghcr.io/htcom-code/protean-worker:0.0.1` 로 올린다.
 
 ### 추가
 
@@ -22,8 +22,9 @@
   MPL-2.0 license·developer·scm)를 담고, 아티팩트 서명은 property-gated — in-memory
   GPG 키가 없으면 서명을 건너뛰어 `publishToMavenLocal` / GitHub Packages 는
   unsigned 로 발행되고, 릴리스 파이프라인이 키와 Central Portal 토큰을 주입한다.
-  발행 산출물은 plain + sources + javadoc + worker 유지(boot jar 제외). 네임스페이스
-  검증·GPG/토큰 설정·릴리스 컷은 외부 단계로 아직 미수행.
+  발행 산출물은 plain + sources + javadoc + worker 유지(boot jar 제외). 릴리스 컷은
+  수동 `Release` 워크플로가 수행하며 업로드 후 VALIDATED 에서 멈춘다 — 실공개는
+  Portal 에서 사람이 Publish 를 눌러야 한다.
 - worker DB admin 자격증명(`protean.worker.db.admin-url` / `username` /
   `password`)을 재기동 없이 런타임 rotation 가능. `DbScopeProvisioner` 가
   provision/detach/destroy 마다 `AdminCreds` 스냅샷을 읽어 자격증명이 바뀔 때만 admin

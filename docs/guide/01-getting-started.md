@@ -6,20 +6,19 @@ This walks the shortest path to adding Protean as a dependency to an existing Sp
 
 ## 1. Add the Dependency
 
-The Protean coordinate is `org.htcom:protean:0.0.1-SNAPSHOT` (`group = org.htcom`, artifactId = `protean`,
-Spring Boot 3.5.x / Java 21). It is currently published to the local Maven repository (`~/.m2`), so add
-`mavenLocal()` to the consumer build.
+The Protean coordinate is `org.htcom:protean:0.0.1` (`group = org.htcom`, artifactId = `protean`,
+Spring Boot 3.5.x / Java 21). It is published to Maven Central, so no extra repository declaration is
+needed beyond the `mavenCentral()` a Spring Boot build already has.
 
 Gradle:
 
 ```groovy
 repositories {
     mavenCentral()
-    mavenLocal()   // where Protean was published via publishToMavenLocal
 }
 
 dependencies {
-    implementation 'org.htcom:protean:0.0.1-SNAPSHOT'
+    implementation 'org.htcom:protean:0.0.1'
 }
 ```
 
@@ -29,7 +28,7 @@ Maven:
 <dependency>
     <groupId>org.htcom</groupId>
     <artifactId>protean</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.1</version>
 </dependency>
 ```
 

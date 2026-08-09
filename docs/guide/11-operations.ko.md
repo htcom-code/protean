@@ -190,7 +190,8 @@ protean:
 - 발행 publication 은 `components.java`(plain jar + Shadow 플러그인이 기여하는 **worker** shaded jar — `shadowed` bundling 속성으로 구분되어 일반 소비자는 여전히 plain jar 를 받음) + sources jar + javadoc jar + 생성 POM.
 - **worker 컨테이너 이미지**는 Jib 로 별도 발행한다: `GITHUB_OWNER`/`GITHUB_ACTOR`/`GITHUB_TOKEN` 이 설정되면 `./gradlew jib` 가 `ghcr.io/<owner>/protean-worker:<ver>` 로 push 하고(없으면 `jibDockerBuild`/`jibBuildTar` 로 로컬 빌드), CI 는 라이브러리 발행과 동일 gate 로 `main` push 시에만 실행한다.
 - JDBC 드라이버(`mysql-connector-j`, `postgresql`)는 protean 자기 bootJar·테스트엔 필요하지만 소비자에게 transitive 로 강제하지 않으려고 발행 POM 에서 `optional=true` 로 표시된다. 소비자가 worker DB 프로비저닝을 쓰면 자기 드라이버를 명시 추가해야 한다.
-- 원격 registry 는 **GitHub Packages**(이관 대상)로, URL·인증을 `build.gradle` 에 하드코딩하지 않고 `gradle.properties`/환경변수로 외부화한다. `githubOwner`/`githubRepo`/`githubActor`/`githubToken`(또는 `GITHUB_OWNER`/`GITHUB_REPO`/`GITHUB_ACTOR`/`GITHUB_TOKEN` env)이 **모두 주어졌을 때만** 원격 repository 가 등록되고(없으면 mavenLocal 만), 그때 `publishLibraryPublicationToGitHubPackagesRepository` 태스크로 발행한다. 자격 템플릿은 `gradle.properties.example` 참고.
+- **릴리스는 Maven Central**(Sonatype Central Portal)로 간다 — `com.vanniktech.maven.publish.base` 플러그인. 릴리스 좌표는 커밋하지 않는다: 소스 버전은 `0.0.1-SNAPSHOT` 으로 두고 릴리스는 `-Pversion=<release>` 로 주입한다. `publishToMavenCentral` 은 먼저 `verifyReleaseArtifact` 게이트(아티팩트 집합 + 실제 소비 테스트)를 돌린 뒤 업로드하며, 배포는 **VALIDATED** 에서 멈추고 실공개는 Portal 에서 사람이 따로 Publish 한다. 서명은 in-memory 이고 property-gated(`signingInMemoryKey*`)라 키가 없는 빌드는 다른 곳에 unsigned 로 발행된다. 업로드는 수동 `Release` 워크플로(`workflow_dispatch`)가 돌리며 tag push 로는 발동하지 않는다.
+- **GitHub Packages** 는 개발 스냅샷을 담는다(CI 가 `main` push 마다 발행). URL·인증을 `build.gradle` 에 하드코딩하지 않고 `gradle.properties`/환경변수로 외부화한다. `githubOwner`/`githubRepo`/`githubActor`/`githubToken`(또는 `GITHUB_OWNER`/`GITHUB_REPO`/`GITHUB_ACTOR`/`GITHUB_TOKEN` env)이 **모두 주어졌을 때만** 원격 repository 가 등록되고(없으면 mavenLocal 만), 그때 `publishLibraryPublicationToGitHubPackagesRepository` 태스크로 발행한다. 자격 템플릿은 `gradle.properties.example` 참고.
 
 ## 관련 문서
 

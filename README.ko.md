@@ -117,11 +117,11 @@ Spring MVC·컨텍스트 내부를 조작하므로 지원 라인은 계약에 �
 
 ## 빠른 시작 (라이브러리 소비)
 
-Protean 은 plain jar 로 발행된다(현재 mavenLocal, 원격 registry 는 GitHub 이관 후 GitHub Packages).
+Protean 은 Maven Central 에 plain jar 로 발행된다(Spring Boot fat jar 아님). 소비자는 `mavenCentral()` 하나면 된다.
 
 ```gradle
 dependencies {
-    implementation 'org.htcom:protean:0.0.1-SNAPSHOT'
+    implementation 'org.htcom:protean:0.0.1'
     // 소비자 앱은 Spring Boot 앱이므로 이미 보유(Protean 은 spring 을 runtime scope 로만 전이):
     implementation 'org.springframework.boot:spring-boot-starter-web'
 }

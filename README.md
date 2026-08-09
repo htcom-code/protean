@@ -152,12 +152,12 @@ Pool sizing, sharding, routing, multi-tenancy, XA, and ORM choice are **consumer
 
 ## Quick start (consuming the library)
 
-Protean is published as a plain jar (currently mavenLocal; the remote registry is
-GitHub Packages after the migration).
+Protean is published to Maven Central as a plain jar (no Spring Boot fat jar), so
+`mavenCentral()` is the only repository a consumer needs.
 
 ```gradle
 dependencies {
-    implementation 'org.htcom:protean:0.0.1-SNAPSHOT'
+    implementation 'org.htcom:protean:0.0.1'
     // The consumer app is a Spring Boot app so it already has this
     // (Protean transits spring only at runtime scope):
     implementation 'org.springframework.boot:spring-boot-starter-web'
