@@ -176,8 +176,8 @@ protean:
 ```
 
 **발행 아티팩트 획득.** 둘 다 Protean 빌드가 산출하므로 워커를 직접 빌드하지 않는다:
-- process 트랙(`jar`) — GitHub Packages 에 `worker` classifier 로 발행되는 평평한 shaded uber-jar(`org.htcom:protean:<version>:worker`). 내려받아 `jar` 가 그 파일을 가리키게 한다. (Spring Boot `-boot.jar` 는 여기서 **안 된다** — process 트랙은 `java -cp` 로 띄우는데 중첩 `BOOT-INF` 레이아웃은 이를 못 채운다. `worker` jar 가 평평한 이유가 이것이다.)
-- container 트랙(`image`) — GHCR 에 `ghcr.io/<owner>/protean-worker:<version>` 로 발행되는 OCI 이미지. 워커를 `/app/protean-worker.jar` 에 담아 `/app/*` classpath 로 실행하며, 호스트 마운트가 필요 없다.
+- process 트랙(`jar`) — Maven Central 에 `worker` classifier 로 발행되는 평평한 shaded uber-jar(`org.htcom:protean:<version>:worker`). 내려받아 `jar` 가 그 파일을 가리키게 한다. (Spring Boot `-boot.jar` 는 여기서 **안 된다** — process 트랙은 `java -cp` 로 띄우는데 중첩 `BOOT-INF` 레이아웃은 이를 못 채운다. `worker` jar 가 평평한 이유가 이것이다.)
+- container 트랙(`image`) — GHCR 에 `ghcr.io/<owner>/protean-worker:<version>` 로 발행되는 OCI 이미지. 워커를 `/app/protean-worker.jar` 에 담아 `/app/*` classpath 로 실행하며, 호스트 마운트가 필요 없다. `<version>` 은 의존하는 Protean 버전으로 pin 한다 — 호스트와 워커는 sidecar 프로토콜 양쪽에서 같은 코드를 돌리므로, 흘러다닐 `latest` 태그를 일부러 만들지 않는다.
 
 **`shared-api` 는 소비자가 큐레이션**하는 것이지 Protean 아티팩트가 아니다: 모듈이 컴파일 시점에 참조하는 공유 타입(자신의 도메인 타입 + 브리지 인터페이스)을 담는다. embed 는 호스트 classpath 를 공짜로 물려받아 이게 필요 없다 — shared-api 제공이 sidecar 의 비용이다.
 

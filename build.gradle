@@ -104,14 +104,19 @@ tasks.register('stageWorkerImageApp', Copy) {
 //    hands docker (`... <image> java -cp /app/* <mainClass> <spring args>`) runs as-is.
 //  - to.image is property-gated exactly like the Maven publish below: a local tag when unset (so `jibDockerBuild`
 //    works offline), ghcr.io/<owner>/protean-worker when GITHUB_OWNER is set (CI). ghcr requires a lowercase path.
+//  - the version is part of to.image rather than to.tags, and there is deliberately NO `latest`: given a bare
+//    repository name Jib resolves the reference to `latest` and treats to.tags as ADDITIONAL tags, so every push
+//    would also move a floating `latest`. The worker is version-locked to the library it serves (a host on
+//    protean:X must run protean-worker:X — same code on both sides of the sidecar protocol), so a floating tag
+//    would hand out mismatched pairs. Consumers pin the version, exactly as `05-isolation-modes` shows.
 jib {
     from {
         image = 'eclipse-temurin:21-jdk'
     }
     to {
         def imgOwner = findProperty('githubOwner') ?: System.getenv('GITHUB_OWNER')
-        image = imgOwner ? "ghcr.io/${imgOwner.toString().toLowerCase()}/protean-worker" : 'protean-worker'
-        tags = [version.toString()]
+        def imgRepo = imgOwner ? "ghcr.io/${imgOwner.toString().toLowerCase()}/protean-worker" : 'protean-worker'
+        image = "${imgRepo}:${version}"
         auth {
             username = (findProperty('githubActor') ?: System.getenv('GITHUB_ACTOR') ?: '').toString()
             password = (findProperty('githubToken') ?: System.getenv('GITHUB_TOKEN') ?: '').toString()

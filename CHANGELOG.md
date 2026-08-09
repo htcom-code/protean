@@ -8,14 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 While the version is `0.x`, the public API may change between minor releases.
 
-## [Unreleased]
+## [0.0.1] - 2026-08-09
 
-Pre-release baseline of **Protean** — a library that turns Spring Boot into a
+First public release of **Protean** — a library that turns Spring Boot into a
 runtime platform: it compiles Java source at runtime, loads it under a dedicated
 ClassLoader, registers REST endpoints, and hot-swaps / rolls back / unloads them
-with no restart. Coordinate `org.htcom:protean`; Spring Boot 3.5.x / Java 21.
-Currently published to `mavenLocal` only; remote publishing (GitHub Packages)
-follows the migration.
+with no restart. Coordinate `org.htcom:protean:0.0.1`; Spring Boot 3.5.x / Java 21.
+Published to Maven Central; the sidecar worker image to `ghcr.io/htcom-code/protean-worker:0.0.1`.
 
 ### Added
 
@@ -26,8 +25,8 @@ follows the migration.
   signing is skipped so `publishToMavenLocal` / GitHub Packages still publish
   unsigned, while the release pipeline supplies the key and Central Portal token.
   The published set stays plain + sources + javadoc + worker (no boot jar).
-  Namespace verification, GPG/token setup, and the release cut are external steps,
-  not yet performed.
+  The release is cut by the manual `Release` workflow, which uploads and stops at
+  VALIDATED — going live stays a deliberate Publish on the Portal.
 - Worker DB admin credentials (`protean.worker.db.admin-url` / `username` /
   `password`) are now runtime-rotatable without a restart: `DbScopeProvisioner`
   reads an `AdminCreds` snapshot per provision/detach/destroy and rebuilds the admin

@@ -176,8 +176,8 @@ protean:
 ```
 
 **Obtaining the published artifacts.** Protean's build emits both, so you do not build the worker yourself:
-- process track (`jar`) — the flat shaded uber-jar published to GitHub Packages under the `worker` classifier (`org.htcom:protean:<version>:worker`). Download it and point `jar` at the file. (A Spring Boot `-boot.jar` will **not** work here — the process track launches with a bare `java -cp`, which the nested `BOOT-INF` layout cannot satisfy; the `worker` jar is flat for exactly this reason.)
-- container track (`image`) — the OCI image published to GHCR at `ghcr.io/<owner>/protean-worker:<version>`. It bundles the worker at `/app/protean-worker.jar` and runs on the `/app/*` classpath; no host mount is needed.
+- process track (`jar`) — the flat shaded uber-jar published to Maven Central under the `worker` classifier (`org.htcom:protean:<version>:worker`). Download it and point `jar` at the file. (A Spring Boot `-boot.jar` will **not** work here — the process track launches with a bare `java -cp`, which the nested `BOOT-INF` layout cannot satisfy; the `worker` jar is flat for exactly this reason.)
+- container track (`image`) — the OCI image published to GHCR at `ghcr.io/<owner>/protean-worker:<version>`. It bundles the worker at `/app/protean-worker.jar` and runs on the `/app/*` classpath; no host mount is needed. Pin `<version>` to the Protean version you depend on — host and worker run the same code across the sidecar protocol, so there is deliberately no `latest` tag to drift onto.
 
 **`shared-api` is yours to curate**, not a Protean artifact: it holds the shared types your modules reference at compile time (your own domain types plus any bridged interfaces). Embed avoids this because it inherits the host classpath for free; supplying `shared-api` is sidecar's cost.
 
