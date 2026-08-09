@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Guards the <b>published</b> configuration-documentation surfaces. Property javadoc on the
@@ -33,9 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * {@code META-INF/spring-configuration-metadata.json}, which ships inside the jar and is what a consumer's IDE shows on
  * autocomplete. That makes it a consumer-facing doc surface with no review gate of its own — this test is that gate.
  *
- * <p>Three checks, each closing a drift mode observed in practice:
+ * <p>Four checks, each closing a drift mode observed in practice:
  *
  * <ol>
+ *   <li><b>Every shipped property carries a description.</b> The other checks only inspect descriptions that exist, so
+ *       a field with no javadoc at all was invisible to all of them — it still autocompletes in the consumer's IDE,
+ *       just with an empty tooltip.</li>
  *   <li><b>No javadoc markup or internal-doc references in shipped descriptions.</b> Inline tags survive into the
  *       metadata as literal text (a consumer reads "{@code true}" instead of "true"), and a reference to a design doc
  *       excluded from the public repo becomes a dangling pointer.</li>
@@ -79,6 +83,26 @@ class ConfigDocSurfaceTest {
     private static final Set<String> WRAP_ALLOWLIST = Set.of(
             "org/htcom/protean/module/SharedLibUsageIndex.java:39",
             "org/htcom/protean/isolation/WorkerRuntimeProvider.java:22");
+
+    @Test
+    void every_shipped_property_carries_a_description() throws Exception {
+        List<JsonNode> properties = properties();
+        List<String> undescribed = new ArrayList<>();
+        for (JsonNode property : properties) {
+            if (property.path("description").asText("").isBlank()) {
+                undescribed.add(property.path("name").asText());
+            }
+        }
+        // All blank means the javadoc was never read rather than never written: the processor takes descriptions from
+        // the source, and an incremental compile hands it elements restored from class files, which carry no doc
+        // comments. Saying so here saves the next person from "fixing" javadoc that is already there.
+        if (!properties.isEmpty() && undescribed.size() == properties.size()) {
+            fail("every description is blank, which is the incremental-compile signature rather than missing javadoc"
+                    + " — rebuild with `./gradlew compileJava --rerun` (or a clean build) before trusting this run");
+        }
+        assertTrue(undescribed.isEmpty(), "these properties reach a consumer's IDE with an empty tooltip — add javadoc"
+                + " to the field on ProteanProperties:\n  " + String.join("\n  ", undescribed));
+    }
 
     @Test
     void shipped_property_descriptions_carry_no_javadoc_markup_or_internal_doc_references() throws Exception {

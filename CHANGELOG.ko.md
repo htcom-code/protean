@@ -189,4 +189,10 @@ Maven Central 에 발행하고, sidecar worker 이미지는 `ghcr.io/htcom-code/
   classifier 발행) + sidecar 워커 컨테이너 이미지(Jib) `ghcr.io/<owner>/protean-worker`.
   `publishToMavenLocal`(POM/소비성 검증). **`test` 와 `bootJar` 는 분리 실행**
   (결합 시 `LeakDiagnosisTest` OOM 위험).
+- 발행 jar 이 `Automatic-Module-Name: org.htcom.protean` 을 선언하고(파일명에서
+  유추된 모듈명은 소비자가 `requires` 를 쓴 뒤에는 바꾸는 것 자체가 breaking 이라
+  첫 릴리스 전에 못박음), MPL-2.0 전문을 `META-INF/LICENSE` 에 담는다 — jar 만
+  받은 사람도 라이선스를 볼 수 있다.
+- Central 사전 게이트가 발행 산출물 전체(`worker` classifier 와 그 서명 포함)를
+  검사하고, 설정 metadata 의 설명이 소실된 jar 은 업로드를 거부한다.
 - README(en/ko) 및 `docs/guide/` 사용자 가이드.

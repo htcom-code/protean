@@ -79,8 +79,9 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword:       ${{ secrets.ORG_GRADLE_PROJECT_mavenCentralPassword }}
       # The container isolation track tells consumers to run ghcr.io/<owner>/protean-worker:<version>, so a release
       # that only ships the library leaves that track with no image to pull: ci.yml pushes the image on main, but at
-      # the development version (0.0.1-SNAPSHOT), never at the release coordinate. Same -Pversion as the upload, so
-      # jib's `tags = [version]` stamps the release tag. Runs AFTER the Central upload deliberately — the upload is
+      # the development version (0.0.1-SNAPSHOT), never at the release coordinate. Same -Pversion as the upload, and
+      # build.gradle puts that version in jib's `to.image`, so this pushes exactly one tag — there is no floating
+      # `latest` for a release to fight a later snapshot over. Runs AFTER the Central upload deliberately — the upload is
       # the gated, expensive half, and a GHCR tag pushed for a deployment that is later Dropped is deletable, while
       # the reverse (image missing for a published library) is what consumers actually trip over.
       - name: push the worker image at the release version (jib → ghcr.io)

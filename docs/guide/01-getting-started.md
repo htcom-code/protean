@@ -32,6 +32,9 @@ Maven:
 </dependency>
 ```
 
+On the module path, Protean's module name is `org.htcom.protean` (declared as `Automatic-Module-Name`, so it
+stays stable across releases).
+
 ### Bundled Spring dependencies
 
 Protean carries `spring-boot-starter-web`, `spring-boot-starter-aop`, and `spring-boot-starter-jdbc` as

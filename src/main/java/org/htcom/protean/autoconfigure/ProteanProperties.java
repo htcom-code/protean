@@ -359,6 +359,7 @@ public class ProteanProperties {
 
     /** Runtime trace recording. */
     public static class Trace {
+        /** Whether request traces are recorded. */
         private volatile boolean enabled = true;
         /** Ring buffer capacity (most recent N requests). */
         private volatile int capacity = 200;
@@ -498,6 +499,7 @@ public class ProteanProperties {
 
     /** Worker-wide manual DB scope (used when auto-provision is off). */
     public static class Datasource {
+        /** Global manual worker DB URL, used when auto-provisioning is off. Empty leaves each worker on its own default database. */
         private String url = "";
         public String getUrl() { return url; }
         public void setUrl(String url) { this.url = url; }
@@ -505,9 +507,11 @@ public class ProteanProperties {
 
     /** Container track (Docker) settings. */
     public static class Container {
+        /** Base image the container-track worker runs in. Must carry a JDK — the worker compiles module sources. */
         private String image = "eclipse-temurin:21-jdk";
         /** Explicit worker jar path (empty = auto-detect the -boot.jar in build/libs). */
         private String jar = "";
+        /** Container memory limit. Sized for the default packing density; raise it proportionally when raising modules-per-worker. */
         private String memory = "512m";
         /** PID limit for fork-bomb protection. */
         private long pidsLimit = 1024;
@@ -515,6 +519,7 @@ public class ProteanProperties {
         private String network = "";
         /** seccomp profile path. Empty = Docker default. */
         private String seccomp = "";
+        /** Automatically restart modules of a crashed worker (container track). */
         private boolean autoRestart = false;
         /** Hostname rewrite target so the container can reach the host DB. */
         private String dbHost = "host.docker.internal";
@@ -539,12 +544,16 @@ public class ProteanProperties {
 
     /** Automatic provisioning of a per-module isolated DB scope. */
     public static class Db {
+        /** Enable per-scope isolated DB auto-provisioning. A deploy then selects a scope, and same-scope modules share that scope's provisioned database. */
         private boolean autoProvision = false;
         /** mysql | postgresql. */
         private String dialect;
         // volatile: read live off the provisioning thread after a runtime admin-credential rotation (see DbScopeProvisioner).
+        /** Admin connection URL used to provision scope databases. Rotatable at runtime: a change applies to the next provision without a restart, and the new connection is validated before the swap. */
         private volatile String adminUrl;
+        /** Admin username for provisioning. Rotatable at runtime like the admin URL. */
         private volatile String adminUsername;
+        /** Admin password for provisioning. Rotatable at runtime like the admin URL. */
         private volatile String adminPassword;
         /**
          * Seed allowlist of DB scopes (tenants) created at startup. A module deploy must bind to one of these via its
@@ -577,7 +586,9 @@ public class ProteanProperties {
 
     /** Sidecar worker runtime (opt-in). */
     public static class Sidecar {
+        /** Path to the sidecar worker jar, required by the process track. The flat worker artifact, not a Spring Boot boot jar. */
         private String jar = "";
+        /** Sidecar worker container image, required by the container track. Pin it to the Protean version in use. */
         private String image = "";
         /** Shared-type jar for worker compilation. */
         private String sharedApi = "";

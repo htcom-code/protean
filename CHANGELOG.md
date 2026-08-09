@@ -222,4 +222,11 @@ Published to Maven Central; the sidecar worker image to `ghcr.io/htcom-code/prot
   image (Jib) at `ghcr.io/<owner>/protean-worker`. `publishToMavenLocal` for
   POM/consumability checks. **`test` and `bootJar` run separately** (combined
   runs can OOM `LeakDiagnosisTest`).
+- The published jars declare `Automatic-Module-Name: org.htcom.protean` (pinned
+  before the first release, since a name derived from the file name would become
+  breaking to change once consumers `requires` it) and carry the MPL-2.0 text at
+  `META-INF/LICENSE`, so a recipient holding only the jar has the license.
+- The pre-Central gate checks the full published set (including the `worker`
+  classifier and its signature) and refuses to upload a jar whose shipped
+  configuration metadata lost its descriptions.
 - README (en/ko) and user guides under `docs/guide/`.
