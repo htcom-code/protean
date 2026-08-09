@@ -33,6 +33,9 @@ Maven:
 </dependency>
 ```
 
+module path 에서 Protean 의 모듈명은 `org.htcom.protean` 이다(`Automatic-Module-Name` 으로 선언해
+릴리스 사이에 바뀌지 않는다).
+
 ### 함께 딸려오는 Spring 의존성
 
 Protean 은 `spring-boot-starter-web`, `spring-boot-starter-aop`, `spring-boot-starter-jdbc` 를

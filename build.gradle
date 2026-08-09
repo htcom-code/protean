@@ -58,7 +58,22 @@ springBoot {
 jar {
     enabled = true
     archiveClassifier = ''
+    manifest {
+        // Pinned now, before the first release, because it is effectively permanent: without it a JPMS consumer gets
+        // an automatic module name derived from the jar FILE NAME, and once anyone writes `requires` against that,
+        // declaring a different name later is a breaking change. Matches the root package.
+        attributes 'Automatic-Module-Name': 'org.htcom.protean',
+                   'Implementation-Title': 'protean',
+                   'Implementation-Version': project.version
+    }
 }
+// MPL-2.0 §3.1: a recipient of the Source/Executable form must be given the license text. The POM's <licenses> block
+// satisfies Maven Central's metadata requirement, but someone holding only the jar never sees the POM — so ship the
+// license inside every published archive too. Scoped to the Central artifacts; shadowJar is excluded because it
+// already concatenates the bundled dependencies' own META-INF/LICENSE entries and a same-path addition would collide.
+tasks.named('jar') { metaInf { from(layout.projectDirectory.file('LICENSE')) } }
+tasks.named('sourcesJar') { metaInf { from(layout.projectDirectory.file('LICENSE')) } }
+tasks.named('javadocJar') { metaInf { from(layout.projectDirectory.file('LICENSE')) } }
 bootJar {
     enabled = true
     archiveClassifier = 'boot'
@@ -299,12 +314,16 @@ tasks.withType(GenerateModuleMetadata).configureEach {
 // (local dev leaves the publication unsigned), asserted when signing is active (the release pipeline).
 tasks.register('verifyReleaseArtifactSet') {
     group = 'verification'
-    description = 'Assert the publishable artifact set (jar/sources/javadoc/pom, +signatures when signing) exists.'
+    description = 'Assert the publishable artifact set (jar/sources/javadoc/worker/pom, +signatures when signing) exists.'
     dependsOn 'publishLibraryPublicationToMavenLocal'
     doLast {
         def dir = new File(System.getProperty('user.home'), '.m2/repository/org/htcom/protean/' + version)
         def b = "protean-${version}"
-        ["${b}.jar", "${b}-sources.jar", "${b}-javadoc.jar", "${b}.pom"].each { n ->
+        // The worker classifier is part of the publication (Shadow contributes it to components.java), so it is part
+        // of what Central receives and belongs in this list — the first version of this gate copied the conventional
+        // four-artifact set and silently left protean's own fifth artifact unchecked.
+        def artifacts = ["${b}.jar", "${b}-sources.jar", "${b}-javadoc.jar", "${b}-worker.jar", "${b}.pom"]
+        artifacts.each { n ->
             def f = new File(dir, n as String)
             if (!f.isFile() || f.length() == 0L) {
                 throw new GradleException("release verify: missing or empty artifact ${f}")
@@ -313,14 +332,45 @@ tasks.register('verifyReleaseArtifactSet') {
         def signing = providers.gradleProperty('signingInMemoryKey').isPresent() ||
                 System.getenv('ORG_GRADLE_PROJECT_signingInMemoryKey') != null
         if (signing) {
-            ["${b}.jar.asc", "${b}.pom.asc", "${b}-sources.jar.asc", "${b}-javadoc.jar.asc"].each { n ->
-                def f = new File(dir, n as String)
+            artifacts.each { n ->
+                def f = new File(dir, "${n}.asc" as String)
                 if (!f.isFile() || f.length() == 0L) {
                     throw new GradleException("release verify: missing or empty signature ${f}")
                 }
             }
         }
-        logger.lifecycle("release verify: artifact set OK (signing=${signing}) — ${dir}")
+
+        // The shipped configuration metadata must actually carry its descriptions. This is not a style check: the
+        // spring-boot-configuration-processor reads javadoc off the SOURCE, so elements restored from an incremental
+        // compile (unchanged sources come back from class files, which carry no doc comments) yield metadata with
+        // every description and defaultValue silently dropped. A warm local build therefore stages a jar whose IDE
+        // surface is blank while every other check still passes — and Central accepts it, permanently. CI always
+        // builds clean so it never sees this, which is exactly why the gate has to look at the staged artifact.
+        def staged = new File(dir, "${b}.jar" as String)
+        def metadata = new java.util.zip.ZipFile(staged).withCloseable { zip ->
+            def entry = zip.getEntry('META-INF/spring-configuration-metadata.json')
+            if (entry == null) {
+                throw new GradleException("release verify: ${staged} has no META-INF/spring-configuration-metadata.json"
+                        + " — is spring-boot-configuration-processor on the annotationProcessor path?")
+            }
+            zip.getInputStream(entry).withStream { new groovy.json.JsonSlurper().parse(it) }
+        }
+        def props = metadata.properties ?: []
+        if (props.size() < 50) {
+            throw new GradleException("release verify: only ${props.size()} configuration properties in the staged jar"
+                    + " — the metadata looks truncated")
+        }
+        def undescribed = props.findAll { !it.description?.trim() }*.name
+        if (!undescribed.isEmpty()) {
+            throw new GradleException("release verify: ${undescribed.size()} of ${props.size()} configuration"
+                    + " properties ship with no description (a consumer's IDE shows a blank tooltip)."
+                    + (undescribed.size() == props.size()
+                        ? " ALL of them are blank, which is the incremental-compile signature — rerun with"
+                        + " `./gradlew compileJava --rerun` (or a clean build) and publish again."
+                        : " Add javadoc to these fields on ProteanProperties:\n  " + undescribed.join("\n  ")))
+        }
+        logger.lifecycle("release verify: artifact set OK (signing=${signing}, ${props.size()} documented config"
+                + " properties) — ${dir}")
     }
 }
 
