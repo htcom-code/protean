@@ -24,6 +24,14 @@ updates:
       # toolchain), not an automated bump — keep 8.x patches/minors, block 9.x majors.
       - dependency-name: "com.gradleup.shadow"                            # root plugins DSL (build.gradle)
         update-types: ["version-update:semver-major"]
+      # The wrapper itself is the other half of that same track. Blocking only the plugins left
+      # a gap: Dependabot proposed the Gradle 8 -> 9 wrapper bump directly (PR #71, closed), and
+      # its CI was green — because the PR jobs run test/bootJar, not the release path (publish,
+      # jib, verifyReleaseArtifactSet) or archive reproducibility, which Gradle 9 enables by
+      # default. A green check there does not authorize the move. The wrapper goes to 9.x as one
+      # verified change together with the Shadow/Jib majors, so keep 8.x patches/minors here too.
+      - dependency-name: "gradle-wrapper"                                 # gradle/wrapper/gradle-wrapper.properties
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions used in .github/workflows/.
   - package-ecosystem: github-actions
