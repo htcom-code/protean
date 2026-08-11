@@ -87,9 +87,12 @@ majors together, as one verified change.
 
 ### 🚫 Not planned
 
-- Auto-accepting Dependabot **major** Gradle-plugin bumps (Shadow, Jib) that require
-  a newer Gradle line. They are gated on the upgrade above, not taken as automated
-  bumps — Dependabot is configured to hold `com.gradleup.shadow` at its major.
+- Auto-accepting Dependabot **major** bumps of either half of the toolchain — the
+  Gradle-plugin majors (Shadow, Jib) that require a newer Gradle line, or the wrapper
+  itself. They are gated on the upgrade above, not taken as automated bumps; Dependabot
+  is configured to hold both `com.gradleup.shadow` and `gradle-wrapper` at their major.
+  A green PR check does not lift that gate: the PR jobs run the test and bootJar gates,
+  not the release path or archive reproducibility, which is what the upgrade must verify.
 
 ---
 

@@ -80,9 +80,11 @@ wrapper 에서 채택 불가). 소비자 대면 완전성 계약 때문이 아�
 
 ### 🚫 Not planned
 
-- 새 Gradle 라인을 요구하는 Dependabot 의 **메이저** Gradle 플러그인 범프(Shadow, Jib) 자동
-  수용. 이들은 위 업그레이드에 게이트돼 있고 자동 범프로 받지 않는다 — Dependabot 은
-  `com.gradleup.shadow` 를 현재 메이저에 묶도록 설정돼 있다.
+- 툴체인 양쪽 어느 쪽이든 Dependabot 의 **메이저** 범프 자동 수용 — 새 Gradle 라인을 요구하는
+  Gradle 플러그인 메이저(Shadow, Jib) 든, wrapper 자체든. 이들은 위 업그레이드에 게이트돼 있고
+  자동 범프로 받지 않는다. Dependabot 은 `com.gradleup.shadow` 와 `gradle-wrapper` 를 모두 현재
+  메이저에 묶도록 설정돼 있다. PR 체크가 초록이어도 게이트는 풀리지 않는다 — PR 잡은 test 와
+  bootJar 게이트를 돌 뿐, 업그레이드가 검증해야 할 릴리스 경로나 archive 재현성은 돌지 않는다.
 
 ---
 
