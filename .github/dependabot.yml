@@ -32,6 +32,18 @@ updates:
       # verified change together with the Shadow/Jib majors, so keep 8.x patches/minors here too.
       - dependency-name: "gradle-wrapper"                                 # gradle/wrapper/gradle-wrapper.properties
         update-types: ["version-update:semver-major"]
+      # The json-schema-validator is pinned to the 1.5.x line by build.gradle (compileOnly for the
+      # optional strict-schema path, testImplementation for the schema conformance tests) and by
+      # the quickstart example's runtimeOnly. 2.x rewrote the API — JsonSchemaFactory, SpecVersion
+      # and ValidationMessage are gone (ValidationMessage became Error) — and 3.x additionally
+      # moved to Jackson 3 (tools.jackson), while this project's baseline is Jackson 2
+      # (com.fasterxml) from Spring Boot 3.5.x. Dependabot proposed 1.5.9 -> 3.0.7 regardless
+      # (PR #74, closed) and NetworkntSchemaValidator failed to compile. 1.5.9 is the last release
+      # of the 1.5.x line, so every future offer is a major — block them here. Leaving 1.5.x means
+      # rewriting that validator, and for 3.x also moving the platform's Jackson generation; that
+      # is a deliberate change, not an automated bump.
+      - dependency-name: "com.networknt:json-schema-validator"            # build.gradle + examples/quickstart/build.gradle
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions used in .github/workflows/.
   - package-ecosystem: github-actions
