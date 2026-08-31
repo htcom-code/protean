@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -97,7 +96,7 @@ public class ReloadModuleResourcesTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        String id = text(arguments, "id");
+        String id = ToolArgs.require(arguments, "reload_module_resources", "id");
         if (platform.find(id).isEmpty()) {
             return McpToolResult.error(ErrorCode.MODULE_NOT_FOUND, ErrorCode.MODULE_NOT_FOUND.format(id))
                     .with("moduleId", id);
@@ -105,8 +104,8 @@ public class ReloadModuleResourcesTool implements McpTool {
         Map<String, ModuleResource> add = new LinkedHashMap<>();
         if (arguments.hasNonNull("files") && arguments.get("files").isArray()) {
             for (JsonNode f : arguments.get("files")) {
-                add.put(text(f, "filename"),
-                        new ModuleResource(text(f, "content"), f.path("base64").asBoolean(false)));
+                add.put(ToolArgs.require(f, "reload_module_resources", "filename"),
+                        new ModuleResource(ToolArgs.require(f, "reload_module_resources", "content"), f.path("base64").asBoolean(false)));
             }
         }
         List<String> removeFiles = new ArrayList<>();
@@ -120,12 +119,5 @@ public class ReloadModuleResourcesTool implements McpTool {
                 .orElseThrow(() -> new IllegalStateException("Module not found immediately after resource reload: " + id));
         JsonNode structured = mapper.valueToTree(ModuleStatus.from(saved, platform.effectiveMode(saved)));
         return McpToolResult.ok("Resources reloaded for module " + saved.id(), structured);
-    }
-
-    private static String text(JsonNode node, String field) {
-        if (node == null || !node.hasNonNull(field) || node.get(field).asText().isBlank()) {
-            throw McpException.invalidParams("missing required field: " + field);
-        }
-        return node.get(field).asText();
     }
 }

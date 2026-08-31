@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -81,7 +80,7 @@ public class PatchModuleTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        String id = text(arguments, "id");
+        String id = ToolArgs.require(arguments, "patch_module", "id");
         ModuleDescriptor current = platform.find(id)
                 .orElse(null);
         if (current == null) {
@@ -95,8 +94,8 @@ public class PatchModuleTool implements McpTool {
             for (JsonNode f : arguments.get("files")) {
                 files.add(new ModulePatch.FileSpec(
                         f.path("kind").asText("source"),
-                        text(f, "filename"),
-                        text(f, "content"),
+                        ToolArgs.require(f, "patch_module", "filename"),
+                        ToolArgs.require(f, "patch_module", "content"),
                         f.path("base64").asBoolean(false)));
             }
         }
@@ -112,12 +111,5 @@ public class PatchModuleTool implements McpTool {
                 .orElseThrow(() -> new IllegalStateException("Module not found in store immediately after patch: " + id));
         JsonNode structured = mapper.valueToTree(ModuleStatus.from(saved, platform.effectiveMode(saved)));
         return McpToolResult.ok("Module " + saved.id() + " patched (v" + saved.version() + ")", structured);
-    }
-
-    private static String text(JsonNode node, String field) {
-        if (node == null || !node.hasNonNull(field) || node.get(field).asText().isBlank()) {
-            throw McpException.invalidParams("missing required field: " + field);
-        }
-        return node.get(field).asText();
     }
 }
