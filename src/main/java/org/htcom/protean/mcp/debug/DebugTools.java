@@ -55,9 +55,20 @@ public final class DebugTools {
         /** Observe-only (state-unchanging). */
         static final McpToolAnnotations OBSERVE = McpToolAnnotations.builder()
                 .readOnly(true).idempotent(true).openWorld(false).build();
-        /** State-changing, non-idempotent action (attach/launch/step/continue/evaluate/redefine). */
+        /** State-changing, non-idempotent action bounded by the debugger protocol (attach/launch/step/continue). */
         static final McpToolAnnotations MUTATE = McpToolAnnotations.builder()
                 .readOnly(false).destructive(false).idempotent(false).openWorld(false).build();
+        /**
+         * Runs code the caller supplies, inside the debuggee (evaluate/redefine). Destructive because the
+         * effect is whatever that code does: {@code ExpressionEvaluator} resolves arbitrary method calls and
+         * assigns to local/field/array/static lvalues, and a redefined method body runs on the next call. The
+         * guides say the same thing — "arbitrary code execution" (09-debugging, 12-security).
+         *
+         * <p>Kept apart from {@link #MUTATE} on purpose. destructiveHint defaults to true in the spec, so
+         * claiming false here would be asserting these are safer than an unannotated tool.
+         */
+        static final McpToolAnnotations ARBITRARY_CODE = McpToolAnnotations.builder()
+                .readOnly(false).destructive(true).idempotent(false).openWorld(false).build();
         /** Action whose result is the same when repeated (set_breakpoint). */
         static final McpToolAnnotations MUTATE_IDEMPOTENT = McpToolAnnotations.builder()
                 .readOnly(false).destructive(false).idempotent(true).openWorld(false).build();
@@ -442,9 +453,13 @@ public final class DebugTools {
 
         @Override public String name() { return "debug.evaluate"; }
         @Override public String title() { return "Evaluate Expression"; }
-        @Override public McpToolAnnotations annotations() { return MUTATE; }
+        @Override public McpToolAnnotations annotations() { return ARBITRARY_CODE; }
         @Override public String description() {
-            return "Evaluates an expression in the stopped frame (paths, getters, indexing, literals + arithmetic/comparison/logical operators, unary, string concatenation, primitive casts, new, FQCN static).";
+            return "Evaluates a Java expression in the stopped frame. The grammar is complete, so this runs whatever "
+                    + "the expression says: method and constructor calls (type-aware overload resolution), assignment "
+                    + "to local/field/array/static lvalues, new, casts, instanceof, operators, lambdas and method "
+                    + "references. Side effects are real and are not undone — treat it as executing code, not reading "
+                    + "state. Use debug.get_variables to only look.";
         }
         @Override public ObjectNode inputSchema() {
             ObjectNode s = sessionSchema();
@@ -479,7 +494,7 @@ public final class DebugTools {
 
         @Override public String name() { return "debug.redefine"; }
         @Override public String title() { return "Redefine Class"; }
-        @Override public McpToolAnnotations annotations() { return MUTATE; }
+        @Override public McpToolAnnotations annotations() { return ARBITRARY_CODE; }
         @Override public String description() {
             return "Recompiles edited source and replaces the running class in place (method bodies only). Keeps the session and stop state.";
         }

@@ -116,6 +116,10 @@ protean.mcp.debug.enabled=true   # debug.* 실행 게이트(기본 false = prod 
 
 **지원**: 식별자(로컬/`this` 필드)·리터럴·`this`·필드/게터/인덱싱·타입 인식 오버로드/생성자 해석(widening·autoboxing·상위타입·most-specific)·산술/비교/논리(단축평가)·비트/시프트·단항(`- ! ~`)·삼항(`?:`)·문자열 `+` 연결·프리미티브 및 참조타입 캐스트(FQCN)·`instanceof`·`new`·FQCN static 참조·대입(`= += …`, 로컬/필드/배열/static lvalue)·**람다·메서드 레퍼런스**(합성 클래스를 대상 VM 에 주입해 실 `stream()` 등에 전달).
 
+> 대입과 메서드 호출이 이 문법에 포함되므로, 표현식 하나가 상태를 바꿀 수 있고 그 변경은 되돌아가지 않는다.
+> `debug.evaluate` 가 `destructiveHint: true` 로 광고되는 이유가 이것이다 — 읽는 것이 아니라 실행하는 도구다.
+> 보기만 할 때는 `debug.get_variables` 를 쓴다.
+
 **제약**:
 - 람다·메서드 레퍼런스는 **함수형 인터페이스 인자 위치에서만** materialize 된다(예: `stream().filter(...)`). 단독으로는 평가할 수 없다.
 - 람다 파라미터는 **타입을 명시**해야 한다 — `(java.lang.String s) -> ...` (형 추론 미지원).

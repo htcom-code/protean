@@ -116,6 +116,10 @@ Since `frames`/`get_variables`/`evaluate` are meaningful only while suspended, w
 
 **Supported**: identifiers (locals / `this` fields)·literals·`this`·field/getter/indexing·type-aware overload/constructor resolution (widening·autoboxing·supertype·most-specific)·arithmetic/comparison/logical (short-circuit)·bit/shift·unary (`- ! ~`)·ternary (`?:`)·string `+` concatenation·primitive and reference-type casts (FQCN)·`instanceof`·`new`·FQCN static references·assignment (`= += …`, local/field/array/static lvalue)·**lambdas·method references** (a synthesized class is injected into the target VM and passed to real `stream()` etc.).
 
+> Because assignment and method calls are part of that grammar, an expression can change state and the
+> change is not undone. `debug.evaluate` is advertised with `destructiveHint: true` for that reason —
+> it executes code rather than reading it. Use `debug.get_variables` when you only want to look.
+
 **Constraints**:
 - Lambdas·method references materialize **only in a functional-interface argument position** (e.g. `stream().filter(...)`). They cannot be evaluated standalone.
 - Lambda parameters must have an **explicit type** — `(java.lang.String s) -> ...` (no type inference).
