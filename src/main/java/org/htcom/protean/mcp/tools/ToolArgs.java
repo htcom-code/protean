@@ -12,7 +12,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.htcom.protean.mcp.McpException;
 
 /**
- * Shared argument extraction for the MCP tools, so every tool rejects a missing argument the same way.
+ * Shared argument extraction for the MCP tools, so every tool treats a missing argument the same way.
+ *
+ * <p>Both halves of the contract live here on purpose. A required argument and an optional one differ only
+ * in what they do once the value is missing — {@link #require} fails, {@link #optional} returns null — and
+ * keeping the two behind one pair of names stops the same three lines from being copied per tool with the
+ * meaning silently flipped.
  *
  * <p>The point is that <b>absent, null and blank are one case, not three</b>. Checking only
  * {@code hasNonNull} lets {@code ""} through, and an empty id then reaches the lookup and comes back as
@@ -46,5 +51,19 @@ final class ToolArgs {
             throw McpException.invalidParams(tool + ": " + field + " is required");
         }
         return value;
+    }
+
+    /**
+     * Extracts an optional text argument. Absent, null, and blank all collapse to {@code null}, so a caller
+     * that sends {@code ""} for a filter it did not mean to set gets "unset" rather than a filter that
+     * matches nothing.
+     *
+     * @param arguments the tool's raw arguments (may be null)
+     * @param field     argument name
+     * @return the value exactly as supplied, or {@code null} when it is absent, null, or blank
+     */
+    static String optional(JsonNode arguments, String field) {
+        String value = arguments == null ? null : arguments.path(field).asText(null);
+        return (value == null || value.isBlank()) ? null : value;
     }
 }

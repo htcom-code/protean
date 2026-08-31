@@ -104,7 +104,7 @@ public class QueryTracesTool implements McpTool {
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
         JsonNode args = arguments == null ? mapper.missingNode() : arguments;
         int limit = clampLimit(args.path("limit"));
-        String moduleId = text(args, "moduleId");
+        String moduleId = ToolArgs.optional(args, "moduleId");
         boolean errorsOnly = args.path("errorsOnly").asBoolean(false);
         Integer status = integer(args, "status");
         Long minLatencyMs = longVal(args, "minLatencyMs");
@@ -124,11 +124,6 @@ public class QueryTracesTool implements McpTool {
                 ? traces.size() + " trace(s)"
                 : "trace capture disabled (set protean.trace.enabled=true)";
         return McpToolResult.ok(summary, structured);
-    }
-
-    private static String text(JsonNode args, String field) {
-        String v = args.path(field).asText(null);
-        return (v == null || v.isBlank()) ? null : v;
     }
 
     private static Integer integer(JsonNode args, String field) {

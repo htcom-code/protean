@@ -109,9 +109,9 @@ public class ListModulesTool implements McpTool {
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
         JsonNode args = arguments == null ? mapper.missingNode() : arguments;
-        String query = text(args, "query");
-        String modeFilter = text(args, "mode");
-        String trustText = text(args, "trustTier");
+        String query = ToolArgs.optional(args, "query");
+        String modeFilter = ToolArgs.optional(args, "mode");
+        String trustText = ToolArgs.optional(args, "trustTier");
         ModuleDescriptor.TrustTier trustFilter;
         try {
             trustFilter = parseTrustTier(trustText);
@@ -149,11 +149,6 @@ public class ListModulesTool implements McpTool {
                 ? page.size() + " module(s) (of " + total + ", more available)"
                 : page.size() + " module(s)";
         return McpToolResult.ok(summary, structured);
-    }
-
-    private static String text(JsonNode args, String field) {
-        String v = args.path(field).asText(null);
-        return (v == null || v.isBlank()) ? null : v;
     }
 
     /** Resolves the {@code trustTier} argument to the enum. null (absent) stays null = "no trust filter". */

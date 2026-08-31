@@ -69,18 +69,42 @@ class McpToolArgumentValidationTest {
             "protean.deploy_shared_lib,     name",
     })
     void blank_required_argument_is_an_argument_error(String tool, String field) {
+        assertRejected(tool, field, args -> args.put(field, ""));
+    }
+
+    /**
+     * The other two shapes the contract folds into the same answer. Kept as its own test because "" is the
+     * one that used to slip through, while an explicit JSON null and an absent key take different paths
+     * through Jackson ({@code asText(null)} vs a missing node) and could regress independently.
+     */
+    @ParameterizedTest(name = "{0} rejects {1} sent as JSON null and as an absent key")
+    @CsvSource({
+            "protean.get_module,            id",
+            "protean.module_versions,       id",
+            "protean.rollback_module,       version",
+            "protean.approve_module,        approver",
+            "protean.get_shared_lib,        name",
+            "protean.deploy_shared_lib,     bytesBase64",
+    })
+    void null_and_absent_required_arguments_fail_like_blank(String tool, String field) {
+        assertRejected(tool, field, args -> args.putNull(field));
+        assertRejected(tool, field, args -> { });
+    }
+
+    /** Calls {@code tool} with every required argument filled except the one {@code breakIt} spoils. */
+    private void assertRejected(String tool, String field, java.util.function.Consumer<ObjectNode> breakIt) {
         ObjectNode args = mapper.createObjectNode();
-        args.put(field, "");
-        // Fill the tool's other required arguments so the blank one under test is the only thing wrong.
+        // Fill the tool's other required arguments so the one under test is the only thing wrong.
         for (String other : new String[]{"id", "name", "version", "approver", "bytesBase64"}) {
             if (!other.equals(field)) {
                 args.put(other, other.equals("bytesBase64") ? "AAAA" : "placeholder");
             }
         }
+        breakIt.accept(args);
         JsonNode resp = callTool(tool, args);
 
         assertEquals(INVALID_PARAMS, resp.path("error").path("code").asInt(),
-                tool + " must reject a blank " + field + " as an argument error, got: " + resp);
+                tool + " must reject a bad " + field + " as an argument error, got: " + resp);
         String message = resp.path("error").path("message").asText();
         assertTrue(message.contains(field),
                 "the message must name the offending argument, got: " + message);
