@@ -106,7 +106,7 @@ The trace feature is split across config, REST, and MCP. Below is a reference hu
 |---|---|---|---|
 | REST | `GET /platform/traces` | `RequestTrace[]` | `limit` (default 50, min 1) · `moduleId` · `errorsOnly` · `status` · `minLatencyMs` · `since` · `beforeSeq` (AND, newest-first) |
 | REST | `GET /platform/traces/metrics` | `ModuleMetricsSnapshot[]` | `moduleId` (all modules if omitted); empty list if metrics off |
-| MCP tool | `protean.query_traces` | same as traces above | same filters as above |
+| MCP tool | `protean.query_traces` | `{enabled, traces[]}` | same filters as above |
 | MCP tool | `protean.module_metrics` | `{enabled, metrics[]}` | `moduleId` |
 | MCP resource | `protean://traces` | recent traces (fixed 50) | — |
 

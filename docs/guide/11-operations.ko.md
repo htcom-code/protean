@@ -106,7 +106,7 @@ trace 기능은 설정·REST·MCP 로 나뉘어 있다. 아래는 전체 표면�
 |---|---|---|---|
 | REST | `GET /platform/traces` | `RequestTrace[]` | `limit`(기본50,최소1)·`moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq` (AND, 최신순) |
 | REST | `GET /platform/traces/metrics` | `ModuleMetricsSnapshot[]` | `moduleId`(생략 시 전 모듈); metrics off 면 빈 목록 |
-| MCP 툴 | `protean.query_traces` | 위 traces 와 동일 | 위 필터와 동일 |
+| MCP 툴 | `protean.query_traces` | `{enabled, traces[]}` | 위 필터와 동일 |
 | MCP 툴 | `protean.module_metrics` | `{enabled, metrics[]}` | `moduleId` |
 | MCP 리소스 | `protean://traces` | 최근 trace(고정 50건) | — |
 

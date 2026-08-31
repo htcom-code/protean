@@ -265,9 +265,12 @@ final class ModuleToolSchemas {
     }
 
     /**
-     * {@code query_traces} result — array of {@code RequestTrace} wrapped in {@code traces} (arrays cannot be
-     * top-level). Item fields must stay consistent with {@link org.htcom.protean.runtime.RequestTrace};
-     * {@code pattern/moduleId/error/traceId} are nullable so they are left out of the item {@code required}.
+     * {@code query_traces} result — {@code {enabled, traces[]}}. Both keys are always present, mirroring
+     * {@link #moduleMetrics(ObjectMapper)}: {@code enabled} reports {@code protean.trace.enabled} so an empty
+     * {@code traces[]} is not ambiguous between "capture is off" and "nothing matched". The array is wrapped
+     * because arrays cannot be top-level. Item fields must stay consistent with
+     * {@link org.htcom.protean.runtime.RequestTrace}; {@code pattern/moduleId/error/traceId} are nullable so
+     * they are left out of the item {@code required}.
      */
     static ObjectNode traceList(ObjectMapper m) {
         ObjectNode s = m.createObjectNode();

@@ -38,7 +38,7 @@ final class ToolArgs {
      * @param arguments the tool's raw arguments (may be null)
      * @param tool      tool name used to prefix the message, e.g. {@code "get_module"}
      * @param field     argument name
-     * @return the trimmed-non-blank value, never null
+     * @return the value exactly as supplied (never trimmed — ids are exact keys), guaranteed non-blank
      */
     static String require(JsonNode arguments, String tool, String field) {
         String value = arguments == null ? null : arguments.path(field).asText(null);
