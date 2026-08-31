@@ -8,6 +8,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 While the version is `0.x`, the public API may change between minor releases.
 
+## [Unreleased]
+
+No public API was added, removed, or changed in this release: a consumer compiled
+against `0.0.1` links unchanged. What changed is what the built-in MCP tools
+*answer*. If you wrap, subclass, or delegate to them, read the migration note at
+the end of this section.
+
+### Fixed
+
+- `protean.list_modules`'s `trustTier` filter compared the argument (a `String`)
+  against `ModuleStatus.trustTier()` (a `TrustTier` enum), so `String.equals(Object)`
+  was false for every module and **the filter matched nothing for any value** — with
+  no error, and a well-formed empty list as the answer. An agent auditing for
+  untrusted modules was told there were none. The argument is now resolved to the
+  enum (case-insensitive, so `trusted` == `TRUSTED`), and an unrecognized value is
+  rejected as `INVALID_ARGUMENT` instead of being answered with an empty result.
+  This shipped in `0.0.1` and has **no workaround there** — list unfiltered and
+  filter client-side.
+- The module and shared-lib tools checked only `hasNonNull` for their required
+  arguments, so `""` passed and the empty id reached the store lookup: the caller
+  got `MODULE_NOT_FOUND` ("module not found: ") and went hunting for a module it
+  had never named. Absent, `null` and blank are now one case across those twelve
+  tools — `get_module`, `get_module_source`, `module_versions`, `uninstall_module`,
+  `rollback_module`, `approve_module`, `reject_module`, `patch_module`,
+  `reload_module_resources`, `get_shared_lib`, `remove_shared_lib`,
+  `deploy_shared_lib` — failing as `INVALID_ARGUMENT` that names the argument.
+  Their required string arguments also declare `minLength: 1`, so
+  `protean.mcp.strict-schema=true` catches the same case at the schema layer.
+- `protean.query_traces` returned a bare `traces[]`, leaving "capture is off" and
+  "nothing matched" indistinguishable — an agent read an empty list as "no such
+  requests" and stopped looking. The result now always carries `enabled`
+  (`protean.trace.enabled`), matching what `protean.module_metrics` already
+  reported, and its `outputSchema` requires both keys.
+- `protean.reload_module_resources` declared no `required` array and no `items`
+  type for `removeFiles`, alone among its family. The tool body already rejected a
+  missing `id`, so this was a contract-declaration gap rather than a runtime hole.
+
+### Changed
+
+- `debug.evaluate` and `debug.redefine` now advertise **`destructiveHint: true`**
+  (was `false`). The spec's default for that hint is `true`, so `false` was not
+  silence — it claimed these were safer than a tool that says nothing. They are
+  not: `evaluate` resolves arbitrary method and constructor calls and assigns to
+  local/field/array/static lvalues, and a redefined method body runs on the next
+  call. `debug.evaluate`'s description was rewritten to say the same thing.
+  Nothing about execution changes — hints are not an authorization boundary
+  (`ModuleActionAuthorizer` and `protean.mcp.debug.enabled` are, and both are
+  untouched) — but **a client that auto-approved on `destructiveHint: false` will
+  now prompt for these two**, which is the point.
+- Required-argument error messages now name the tool.
+  `patch_module` and `reload_module_resources` said `missing required field: id`
+  and now say `patch_module: id is required`; `approve_module`, `reject_module`,
+  `rollback_module` and `deploy_shared_lib` reported their required arguments in
+  one combined message (`approve_module: id and approver required`) and now report
+  the first missing one individually. `missing required field` was doing double
+  duty — the dispatcher emits the same phrase when a tool's own result violates its
+  `outputSchema`, which is a server bug rather than a caller mistake.
+  `ModuleInputNormalizer` still uses the old phrasing for `deploy_module`,
+  `update_module` and `debug.launch`.
+- The `debug.*` tools still accept a blank string where the tools above no longer
+  do (`debug.frames` with `sessionId: ""` answers `no debug session: `). This is
+  documented rather than changed, so the boundary is explicit; `debug.launch` is
+  the exception, since it shares the module tools' argument handling.
+
+### Migration — if you wrap or subclass the built-in MCP tools
+
+The tool classes are public and non-final and `McpDispatcher.registerTool` replaces
+by name, so consumers can subclass them, delegate to them, or register a same-named
+replacement. Three of the changes above are visible through that seam:
+
+| If your wrapper… | On `0.0.1` | Now |
+|---|---|---|
+| delegates `outputSchema()` to `QueryTracesTool` but builds its own `structuredContent` with `traces` only | returned your result | the dispatcher rejects it with `OUTPUT_SCHEMA_VIOLATION` (`missing required field: enabled`) |
+| catches `RuntimeException` around the inner tool and is called with a blank required argument | the inner tool *returned* `isError MODULE_NOT_FOUND`, so your catch never ran | the inner tool *throws* `McpException` (a `RuntimeException`), so your catch runs and can turn an error into a success |
+| gives `""` its own meaning and inherits `inputSchema()`, with `protean.mcp.strict-schema=true` | your `call()` ran | `minLength: 1` rejects the argument before `call()` is entered |
+
+Fixes: emit `enabled` alongside `traces` (or declare your own `outputSchema`);
+let `McpException` propagate, or re-throw it from your catch; and override
+`inputSchema()` if a blank argument is meaningful to you.
+
+None of the three rows applies to wrappers of `list_modules`, `module_metrics` or
+`list_runtimes`: their optional-argument handling is unchanged, and their
+`outputSchema` did not grow a required key. A `list_modules` wrapper does still
+see the `trustTier` change above — a value that is not `TRUSTED` or `UNTRUSTED`
+now comes back as an error rather than an empty list. A tool that fully replaces
+a built-in by name is unaffected throughout, since it supplies its own schema and
+body.
+
 ## [0.0.1] - 2026-08-09
 
 First public release of **Protean** — a library that turns Spring Boot into a
