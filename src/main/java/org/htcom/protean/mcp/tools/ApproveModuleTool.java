@@ -12,7 +12,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -52,8 +51,9 @@ public class ApproveModuleTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
-        props.putObject("id").put("type", "string");
-        props.putObject("approver").put("type", "string").put("description", "Approver identity (audit log)");
+        props.putObject("id").put("type", "string").put("minLength", 1);
+        props.putObject("approver").put("type", "string").put("minLength", 1)
+                .put("description", "Approver identity (audit log)");
         schema.putArray("required").add("id").add("approver");
         return schema;
     }
@@ -82,11 +82,9 @@ public class ApproveModuleTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        if (!arguments.hasNonNull("id") || !arguments.hasNonNull("approver")) {
-            throw McpException.invalidParams("approve_module: id and approver required");
-        }
-        String id = arguments.get("id").asText();
-        platform.approve(id, arguments.get("approver").asText());
+        String id = ToolArgs.require(arguments, "approve_module", "id");
+        String approver = ToolArgs.require(arguments, "approve_module", "approver");
+        platform.approve(id, approver);
         ModuleDescriptor saved = platform.find(id)
                 .orElseThrow(() -> new IllegalStateException("module not found in store immediately after approval: " + id));
         JsonNode structured = mapper.valueToTree(ModuleStatus.from(saved, platform.effectiveMode(saved)));

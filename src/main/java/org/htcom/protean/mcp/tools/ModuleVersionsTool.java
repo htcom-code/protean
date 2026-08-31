@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -49,7 +48,7 @@ public class ModuleVersionsTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
-        props.putObject("id").put("type", "string").put("description", "Module id");
+        props.putObject("id").put("type", "string").put("minLength", 1).put("description", "Module id");
         schema.putArray("required").add("id");
         return schema;
     }
@@ -76,10 +75,7 @@ public class ModuleVersionsTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        if (!arguments.hasNonNull("id")) {
-            throw McpException.invalidParams("module_versions: id required");
-        }
-        String id = arguments.get("id").asText();
+        String id = ToolArgs.require(arguments, "module_versions", "id");
         if (platform.find(id).isEmpty()) {
             return McpToolResult.error(ErrorCode.MODULE_NOT_FOUND, ErrorCode.MODULE_NOT_FOUND.format(id))
                     .with("moduleId", id);

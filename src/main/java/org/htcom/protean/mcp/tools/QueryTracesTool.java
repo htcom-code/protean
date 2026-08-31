@@ -27,6 +27,10 @@ import java.util.List;
  * {@code GET /platform/traces}: {@code moduleId}, {@code errorsOnly}, {@code status}, {@code minLatencyMs},
  * {@code since} (epoch-millis lower bound), {@code beforeSeq} (cursor into the past), and {@code limit}.
  * Every set filter combines with AND. Read-only.
+ *
+ * <p>The result always carries {@code enabled} ({@code protean.trace.enabled}), mirroring
+ * {@code module_metrics}, so an empty {@code traces[]} is never ambiguous between "capture is off" and
+ * "nothing matched".
  */
 public class QueryTracesTool implements McpTool {
 
@@ -50,7 +54,8 @@ public class QueryTracesTool implements McpTool {
     public String description() {
         return "Queries recent request traces (newest-first) for incident triage. Optional filters: "
                 + "moduleId, errorsOnly, status, minLatencyMs, since (epoch ms), beforeSeq (page into the past), "
-                + "and limit. All filters combine with AND.";
+                + "and limit. All filters combine with AND. The result carries enabled (protean.trace.enabled) so "
+                + "an empty traces[] is distinguishable from capture being off.";
     }
 
     @Override
@@ -110,9 +115,15 @@ public class QueryTracesTool implements McpTool {
                 new TraceQuery(limit, moduleId, errorsOnly, status, minLatencyMs, since, beforeSeq));
 
         // structuredContent must be an object (arrays not allowed) → wrap under the traces key.
+        // enabled is always present so that "capture is off" is distinguishable from "nothing matched" —
+        // without it an agent reads an empty list as "no such requests" and stops looking.
         ObjectNode structured = mapper.createObjectNode();
+        structured.put("enabled", store.enabled());
         structured.set("traces", mapper.valueToTree(traces));
-        return McpToolResult.ok(traces.size() + " trace(s)", structured);
+        String summary = store.enabled()
+                ? traces.size() + " trace(s)"
+                : "trace capture disabled (set protean.trace.enabled=true)";
+        return McpToolResult.ok(summary, structured);
     }
 
     private static String text(JsonNode args, String field) {

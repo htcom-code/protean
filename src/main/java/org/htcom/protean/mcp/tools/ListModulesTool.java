@@ -11,11 +11,13 @@ package org.htcom.protean.mcp.tools;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
 import org.htcom.protean.mcp.ModuleActionAuthorizer;
+import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModulePlatform;
 import org.htcom.protean.web.ModuleStatus;
 
@@ -103,7 +105,16 @@ public class ListModulesTool implements McpTool {
         JsonNode args = arguments == null ? mapper.missingNode() : arguments;
         String query = text(args, "query");
         String modeFilter = text(args, "mode");
-        String trustFilter = text(args, "trustTier");
+        String trustText = text(args, "trustTier");
+        ModuleDescriptor.TrustTier trustFilter;
+        try {
+            trustFilter = parseTrustTier(trustText);
+        } catch (IllegalArgumentException e) {
+            // The schema already narrows this to an enum, so a bad value means the caller ignored it —
+            // say so instead of silently returning "no modules match".
+            return McpToolResult.error(ErrorCode.INVALID_ARGUMENT,
+                    "trustTier must be one of TRUSTED, UNTRUSTED (got: " + trustText + ")");
+        }
         int limit = clampLimit(args.path("limit"));
         int offset = decodeCursor(args.path("cursor").asText(null));
 
@@ -139,7 +150,12 @@ public class ListModulesTool implements McpTool {
         return (v == null || v.isBlank()) ? null : v;
     }
 
-    private static boolean matches(ModuleStatus s, String query, String mode, String trust) {
+    /** Resolves the {@code trustTier} argument to the enum. null (absent) stays null = "no trust filter". */
+    private static ModuleDescriptor.TrustTier parseTrustTier(String raw) {
+        return raw == null ? null : ModuleDescriptor.TrustTier.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private static boolean matches(ModuleStatus s, String query, String mode, ModuleDescriptor.TrustTier trust) {
         if (query != null) {
             String q = query.toLowerCase(Locale.ROOT);
             boolean hit = s.id().toLowerCase(Locale.ROOT).contains(q)
@@ -151,7 +167,9 @@ public class ListModulesTool implements McpTool {
         if (mode != null && !mode.equals(s.mode())) {
             return false;
         }
-        return trust == null || trust.equals(s.trustTier());
+        // Compared as the enum: ModuleStatus.trustTier() is a TrustTier, so a String comparison here would
+        // be false for every module and the filter would silently match nothing.
+        return trust == null || trust == s.trustTier();
     }
 
     /**

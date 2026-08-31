@@ -161,7 +161,11 @@ class McpTraceToolsTest {
         assertTrue(traces.isObject(), "query_traces outputSchema serialized");
         List<String> tReq = new ArrayList<>();
         traces.path("required").forEach(r -> tReq.add(r.asText()));
-        assertEquals(List.of("traces"), tReq);
+        // Symmetric with module_metrics: enabled is part of the contract so that an empty traces[] is never
+        // ambiguous between "capture is off" and "nothing matched". Pinned exactly, not by contains: a
+        // required key that appears without the tool emitting it is an OUTPUT_SCHEMA_VIOLATION for every caller.
+        assertEquals(List.of("enabled", "traces"), tReq);
+        assertEquals("boolean", traces.path("properties").path("enabled").path("type").asText());
     }
 
     @Test

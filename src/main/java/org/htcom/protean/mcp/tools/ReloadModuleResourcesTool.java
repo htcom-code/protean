@@ -58,14 +58,17 @@ public class ReloadModuleResourcesTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
-        props.putObject("id").put("type", "string");
+        props.putObject("id").put("type", "string").put("minLength", 1);
         ObjectNode files = props.putObject("files");
         files.put("type", "array").put("description", "Resources to replace/add (filename=classpath path, content, base64?)");
         ObjectNode fp = files.putObject("items").put("type", "object").putObject("properties");
         fp.putObject("filename").put("type", "string");
         fp.putObject("content").put("type", "string");
         fp.putObject("base64").put("type", "boolean");
-        props.putObject("removeFiles").put("type", "array").put("description", "Resource paths to remove");
+        ObjectNode removeFiles = props.putObject("removeFiles");
+        removeFiles.put("type", "array").put("description", "Resource paths to remove");
+        removeFiles.putObject("items").put("type", "string");
+        schema.putArray("required").add("id");
         return schema;
     }
 

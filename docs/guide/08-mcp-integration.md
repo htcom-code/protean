@@ -118,6 +118,21 @@ Example MCP-client (agent) configuration:
 
 Most built-in tools use the `protean.` prefix; the configuration tools are the exception, using the `config.` prefix (`config.get` / `config.list` / `config.set`). `tools/list` returns each tool's name, description, input schema, and (when configured) title, output schema, and behavior hints ([Tool-object metadata](#tool-object-metadata-title--outputschema--annotations)). When a consumer registers its own `McpTool` beans, they are exposed alongside (open-core).
 
+**Required arguments.** For the `protean.` and `config.` tools, absent, `null`, and blank (`""` or
+whitespace) are one case: all three fail as `INVALID_ARGUMENT` naming the argument. A blank `id` is never
+resolved as a lookup — an agent that mis-built its arguments is told which argument is missing, not that the
+module does not exist. The module and shared-lib tools additionally declare `minLength: 1` on their required
+string arguments, so [strict schema validation](#outputschema-validation-scope-server-vs-client) catches the
+blank case at the schema layer when it is enabled; it is not declared on `config.get`'s `key` or on
+`deploy_module`/`update_module`'s `version`, `controller` and nested `files[]` entries, which rest on the
+runtime check alone.
+
+The [`debug.*` tools](09-debugging.md) do not follow this yet. The arguments they read directly —
+`sessionId`, `expr`, `className`, `host` — reject an absent or `null` value but accept a blank string, so
+`debug.frames` with `sessionId: ""` answers `no debug session: ` instead of naming the argument.
+`debug.launch` is the exception, because it shares the module tools' argument handling. Send the argument
+you mean rather than an empty string.
+
 ### Query tools
 
 | Tool name | Input | Purpose |
@@ -142,6 +157,16 @@ When there are many modules, browsing the list by id is hard, so `list_modules` 
 
 `limit=0` returns **all** modules matching the filter with no paging cap (no `nextCursor` is emitted in that case). Results are sorted ascending by `id`, and if more items remain it includes `structuredContent.nextCursor` (an opaque token). Pass this value as the next request's `cursor` to continue. (This paging is for the `modules` array inside the tool result, and is separate from the [cursor pagination](#pagination-cursor) of JSON-RPC lists such as `tools/list`.)
 
+> **A cursor that cannot be decoded restarts from the beginning.** It is not rejected: a corrupt or
+> truncated `cursor` is treated as absent and the first page comes back, with no error and nothing to
+> distinguish it from a legitimate first page. This keeps a damaged token from ending a scan, but it means a
+> caller that keeps re-sending a cursor it did not get from a `nextCursor` will loop over page one forever.
+> Pass back only the `nextCursor` value you received, verbatim, and stop when no `nextCursor` is returned.
+
+`trustTier` is matched as the enum, and an unrecognized value is **rejected** with `INVALID_ARGUMENT`
+rather than answered with an empty list — a typo must not read as "no modules have that trust tier".
+Casing is not significant (`trusted` == `TRUSTED`).
+
 ```jsonc
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
   "name":"protean.list_modules",
@@ -157,7 +182,7 @@ Incident-triage read tools over the [request-trace ring buffer](11-operations.md
 
 | Tool name | Input | Purpose |
 |---|---|---|
-| `protean.query_traces` | all optional: `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` | Recent request traces, newest-first (filters AND-combine). `limit` default 50, max 500; `beforeSeq` is a cursor paging into the past. Same filters as `GET /platform/traces` |
+| `protean.query_traces` | all optional: `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` | Recent request traces, newest-first (filters AND-combine). `limit` default 50, max 500; `beforeSeq` is a cursor paging into the past. Same filters as `GET /platform/traces`. The result always carries `enabled` (`protean.trace.enabled`), so an empty `traces[]` never has to be guessed at |
 | `protean.module_metrics` | `moduleId` (optional) | Per-module request metrics (count, error rate, latency p50/p95/p99, max, last-seen). All tracked modules if omitted |
 
 ### Deploy & modify tools
@@ -167,7 +192,7 @@ Incident-triage read tools over the [request-trace ring buffer](11-operations.md
 | `protean.deploy_module` | `files[]` or `manifest`, `id`·`version`·`controller`·`isolationMode` | Deploy a new module (ACTIVE on passing the gates) |
 | `protean.update_module` | same as deploy (`files[]`/`manifest`) | Canary hot-swap update (auto-rollback on verification failure) |
 | `protean.patch_module` | `id`·`version`·`files[]`·`removeFiles[]` | Delta update — overlay only the changed files + remove, then canary update |
-| `protean.reload_module_resources` | `id`·`files[]`·`removeFiles[]` | Swap resources only, in place (live-reload with no compile/rebuild) |
+| `protean.reload_module_resources` | `id` (required)·`files[]`·`removeFiles[]` | Swap resources only, in place (live-reload with no compile/rebuild) |
 | `protean.rollback_module` | `id` (required)·`version` (required) | Roll back to a specific version in history |
 | `protean.uninstall_module` | `id` (required) | Uninstall a module (remove endpoints and context) |
 

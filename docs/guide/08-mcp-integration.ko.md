@@ -118,6 +118,18 @@ MCP 클라이언트(에이전트) 설정 예:
 
 기본 툴은 대부분 `protean.` 접두사를 쓴다. 예외는 설정 툴로, `config.` 접두사를 쓴다(`config.get` / `config.list` / `config.set`). `tools/list` 가 각 툴의 이름·설명·입력 스키마와 (설정된 경우) 표시명·출력 스키마·동작 힌트를 반환한다([툴 객체 메타데이터](#툴-객체-메타데이터-title--outputschema--annotations)). 소비자가 자기 `McpTool` 빈을 등록하면 함께 노출된다(열린 코어).
 
+**필수 인자.** `protean.` · `config.` 툴에서는 **없음·`null`·빈 값(`""` 또는 공백)이 한 가지 경우**다 —
+셋 다 문제의 인자 이름을 담아 `INVALID_ARGUMENT` 로 실패한다. 빈 `id` 를 조회로 넘기지 않는다. 인자를
+잘못 만든 에이전트는 "모듈이 없다"가 아니라 "어떤 인자가 빠졌다"를 듣는다. 모듈·shared-lib 툴은 필수
+문자열 인자에 `minLength: 1` 까지 선언하므로 [strict 스키마 검증](#outputschema-검증-범위-서버-vs-클라이언트)을
+켜면 빈 값이 스키마 층에서도 걸린다. `config.get` 의 `key`, `deploy_module`/`update_module` 의
+`version`·`controller` 와 중첩 `files[]` 항목에는 선언돼 있지 않아 위의 런타임 검사에만 기댄다.
+
+[`debug.*` 툴](09-debugging.ko.md)은 아직 이 규칙을 따르지 않는다. 이들이 직접 읽는 인자
+(`sessionId`·`expr`·`className`·`host`)는 없음·`null` 은 거부하지만 빈 문자열은 통과시킨다 — 그래서
+`debug.frames` 에 `sessionId: ""` 를 주면 인자 이름 대신 `no debug session: ` 이 돌아온다. `debug.launch`
+는 예외인데, 모듈 툴과 같은 인자 처리를 쓰기 때문이다. 빈 문자열 대신 의도한 값을 보내라.
+
 ### 조회 툴
 
 | 툴 이름 | 입력 | 용도 |
@@ -142,6 +154,14 @@ MCP 클라이언트(에이전트) 설정 예:
 
 `limit=0` 은 페이징 상한 없이 필터에 맞는 모듈을 **전부** 반환한다(이때 `nextCursor` 는 나오지 않는다). 결과는 `id` 오름차순으로 정렬되고, 더 남은 항목이 있으면 `structuredContent.nextCursor`(불투명 토큰)를 담는다. 이 값을 다음 요청 `cursor` 로 넘겨 이어 받는다. (이 페이징은 tool result 안의 `modules` 배열용이며, `tools/list` 등 JSON-RPC 목록의 [커서 페이지네이션](#페이지네이션-커서)과는 별개다.)
 
+> **해독할 수 없는 커서는 처음부터 다시 반환한다.** 거부하지 않는다 — 깨졌거나 잘린 `cursor` 는 없는 것으로
+> 보고 첫 페이지를 돌려주며, 에러도 없고 정상적인 첫 페이지와 구별되지도 않는다. 토큰이 상해도 조회가 끊기지
+> 않게 하는 선택이지만, `nextCursor` 로 받지 않은 커서를 계속 다시 보내면 1페이지를 무한히 반복하게 된다.
+> 받은 `nextCursor` 값만 그대로 넘기고, `nextCursor` 가 없으면 멈춘다.
+
+`trustTier` 는 enum 으로 비교하며, 알 수 없는 값은 빈 목록이 아니라 `INVALID_ARGUMENT` 로 **거부**한다 —
+오타가 "그 신뢰 등급인 모듈이 없다"로 읽히면 안 되기 때문이다. 대소문자는 구분하지 않는다(`trusted` == `TRUSTED`).
+
 ```jsonc
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
   "name":"protean.list_modules",
@@ -157,7 +177,7 @@ MCP 클라이언트(에이전트) 설정 예:
 
 | 툴 이름 | 입력 | 용도 |
 |---|---|---|
-| `protean.query_traces` | 모두 선택: `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` | 최근 요청 트레이스(최신순, 필터 AND 결합). `limit` 기본 50·최대 500; `beforeSeq` 는 과거로 페이징하는 커서. `GET /platform/traces` 와 동일 필터 |
+| `protean.query_traces` | 모두 선택: `moduleId`·`errorsOnly`·`status`·`minLatencyMs`·`since`·`beforeSeq`·`limit` | 최근 요청 트레이스(최신순, 필터 AND 결합). `limit` 기본 50·최대 500; `beforeSeq` 는 과거로 페이징하는 커서. `GET /platform/traces` 와 동일 필터. 결과에는 항상 `enabled`(`protean.trace.enabled`)가 실려서 빈 `traces[]` 를 짐작할 필요가 없다 |
 | `protean.module_metrics` | `moduleId`(선택) | 모듈별 요청 메트릭(건수·에러율·지연 p50/p95/p99·최댓값·마지막 관측). 생략 시 추적 중인 전 모듈 |
 
 ### 배포·수정 툴
@@ -167,7 +187,7 @@ MCP 클라이언트(에이전트) 설정 예:
 | `protean.deploy_module` | `files[]` 또는 `manifest`, `id`·`version`·`controller`·`isolationMode` | 신규 모듈 배포(게이트 통과 시 ACTIVE) |
 | `protean.update_module` | deploy 와 동일(`files[]`/`manifest`) | 카나리 hot-swap 업데이트(검증 실패 시 자동 롤백) |
 | `protean.patch_module` | `id`·`version`·`files[]`·`removeFiles[]` | delta 업데이트 — 바뀐 파일만 overlay + 제거 후 카나리 update |
-| `protean.reload_module_resources` | `id`·`files[]`·`removeFiles[]` | 리소스만 제자리 교체(컴파일·재빌드 없이 live-reload) |
+| `protean.reload_module_resources` | `id`(필수)·`files[]`·`removeFiles[]` | 리소스만 제자리 교체(컴파일·재빌드 없이 live-reload) |
 | `protean.rollback_module` | `id`(필수)·`version`(필수) | 히스토리의 특정 version 으로 롤백 |
 | `protean.uninstall_module` | `id`(필수) | 모듈 해제(엔드포인트·컨텍스트 제거) |
 

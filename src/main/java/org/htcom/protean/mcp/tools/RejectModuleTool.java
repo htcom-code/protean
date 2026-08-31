@@ -12,7 +12,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -47,8 +46,9 @@ public class RejectModuleTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
-        props.putObject("id").put("type", "string");
-        props.putObject("approver").put("type", "string").put("description", "Identity of the rejector (audit log)");
+        props.putObject("id").put("type", "string").put("minLength", 1);
+        props.putObject("approver").put("type", "string").put("minLength", 1)
+                .put("description", "Identity of the rejector (audit log)");
         schema.putArray("required").add("id").add("approver");
         return schema;
     }
@@ -72,11 +72,9 @@ public class RejectModuleTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        if (!arguments.hasNonNull("id") || !arguments.hasNonNull("approver")) {
-            throw McpException.invalidParams("reject_module: id and approver required");
-        }
-        String id = arguments.get("id").asText();
-        platform.reject(id, arguments.get("approver").asText());
+        String id = ToolArgs.require(arguments, "reject_module", "id");
+        String approver = ToolArgs.require(arguments, "reject_module", "approver");
+        platform.reject(id, approver);
         return McpToolResult.ok("Module " + id + " rejected and removed");
     }
 }

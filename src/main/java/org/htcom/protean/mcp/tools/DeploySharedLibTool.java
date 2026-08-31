@@ -56,9 +56,11 @@ public class DeploySharedLibTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode p = schema.putObject("properties");
-        p.putObject("name").put("type", "string").put("description", "Logical lib name (unique key in the store)");
-        p.putObject("version").put("type", "string").put("description", "Lib version");
-        p.putObject("bytesBase64").put("type", "string").put("description", "Base64 of the jar file bytes");
+        p.putObject("name").put("type", "string").put("minLength", 1)
+                .put("description", "Logical lib name (unique key in the store)");
+        p.putObject("version").put("type", "string").put("minLength", 1).put("description", "Lib version");
+        p.putObject("bytesBase64").put("type", "string").put("minLength", 1)
+                .put("description", "Base64 of the jar file bytes");
         p.putObject("signerKeyId").put("type", "string").put("description", "Optional Ed25519 signer key id (trust seam)");
         p.putObject("signature").put("type", "string").put("description", "Optional Base64 signature (trust seam)");
         schema.putArray("required").add("name").add("version").add("bytesBase64");
@@ -84,17 +86,17 @@ public class DeploySharedLibTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        if (!arguments.hasNonNull("name") || !arguments.hasNonNull("version") || !arguments.hasNonNull("bytesBase64")) {
-            throw McpException.invalidParams("deploy_shared_lib: name, version and bytesBase64 are required");
-        }
+        String name = ToolArgs.require(arguments, "deploy_shared_lib", "name");
+        String version = ToolArgs.require(arguments, "deploy_shared_lib", "version");
+        String bytesBase64 = ToolArgs.require(arguments, "deploy_shared_lib", "bytesBase64");
         byte[] bytes;
         try {
-            bytes = Base64.getDecoder().decode(arguments.get("bytesBase64").asText());
+            bytes = Base64.getDecoder().decode(bytesBase64);
         } catch (IllegalArgumentException e) {
             throw McpException.invalidParams("deploy_shared_lib: bytesBase64 is not valid Base64");
         }
         SharedLibStore.IncomingLib in = new SharedLibStore.IncomingLib(
-                arguments.get("name").asText(), arguments.get("version").asText(), bytes,
+                name, version, bytes,
                 arguments.hasNonNull("signerKeyId") ? arguments.get("signerKeyId").asText() : null,
                 arguments.hasNonNull("signature") ? arguments.get("signature").asText() : null);
         signatureGate.enforce(in.name(), in.bytes(), in.signerKeyId(), in.signature());
