@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -63,7 +62,7 @@ public class GetModuleSourceTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
-        props.putObject("id").put("type", "string").put("description", "Module id");
+        props.putObject("id").put("type", "string").put("minLength", 1).put("description", "Module id");
         props.putObject("className").put("type", "string")
                 .put("description", "FQCN. If given, only that class file; otherwise the full source map");
         props.putObject("version").put("type", "string")
@@ -96,10 +95,7 @@ public class GetModuleSourceTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        if (!arguments.hasNonNull("id")) {
-            throw McpException.invalidParams("get_module_source: id required");
-        }
-        String id = arguments.get("id").asText();
+        String id = ToolArgs.require(arguments, "get_module_source", "id");
         String version = arguments.hasNonNull("version") ? arguments.get("version").asText() : null;
         String className = arguments.hasNonNull("className") ? arguments.get("className").asText() : null;
         boolean includeTests = arguments.hasNonNull("includeTests") && arguments.get("includeTests").asBoolean();

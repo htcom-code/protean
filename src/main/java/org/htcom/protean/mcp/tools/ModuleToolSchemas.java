@@ -89,7 +89,8 @@ final class ModuleToolSchemas {
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
 
-        props.putObject("id").put("type", "string").put("description", "Module id (required for files[] form)");
+        props.putObject("id").put("type", "string").put("minLength", 1)
+                .put("description", "Module id (required for files[] form)");
         props.putObject("version").put("type", "string").put("description", "Module version (required for files[] form)");
         props.putObject("controller").put("type", "string")
                 .put("description", "REST controller FQCN (required for files[] form, except kind=LIBRARY)");
@@ -179,7 +180,8 @@ final class ModuleToolSchemas {
         ObjectNode schema = m.createObjectNode();
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
-        props.putObject("id").put("type", "string").put("description", "id of the module to patch");
+        props.putObject("id").put("type", "string").put("minLength", 1)
+                .put("description", "id of the module to patch");
         props.putObject("version").put("type", "string").put("description", "New version (optional; keeps the current version if omitted)");
         ObjectNode files = props.putObject("files");
         files.put("type", "array").put("description",
@@ -263,14 +265,21 @@ final class ModuleToolSchemas {
     }
 
     /**
-     * {@code query_traces} result — array of {@code RequestTrace} wrapped in {@code traces} (arrays cannot be
-     * top-level). Item fields must stay consistent with {@link org.htcom.protean.runtime.RequestTrace};
-     * {@code pattern/moduleId/error/traceId} are nullable so they are left out of the item {@code required}.
+     * {@code query_traces} result — {@code {enabled, traces[]}}. Both keys are always present, mirroring
+     * {@link #moduleMetrics(ObjectMapper)}: {@code enabled} reports {@code protean.trace.enabled} so an empty
+     * {@code traces[]} is not ambiguous between "capture is off" and "nothing matched". The array is wrapped
+     * because arrays cannot be top-level. Item fields must stay consistent with
+     * {@link org.htcom.protean.runtime.RequestTrace}; {@code pattern/moduleId/error/traceId} are nullable so
+     * they are left out of the item {@code required}.
      */
     static ObjectNode traceList(ObjectMapper m) {
         ObjectNode s = m.createObjectNode();
         s.put("type", "object");
-        ObjectNode traces = s.putObject("properties").putObject("traces");
+        ObjectNode props = s.putObject("properties");
+        props.putObject("enabled").put("type", "boolean")
+                .put("description", "false when protean.trace.enabled is off — an empty traces[] then means "
+                        + "\"capture is off\", not \"nothing matched\"");
+        ObjectNode traces = props.putObject("traces");
         traces.put("type", "array");
         ObjectNode item = traces.putObject("items");
         item.put("type", "object");
@@ -286,7 +295,7 @@ final class ModuleToolSchemas {
         nullableString(ip, "error", "thrown exception FQCN (null if none)");
         nullableString(ip, "traceId", "correlation id shared with logs (null if unavailable)");
         item.putArray("required").add("seq").add("epochMillis").add("method").add("uri").add("status").add("latencyMs");
-        s.putArray("required").add("traces");
+        s.putArray("required").add("enabled").add("traces");
         return s;
     }
 }

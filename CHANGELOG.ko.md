@@ -8,6 +8,79 @@
 
 버전이 `0.x` 인 동안 공개 API 는 마이너 릴리스 사이에 바뀔 수 있다.
 
+## [Unreleased]
+
+이번 릴리스에서 공개 API 는 추가·제거·변경이 **없다** — `0.0.1` 로 컴파일한 소비자는 그대로
+링크된다. 바뀐 것은 내장 MCP 툴이 **무엇을 답하는가**다. 이 툴들을 wrap·subclass·위임해서
+쓰고 있다면 이 절 끝의 마이그레이션 노트를 읽어야 한다.
+
+### 수정
+
+- `protean.list_modules` 의 `trustTier` 필터가 인자(`String`)를 `ModuleStatus.trustTier()`
+  (`TrustTier` enum)와 비교해 `String.equals(Object)` 가 모든 모듈에 대해 false 였다 —
+  **어떤 값을 줘도 필터가 아무것도 맞추지 못했다.** 에러도 없고 형태가 멀쩡한 빈 목록이
+  답으로 돌아왔다. untrusted 모듈을 감사하던 에이전트는 "없다"를 들었다. 이제 인자를 enum 으로
+  해석하고(대소문자 무시 — `trusted` == `TRUSTED`), 알 수 없는 값은 빈 목록이 아니라
+  `INVALID_ARGUMENT` 로 거부한다. `0.0.1` 에 실려 나갔고 그 버전에는 **회피책이 없다** —
+  필터 없이 전량 받아 클라이언트에서 걸러야 한다.
+- 모듈·shared-lib 툴이 필수 인자를 `hasNonNull` 로만 검사해 `""` 가 통과했고, 빈 id 가 저장소
+  조회까지 도달해 `MODULE_NOT_FOUND`("module not found: ")로 돌아왔다 — 호출자는 자기가 이름을
+  준 적 없는 모듈을 찾아 헤맸다. 이제 **없음·`null`·빈 값이 한 경우**로, 아래 12개 툴에서 문제의
+  인자 이름을 담아 `INVALID_ARGUMENT` 로 실패한다: `get_module`·`get_module_source`·
+  `module_versions`·`uninstall_module`·`rollback_module`·`approve_module`·`reject_module`·
+  `patch_module`·`reload_module_resources`·`get_shared_lib`·`remove_shared_lib`·
+  `deploy_shared_lib`. 이 툴들의 필수 문자열 인자에는 `minLength: 1` 도 선언돼
+  `protean.mcp.strict-schema=true` 를 켜면 스키마 층에서도 같은 경우가 걸린다.
+- `protean.query_traces` 가 `traces[]` 만 돌려줘 "capture 가 꺼짐"과 "맞는 게 없음"을 구별할 수
+  없었다 — 에이전트는 빈 목록을 "그런 요청이 없다"로 읽고 조사를 멈췄다. 이제 결과에 항상
+  `enabled`(`protean.trace.enabled`)가 실린다. `protean.module_metrics` 가 이미 하던 것과 같은
+  형태이며, `outputSchema` 가 두 키를 모두 요구한다.
+- `protean.reload_module_resources` 만 유독 `required` 배열이 없고 `removeFiles` 에 `items`
+  타입도 없었다. 툴 본문이 이미 빠진 `id` 를 막고 있었으므로 런타임 구멍이 아니라 계약 선언의
+  공백이었다.
+
+### 변경
+
+- `debug.evaluate`·`debug.redefine` 이 이제 **`destructiveHint: true`** 로 광고한다(이전 `false`).
+  스펙상 이 힌트의 기본값이 `true` 라서 `false` 는 침묵이 아니라 **"아무 말도 않는 툴보다 안전하다"는
+  주장**이었다. 사실이 아니다 — `evaluate` 는 임의의 메서드·생성자 호출을 해석하고
+  로컬/필드/배열/static lvalue 에 대입하며, redefine 된 메서드 본문은 다음 호출에서 실행된다.
+  `debug.evaluate` 의 설명도 같은 내용으로 다시 썼다. 실행 자체는 아무것도 바뀌지 않는다 —
+  힌트는 인가 경계가 아니고(경계는 `ModuleActionAuthorizer` 와 `protean.mcp.debug.enabled` 이며
+  둘 다 그대로다) — 다만 **`destructiveHint: false` 를 보고 자동 승인하던 클라이언트는 이제 이 둘에
+  대해 확인을 묻게 된다.** 그게 이 변경의 목적이다.
+- 필수 인자 에러 메시지가 이제 툴 이름을 담는다. `patch_module`·`reload_module_resources` 는
+  `missing required field: id` 대신 `patch_module: id is required` 로, `approve_module`·
+  `reject_module`·`rollback_module`·`deploy_shared_lib` 는 필수 인자를 한 문장에 몰아 알리던 것
+  (`approve_module: id and approver required`)을 빠진 인자별로 개별 보고한다.
+  `missing required field` 는 두 가지 일을 겸하고 있었다 — 툴 자신의 결과가 `outputSchema` 를
+  어겼을 때 디스패처가 같은 문구를 내보내는데, 그건 호출자 실수가 아니라 서버 버그다.
+  `ModuleInputNormalizer` 는 `deploy_module`·`update_module`·`debug.launch` 에서 옛 문구를 유지한다.
+- `debug.*` 툴은 위 툴들과 달리 여전히 빈 문자열을 통과시킨다(`debug.frames` 에 `sessionId: ""` 를
+  주면 `no debug session: ` 이 돌아온다). 이번에는 바꾸지 않고 **경계를 문서에 명시**했다.
+  `debug.launch` 는 모듈 툴과 같은 인자 처리를 쓰므로 예외다.
+
+### 마이그레이션 — 내장 MCP 툴을 wrap·subclass 해서 쓴다면
+
+툴 클래스는 public·비-final 이고 `McpDispatcher.registerTool` 은 이름으로 교체하므로, 소비자는
+subclass·위임·동명 교체 어느 쪽도 할 수 있다. 위 변경 중 셋이 그 이음매로 드러난다.
+
+| wrapper 가 이런 형태라면 | `0.0.1` | 지금 |
+|---|---|---|
+| `outputSchema()` 는 `QueryTracesTool` 에 위임하면서 `structuredContent` 는 `traces` 만 직접 조립 | 결과가 그대로 나갔다 | 디스패처가 `OUTPUT_SCHEMA_VIOLATION`(`missing required field: enabled`)으로 막는다 |
+| 내부 툴 호출을 `catch (RuntimeException)` 으로 감싸고 빈 필수 인자로 호출됨 | 내부 툴이 `isError MODULE_NOT_FOUND` 를 **반환**해 catch 가 돌지 않았다 | 내부 툴이 `McpException`(RuntimeException)을 **던져** catch 가 돌고, 에러가 성공으로 뒤집힐 수 있다 |
+| `""` 에 자체 의미를 부여하고 `inputSchema()` 를 상속, `protean.mcp.strict-schema=true` | `call()` 이 실행됐다 | `minLength: 1` 이 `call()` 진입 전에 인자를 거부한다 |
+
+대응: `traces` 와 함께 `enabled` 를 방출하거나 자기 `outputSchema` 를 선언한다 · `McpException` 은
+그대로 통과시키거나 catch 에서 다시 던진다 · 빈 인자에 의미가 있다면 `inputSchema()` 를
+override 한다.
+
+위 표의 세 행은 `list_modules`·`module_metrics`·`list_runtimes` 의 wrapper 에는 해당하지 않는다 —
+선택 인자 처리가 그대로이고, 이들의 `outputSchema` 에는 필수 키가 늘지 않았다. 다만 `list_modules`
+wrapper 는 위의 `trustTier` 변경은 그대로 겪는다 — `TRUSTED`·`UNTRUSTED` 가 아닌 값은 이제 빈 목록이
+아니라 에러로 돌아온다. 내장 툴을 이름으로 **완전 교체**한 경우는 자기 스키마와 본문을 쓰므로 전 항목
+무관하다.
+
 ## [0.0.1] - 2026-08-09
 
 **Protean** 첫 공개 릴리스 — Spring Boot 를 런타임 플랫폼으로 쓰는 라이브러리.

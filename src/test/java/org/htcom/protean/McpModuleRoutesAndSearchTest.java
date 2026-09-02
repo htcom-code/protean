@@ -51,6 +51,12 @@ class McpModuleRoutesAndSearchTest {
 
     static final String[] IDS = {"alpha-mod", "beta-mod", "gamma-mod"};
 
+    /**
+     * Deployed UNTRUSTED so the trustTier filter can be checked from both sides. Deliberately not named
+     * "*-mod": the paging tests narrow with query "-mod" and expect exactly {@link #IDS}.
+     */
+    static final String UNTRUSTED_ID = "delta-untrusted";
+
     /** Gives each module a unique package/path to avoid route collisions. */
     private static String source(String id) {
         String pkg = id.replace("-", "");
@@ -89,11 +95,34 @@ class McpModuleRoutesAndSearchTest {
             JsonNode r = callTool("protean.deploy_module", args).path("result");
             assertFalse(r.path("isError").asBoolean(false), "deploy must succeed: " + id);
         }
+        deployUntrusted();
+    }
+
+    private void deployUntrusted() {
+        String pkg = UNTRUSTED_ID.replace("-", "");
+        ObjectNode args = mapper.createObjectNode();
+        args.put("id", UNTRUSTED_ID);
+        args.put("version", "1.0.0");
+        args.put("controller", "gen." + pkg + ".C");
+        args.put("trustTier", "UNTRUSTED");
+        ArrayNode files = args.putArray("files");
+        ObjectNode src = files.addObject();
+        src.put("kind", "source");
+        src.put("filename", "C.java");
+        src.put("content", source(UNTRUSTED_ID));
+        ObjectNode t = files.addObject();
+        t.put("kind", "test");
+        t.put("filename", "CTest.java");
+        t.put("content", test(UNTRUSTED_ID));
+        JsonNode r = callTool("protean.deploy_module", args).path("result");
+        assertFalse(r.path("isError").asBoolean(false), "deploy must succeed: " + UNTRUSTED_ID);
     }
 
     @AfterEach
     void cleanup() {
-        for (String id : IDS) {
+        List<String> all = new ArrayList<>(List.of(IDS));
+        all.add(UNTRUSTED_ID);
+        for (String id : all) {
             try {
                 platform.uninstall(id);
             } catch (RuntimeException ignored) {
@@ -205,7 +234,73 @@ class McpModuleRoutesAndSearchTest {
         assertEquals(3, modules.size(), "a corrupt cursor falls back to the start");
     }
 
+    // --- list_modules filters: positive control ---
+    //
+    // These assert what a filter KEEPS, never merely that it narrowed. A filter that matches nothing
+    // satisfies every "the result got smaller" assertion, which is how the trustTier filter shipped in
+    // 0.0.1 comparing a String argument against a TrustTier enum — always false, always zero results,
+    // no test broken. Both sides of every filter must therefore come back non-empty.
+
+    @Test
+    void list_modules_trust_tier_filter_keeps_the_matching_modules() {
+        List<String> trusted = ids(listModules(filter("trustTier", "TRUSTED")));
+        List<String> untrusted = ids(listModules(filter("trustTier", "UNTRUSTED")));
+
+        assertFalse(trusted.isEmpty(), "TRUSTED must keep the trusted modules, not filter everything out");
+        assertFalse(untrusted.isEmpty(), "UNTRUSTED must keep the untrusted module, not filter everything out");
+
+        assertTrue(trusted.containsAll(List.of(IDS)), "every trusted module must survive: " + trusted);
+        assertFalse(trusted.contains(UNTRUSTED_ID), "the untrusted module must not appear: " + trusted);
+        assertTrue(untrusted.contains(UNTRUSTED_ID), "the untrusted module must survive: " + untrusted);
+        for (String id : IDS) {
+            assertFalse(untrusted.contains(id), id + " is TRUSTED and must not appear: " + untrusted);
+        }
+    }
+
+    @Test
+    void list_modules_trust_tier_filter_is_case_insensitive() {
+        List<String> upper = ids(listModules(filter("trustTier", "TRUSTED")));
+        // Without this the assertion below holds for two empty lists, which is the very failure the
+        // trustTier bug had: a filter that matches nothing looks like a filter that agrees with itself.
+        assertFalse(upper.isEmpty(), "the fixture must yield trusted modules, or this compares nothing to nothing");
+        assertEquals(upper, ids(listModules(filter("trustTier", "trusted"))));
+    }
+
+    @Test
+    void list_modules_mode_filter_keeps_the_matching_modules() {
+        // mode is a String on both sides so it works today, but it is the same kind of comparison one
+        // refactor away from the same failure — covered here so it cannot regress silently either.
+        List<String> inProcess = ids(listModules(filter("mode", "in-process")));
+        assertFalse(inProcess.isEmpty(), "in-process must keep the modules that actually run in-process");
+        assertTrue(inProcess.containsAll(List.of(IDS)), inProcess.toString());
+        assertTrue(inProcess.contains(UNTRUSTED_ID), inProcess.toString());
+        assertTrue(ids(listModules(filter("mode", "container"))).isEmpty(),
+                "nothing runs in a container here, so that mode must keep nothing");
+    }
+
+    @Test
+    void list_modules_rejects_an_unknown_trust_tier() {
+        // Rejecting beats returning an empty list: a typo must not read as "no such modules".
+        JsonNode result = callTool("protean.list_modules", filter("trustTier", "SEMI_TRUSTED")).path("result");
+        assertTrue(result.path("isError").asBoolean(false), "an unparseable trustTier must be an error");
+        assertTrue(result.path("content").get(0).path("text").asText().contains("trustTier"),
+                "the message must name the offending argument: " + result.path("content"));
+    }
+
     // --- helpers ---
+
+    private ObjectNode filter(String field, String value) {
+        ObjectNode args = mapper.createObjectNode();
+        args.put(field, value);
+        return args;
+    }
+
+    /** Module ids of a list_modules result, in response order. */
+    private List<String> ids(JsonNode structured) {
+        List<String> out = new ArrayList<>();
+        structured.path("modules").forEach(m -> out.add(m.path("id").asText()));
+        return out;
+    }
 
     private JsonNode listModules(ObjectNode args) {
         JsonNode result = callTool("protean.list_modules", args == null ? mapper.createObjectNode() : args)

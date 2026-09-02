@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -46,7 +45,7 @@ public class UninstallModuleTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode props = schema.putObject("properties");
-        props.putObject("id").put("type", "string");
+        props.putObject("id").put("type", "string").put("minLength", 1);
         schema.putArray("required").add("id");
         return schema;
     }
@@ -70,10 +69,7 @@ public class UninstallModuleTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        if (!arguments.hasNonNull("id")) {
-            throw McpException.invalidParams("uninstall_module: id is required");
-        }
-        String id = arguments.get("id").asText();
+        String id = ToolArgs.require(arguments, "uninstall_module", "id");
         if (platform.find(id).isEmpty()) {
             return McpToolResult.error(ErrorCode.MODULE_NOT_FOUND, ErrorCode.MODULE_NOT_FOUND.format(id))
                     .with("moduleId", id);

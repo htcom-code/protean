@@ -11,11 +11,13 @@ package org.htcom.protean.mcp.tools;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
 import org.htcom.protean.mcp.ModuleActionAuthorizer;
+import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModulePlatform;
 import org.htcom.protean.web.ModuleStatus;
 
@@ -29,10 +31,14 @@ import java.util.Locale;
  *
  * <p>Called with no arguments, it preserves the existing behavior (all ACTIVE modules) for backward
  * compatibility. For large module counts it supports optional filtering and paging:
- * {@code query} (partial, case-insensitive match on id/controllerFqcn), {@code mode} and
- * {@code trustTier} (exact match), {@code limit} (default 50, max 200, {@code 0} = all/unbounded),
- * and {@code cursor} (offset continuation). Results are sorted by id ascending (paging stability).
- * If more remain, {@code nextCursor} is included in the structuredContent.
+ * {@code query} (partial, case-insensitive match on id/controllerFqcn), {@code mode} (exact match),
+ * {@code trustTier} (resolved to {@link ModuleDescriptor.TrustTier}, case-insensitive; an unrecognized
+ * value is an {@code INVALID_ARGUMENT} error, never an empty result), {@code limit} (default 50, max 200,
+ * {@code 0} = all/unbounded), and {@code cursor} (offset continuation). Results are sorted by id ascending
+ * (paging stability). If more remain, {@code nextCursor} is included in the structuredContent.
+ *
+ * <p>A {@code cursor} that cannot be decoded is treated as absent and paging restarts from the beginning,
+ * with no error — a caller must page with the {@code nextCursor} it was given and stop when none is returned.
  */
 public class ListModulesTool implements McpTool {
 
@@ -68,7 +74,9 @@ public class ListModulesTool implements McpTool {
         p.putObject("mode").put("type", "string")
                 .put("description", "Exact match on isolation mode (in-process|worker|container). All if omitted");
         ObjectNode trustTier = p.putObject("trustTier");
-        trustTier.put("type", "string").put("description", "Exact match on trust tier. All if omitted");
+        trustTier.put("type", "string").put("description",
+                "Trust tier to keep (case-insensitive). An unrecognized value is rejected, not answered "
+                        + "with an empty list. All if omitted");
         trustTier.putArray("enum").add("TRUSTED").add("UNTRUSTED");
         p.putObject("limit").put("type", "integer")
                 .put("description", "Maximum number to return (default " + DEFAULT_LIMIT + ", max " + MAX_LIMIT
@@ -101,9 +109,18 @@ public class ListModulesTool implements McpTool {
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
         JsonNode args = arguments == null ? mapper.missingNode() : arguments;
-        String query = text(args, "query");
-        String modeFilter = text(args, "mode");
-        String trustFilter = text(args, "trustTier");
+        String query = ToolArgs.optional(args, "query");
+        String modeFilter = ToolArgs.optional(args, "mode");
+        String trustText = ToolArgs.optional(args, "trustTier");
+        ModuleDescriptor.TrustTier trustFilter;
+        try {
+            trustFilter = parseTrustTier(trustText);
+        } catch (IllegalArgumentException e) {
+            // The schema already narrows this to an enum, so a bad value means the caller ignored it —
+            // say so instead of silently returning "no modules match".
+            return McpToolResult.error(ErrorCode.INVALID_ARGUMENT,
+                    "trustTier must be one of TRUSTED, UNTRUSTED (got: " + trustText + ")");
+        }
         int limit = clampLimit(args.path("limit"));
         int offset = decodeCursor(args.path("cursor").asText(null));
 
@@ -134,12 +151,12 @@ public class ListModulesTool implements McpTool {
         return McpToolResult.ok(summary, structured);
     }
 
-    private static String text(JsonNode args, String field) {
-        String v = args.path(field).asText(null);
-        return (v == null || v.isBlank()) ? null : v;
+    /** Resolves the {@code trustTier} argument to the enum. null (absent) stays null = "no trust filter". */
+    private static ModuleDescriptor.TrustTier parseTrustTier(String raw) {
+        return raw == null ? null : ModuleDescriptor.TrustTier.valueOf(raw.trim().toUpperCase(Locale.ROOT));
     }
 
-    private static boolean matches(ModuleStatus s, String query, String mode, String trust) {
+    private static boolean matches(ModuleStatus s, String query, String mode, ModuleDescriptor.TrustTier trust) {
         if (query != null) {
             String q = query.toLowerCase(Locale.ROOT);
             boolean hit = s.id().toLowerCase(Locale.ROOT).contains(q)
@@ -151,7 +168,9 @@ public class ListModulesTool implements McpTool {
         if (mode != null && !mode.equals(s.mode())) {
             return false;
         }
-        return trust == null || trust.equals(s.trustTier());
+        // Enum identity on both sides. ModuleStatus.trustTier() is a TrustTier, so comparing it against a
+        // String argument would be false for every module and the filter would match nothing without error.
+        return trust == null || trust == s.trustTier();
     }
 
     /**

@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.compiler.Generation;
 import org.htcom.protean.mcp.McpCallContext;
-import org.htcom.protean.mcp.McpException;
 import org.htcom.protean.mcp.McpTool;
 import org.htcom.protean.mcp.McpToolAnnotations;
 import org.htcom.protean.mcp.McpToolResult;
@@ -48,7 +47,8 @@ public class RemoveSharedLibTool implements McpTool {
         ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
         ObjectNode p = schema.putObject("properties");
-        p.putObject("name").put("type", "string").put("description", "Stored lib name to remove");
+        p.putObject("name").put("type", "string").put("minLength", 1)
+                .put("description", "Stored lib name to remove");
         schema.putArray("required").add("name");
         return schema;
     }
@@ -72,10 +72,7 @@ public class RemoveSharedLibTool implements McpTool {
 
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
-        if (!arguments.hasNonNull("name")) {
-            throw McpException.invalidParams("remove_shared_lib: name required");
-        }
-        String name = arguments.get("name").asText();
+        String name = ToolArgs.require(arguments, "remove_shared_lib", "name");
         Generation gen = store.remove(name);
         return McpToolResult.ok("Shared lib " + name + " removed → generation " + gen.id(),
                 mapper.valueToTree(store.view()));

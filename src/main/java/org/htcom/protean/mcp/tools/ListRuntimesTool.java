@@ -105,8 +105,8 @@ public class ListRuntimesTool implements McpTool {
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
         JsonNode args = arguments == null ? mapper.missingNode() : arguments;
-        String modeFilter = text(args, "mode");
-        String scopeFilter = text(args, "scope");
+        String modeFilter = ToolArgs.optional(args, "mode");
+        String scopeFilter = ToolArgs.optional(args, "scope");
 
         List<RuntimeInfo> matched = platform.runtimes().stream()
                 .filter(r -> modeFilter == null || modeFilter.equals(r.mode()))
@@ -122,10 +122,5 @@ public class ListRuntimesTool implements McpTool {
                 ? matched.size() + " runtime(s)"
                 : matched.size() + " runtime(s), " + hostingNothing + " hosting no modules";
         return McpToolResult.ok(summary, structured);
-    }
-
-    private static String text(JsonNode args, String field) {
-        String v = args.path(field).asText(null);
-        return (v == null || v.isBlank()) ? null : v;
     }
 }

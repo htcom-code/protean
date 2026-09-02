@@ -84,7 +84,7 @@ public class ModuleMetricsTool implements McpTool {
     @Override
     public McpToolResult call(JsonNode arguments, McpCallContext ctx) {
         JsonNode args = arguments == null ? mapper.missingNode() : arguments;
-        String moduleId = text(args, "moduleId");
+        String moduleId = ToolArgs.optional(args, "moduleId");
 
         ObjectNode structured = mapper.createObjectNode();
         structured.put("enabled", metrics.enabled());
@@ -99,10 +99,5 @@ public class ModuleMetricsTool implements McpTool {
                 : metrics.snapshots();
         structured.set("metrics", mapper.valueToTree(snapshots));
         return McpToolResult.ok(snapshots.size() + " module metric(s)", structured);
-    }
-
-    private static String text(JsonNode args, String field) {
-        String v = args.path(field).asText(null);
-        return (v == null || v.isBlank()) ? null : v;
     }
 }
