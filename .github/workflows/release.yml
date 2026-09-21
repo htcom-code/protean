@@ -8,9 +8,12 @@
 # dispatch uploads first and creates NO tag, so a Drop lets the SAME version be retried. The tag + release/<version>
 # marker are created by a human AFTER the VALIDATED deployment is confirmed (see the release runbook).
 #
-# Versioning (decision "b"): the source stays at 0.0.1-SNAPSHOT permanently; the release coordinate is never
-# committed. It comes from the `version` input and is injected via -Pversion, which build.gradle reads through
-# providers.gradleProperty('version'). So dispatching version=0.0.1 publishes org.htcom:protean:0.0.1.
+# Versioning (decision "b"): the release coordinate is never committed. It comes from the `version` input and is
+# injected via -Pversion, which build.gradle reads through providers.gradleProperty('version'). So dispatching
+# version=0.1.0 publishes org.htcom:protean:0.1.0. The committed default is the NEXT version as a SNAPSHOT
+# (0.1.0-SNAPSHOT while 0.1.0 is being worked towards), bumped right after each release — it used to hold the
+# released version permanently, which made a development build announce itself as older than the release it
+# already surpassed once the SSE `ready` frame started reporting it as `platformVersion`.
 #
 # Signing: in-memory (vanniktech signAllPublications → Bouncy Castle). No gpg binary or keyring is installed on the
 # runner; the armored private key is supplied as a string. The key, its passphrase, and the Central Portal user
@@ -79,7 +82,7 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword:       ${{ secrets.ORG_GRADLE_PROJECT_mavenCentralPassword }}
       # The container isolation track tells consumers to run ghcr.io/<owner>/protean-worker:<version>, so a release
       # that only ships the library leaves that track with no image to pull: ci.yml pushes the image on main, but at
-      # the development version (0.0.1-SNAPSHOT), never at the release coordinate. Same -Pversion as the upload, and
+      # the development SNAPSHOT, never at the release coordinate. Same -Pversion as the upload, and
       # build.gradle puts that version in jib's `to.image`, so this pushes exactly one tag — there is no floating
       # `latest` for a release to fight a later snapshot over. Runs AFTER the Central upload deliberately — the upload is
       # the gated, expensive half, and a GHCR tag pushed for a deployment that is later Dropped is deletable, while

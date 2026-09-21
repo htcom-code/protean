@@ -55,6 +55,14 @@
 
 ### 변경
 
+- 커밋되는 개발 버전이 `0.1.0-SNAPSHOT` 이 됐다(종전에는 릴리스된 좌표 그대로인
+  `0.0.1-SNAPSHOT`). **GitHub Packages 의 개발 스냅샷도 이 좌표로 옮겨 간다** —
+  `org.htcom:protean:0.0.1-SNAPSHOT` 에 고정된 빌드는 더 이상 갱신을 받지 못하므로
+  `0.1.0-SNAPSHOT` 으로 옮겨야 한다. 릴리스 좌표는 영향이 없고 여전히 `-Pversion` 으로
+  주입하며 커밋하지 않는다. 바꾼 이유는 새 `ready` 프레임이다 — 이 값을 클라이언트에
+  `platformVersion` 으로 내려보내는데, `0.0.1-SNAPSHOT` 은 `0.0.1` 보다 **앞서므로**
+  모든 개발 빌드가 이미 넘어선 릴리스보다 자기가 낮다고 말하고 있었다.
+
 - `debug.evaluate`·`debug.redefine` 이 이제 **`destructiveHint: true`** 로 광고한다(이전 `false`).
   스펙상 이 힌트의 기본값이 `true` 라서 `false` 는 침묵이 아니라 **"아무 말도 않는 툴보다 안전하다"는
   주장**이었다. 사실이 아니다 — `evaluate` 는 임의의 메서드·생성자 호출을 해석하고

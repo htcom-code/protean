@@ -30,7 +30,7 @@ repositories {
 
 // The version under test is injected by the root release gate (-PproteanVersion=<version>); defaults to the dev
 // SNAPSHOT so this build is runnable on its own after a plain publishToMavenLocal.
-def proteanVersion = (findProperty('proteanVersion') ?: '0.0.1-SNAPSHOT').toString()
+def proteanVersion = (findProperty('proteanVersion') ?: '0.1.0-SNAPSHOT').toString()
 
 dependencies {
     implementation "org.htcom:protean:${proteanVersion}"

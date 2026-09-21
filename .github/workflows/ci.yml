@@ -68,6 +68,19 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
       - name: bootJar
         run: ./gradlew bootJar --console=plain
+      # The SSE `ready` frame reports Implementation-Version to clients as `platformVersion`, and it is read from
+      # the jar manifest at runtime. Nothing in the test suite can see it: the tests run from exploded classes, where
+      # there is no manifest and the field is null by design. So dropping the manifest attribute would ship
+      # platformVersion=null to every consumer with a fully green build. Assert it on the artifact instead.
+      - name: jar manifest version matches the build
+        run: |
+          ver=$(./gradlew -q properties --no-configuration-cache | awk -F': ' '/^version: /{print $2}')
+          jar="build/libs/protean-${ver}.jar"
+          test -f "$jar" || { echo "::error::expected $jar, found: $(ls build/libs)"; exit 1; }
+          got=$(unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r' | awk -F': ' '/^Implementation-Version: /{print $2}')
+          test "$got" = "$ver" \
+            || { echo "::error::manifest says '${got:-<absent>}', build says '$ver' — platformVersion would lie to consumers"; exit 1; }
+          echo "platformVersion will report: $got"
 
   # Worker/container isolation tests self-skip when no bootJar is present (they
   # need the fat -boot.jar), so the `test` job never exercises them. This job
