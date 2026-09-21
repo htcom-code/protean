@@ -41,6 +41,26 @@ class TraceMetricsTest {
     }
 
     @Test
+    void disabling_stops_new_observations_but_keeps_what_was_already_aggregated() {
+        ProteanProperties props = new ProteanProperties();
+        props.getTrace().getMetrics().setEnabled(true);
+        TraceMetrics m = new TraceMetrics(props);
+        m.observe("mod-a", 200, 5, null, 1000);
+
+        props.getTrace().getMetrics().setEnabled(false);   // live key, flipped at runtime
+
+        // The flag gates observation, not exposure. The row survives, so an empty result can never be read as
+        // "metrics are off" — the javadoc used to claim exactly that, and a caller believing it would report a
+        // disabled platform as an idle one.
+        assertThat(m.enabled()).isFalse();
+        m.observe("mod-a", 500, 9, null, 1001);            // dropped: this is what the flag actually stops
+        assertThat(m.snapshots()).hasSize(1);
+        ModuleMetricsSnapshot retained = m.snapshot("mod-a").orElseThrow();
+        assertThat(retained.count()).isEqualTo(1);
+        assertThat(retained.errorCount()).isZero();
+    }
+
+    @Test
     void counts_requests_and_errors() {
         TraceMetrics m = enabledMetrics(512);
         m.observe("mod-a", 200, 5, null, 1000);

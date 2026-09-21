@@ -367,7 +367,9 @@ POST /platform/modules/cp-mod/approve?approver=alice
 
 ### GET `/platform/traces/metrics`
 
-모듈별 집계 메트릭(요청 수·오류율·지연 백분위)을 조회한다. **opt-in** — `protean.trace.metrics.enabled=true` 일 때만 집계되며, 꺼져 있으면 빈 목록을 반환한다.
+모듈별 집계 메트릭(요청 수·오류율·지연 백분위)을 조회한다. **opt-in** — `protean.trace.metrics.enabled=true` 일 때만 집계된다.
+
+그 플래그를 끈다고 이 엔드포인트가 비지는 **않는다**. 플래그가 막는 것은 집계이지 노출이 아니므로, 끄기 전에 관찰된 행은 그대로 계속 나간다. 따라서 빈 목록은 *"집계된 적이 없다"* 는 뜻이지 *"집계가 꺼져 있다"* 가 아니다 — 둘을 구별하려면 SSE `ready` 프레임의 `metricsEnabled` 를 읽는다.
 
 - 쿼리 파라미터:
   - `moduleId`(선택) — 지정 시 그 모듈만(추적 안 된 모듈이면 빈 목록), 생략 시 추적 중인 전 모듈.
@@ -399,7 +401,7 @@ POST /platform/modules/cp-mod/approve?approver=alice
 - named 이벤트:
   - `ready` — 연결 확인(ack). 언제나 첫 프레임이다(아래 참고)
   - `trace` — 새 `RequestTrace` 델타
-  - `metrics` — `ModuleMetricsSnapshot[]` 갱신(모듈별 누적 집계, `protean.trace.metrics.enabled=true` 일 때만 채워짐)
+  - `metrics` — `ModuleMetricsSnapshot[]` 갱신(모듈별 누적 집계. 새 관찰은 `protean.trace.metrics.enabled=true` 일 때만 쌓이지만, 끄기 전에 집계된 행은 계속 나간다)
   - `modules` — 현재 `ModuleStatus[]`
   - `summary` — `TraceSummary`: 콘솔 헤더용 **윈도** 집계(아래 참고)
 - `/platform/traces` 와 마찬가지로 스트림 연결 자체는 trace 기록에서 제외된다(자기-관측 방지).
@@ -416,7 +418,10 @@ data: {"platform":"protean","platformVersion":"0.1.0","tracesEnabled":true,
 
 - `platform` — 구현체 식별자. 언제나 `"protean"`. 이 계약을 여러 구현이 공유하므로, 버전 숫자만 받은 콘솔이 그것이 누구의 버전인지 추측하지 않도록 함께 싣는다. **표시·진단용이며 동작을 분기하는 데 쓰지 않는다.**
 - `platformVersion` — 이 라이브러리의 버전. jar manifest 의 `Implementation-Version` 에서 읽는다. manifest 가 없는 레이아웃(exploded classes — 이 라이브러리 자신의 테스트, 그리고 클래스 디렉터리로 잡힌 IDE 실행)에서는 **`null`** 이다. 그 상황에서는 버전을 정말로 모르며, 임의의 대체 문자열은 "지금 어느 버전과 이야기하고 있나" 에 대한 지어낸 답이 된다. 실제로는 보기 드물다 — 소비자 앱은 protean 을 jar 로 해석하고 `examples/quickstart` 데모도 그러므로, **콘솔이 실제로 붙는 경로는 전부 진짜 버전을 내려보낸다.** 필드 자체는 항상 있으므로 클라이언트가 "없음" 과 "모름" 을 구별할 일이 없다.
-- `tracesEnabled` / `metricsEnabled` — `protean.trace.enabled` 와 `protean.trace.metrics.enabled`. **"기록이 꺼져 있다"** 와 **"켜져 있는데 아직 아무 일도 없었다"** 를 가른다. 빈 스트림만으로는 이 둘이 구별되지 않는다.
+- `tracesEnabled` — `protean.trace.enabled`. **"기록이 꺼져 있다"** 와 **"켜져 있는데 아직 아무 일도 없었다"** 를 가른다 — 빈 스트림만으로는 구별되지 않는다.
+- `metricsEnabled` — **`protean.trace.enabled` AND `protean.trace.metrics.enabled` 로 정의된다.** metrics 스위치 단독 값이 아니다. 기록은 집계보다 **앞서** 막히므로 `tracesEnabled` 가 false 인 동안 그 스위치는 아무 의미가 없다. MCP 메트릭 툴이 같은 이름으로 답하는 값과 같으며, 이 계약을 구현하면서 원시 스위치를 싣는 것은 계약 위반이다.
+
+  ⚠️ **그래도 `tracesEnabled` 를 먼저 읽어야 한다.** 논리곱은 틀린 답 하나를 없애지만(`{"tracesEnabled": false, "metricsEnabled": true}` 는 이 프레임이 내보낼 수 없는 상태다) 다른 하나를 만든다. `{"tracesEnabled": false, "metricsEnabled": false}` 에서 `metricsEnabled` 만 보는 클라이언트는 *"메트릭이 꺼져 있다 — 켜면 행이 생긴다"* 고 말하는데, 기록이 꺼져 있는 한 켜도 아무 일도 일어나지 않는다. `metricsEnabled` 는 "메트릭이 쌓이고 있는가" 에 답할 뿐 **"켜면 도움이 되는가" 에는 답하지 않는다.**
 - `buffered` — 이 프레임 **다음에 오는 `trace` 프레임이 싣는 행 수**이며, 링이 보유한 행 수가 아니다. `protean.trace.capacity` 가 재생 상한 200 을 넘으면 둘이 달라진다. 숫자만 알리고 행은 주지 않는 것은 둘 다 안 하느니만 못하다.
 - `tickMs` — 푸시 주기(`1000`). 클라이언트의 침묵 감지 워치독이 가정 대신 계약을 기준으로 자기 값을 정할 수 있게 한다.
 - `capacity` — **이 연결 시점의** `protean.trace.capacity`. 클라이언트가 "이보다 과거는 서버에 없다" 를 말할 수 있다. LIVE 키이므로 이후 변경은 이미 연결된 클라이언트에 닿지 않으며, 재연결 때 새 값이 다시 나간다.

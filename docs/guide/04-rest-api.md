@@ -367,7 +367,9 @@ Query recent request-execution traces, newest-first. If `protean.trace.enabled=f
 
 ### GET `/platform/traces/metrics`
 
-Query per-module aggregate metrics (request count, error rate, latency percentiles). **opt-in** — aggregation happens only when `protean.trace.metrics.enabled=true`; when off, it returns an empty list.
+Query per-module aggregate metrics (request count, error rate, latency percentiles). **opt-in** — aggregation happens only when `protean.trace.metrics.enabled=true`.
+
+Turning that flag off does **not** empty this endpoint: it gates aggregation, not exposure, so rows observed before it was turned off keep being returned. An empty list therefore means *"nothing was ever aggregated"*, never *"aggregation is off"* — to tell those apart, read `metricsEnabled` from the SSE `ready` frame.
 
 - Query parameters:
   - `moduleId` (optional) — when set, only that module (empty list if the module is not tracked); when omitted, all tracked modules.
@@ -399,7 +401,7 @@ Live server-sent-events (SSE) push stream — the console uses it in place of 5-
 - Named events:
   - `ready` — connection acknowledgement, always the first frame (see below)
   - `trace` — new `RequestTrace` deltas
-  - `metrics` — a `ModuleMetricsSnapshot[]` update (per-module cumulative aggregate; populated only when `protean.trace.metrics.enabled=true`)
+  - `metrics` — a `ModuleMetricsSnapshot[]` update (per-module cumulative aggregate; new observations accrue only when `protean.trace.metrics.enabled=true`, but rows aggregated before it was turned off keep being sent)
   - `modules` — the current `ModuleStatus[]`
   - `summary` — a `TraceSummary`: a **windowed** aggregate for the console header (see below)
 - Like `/platform/traces`, the stream connection itself is excluded from trace recording (no self-observation).
@@ -416,7 +418,10 @@ It carries only what a client must know **once, at connect time** and cannot der
 
 - `platform` — implementation identifier, always `"protean"`. Present so a console watching several implementations of this contract is not left reading a bare version number and guessing whose it is. **Display and diagnostics only — do not branch behaviour on it.**
 - `platformVersion` — this library's version, read from the jar manifest (`Implementation-Version`). **`null`** when running from a layout that has no manifest (exploded classes: the library's own test suite, and IDE runs configured against class directories) — the version is genuinely unknown there, and a placeholder would be a fabricated answer. In practice it is rarely seen: a consumer application resolves protean as a jar, and so does the `examples/quickstart` demo, so every path a console actually connects to reports a real version. The field is always present, so a client never has to distinguish "absent" from "unknown".
-- `tracesEnabled` / `metricsEnabled` — `protean.trace.enabled` and `protean.trace.metrics.enabled`. They separate **"recording is off"** from **"recording is on but nothing has happened yet"**, which an empty stream cannot.
+- `tracesEnabled` — `protean.trace.enabled`. Separates **"recording is off"** from **"recording is on but nothing has happened yet"**, which an empty stream cannot.
+- `metricsEnabled` — **defined as `protean.trace.enabled` AND `protean.trace.metrics.enabled`**, not the metrics switch on its own. Recording is gated before aggregation is reached, so the switch means nothing while `tracesEnabled` is false. This is the same value the MCP metrics tool reports under the same name; an implementation of this contract that sends the raw switch is not conforming.
+
+  ⚠️ **Read `tracesEnabled` first anyway.** The conjunction removes one wrong answer — `{"tracesEnabled": false, "metricsEnabled": true}` is not a state this frame can report — but it creates another. On `{"tracesEnabled": false, "metricsEnabled": false}` a client that looks only at `metricsEnabled` will say *"metrics are off; turn them on and rows appear"*, and turning them on changes nothing while recording is off. `metricsEnabled` answers "are metrics accruing", never "would enabling them help".
 - `buffered` — how many rows the `trace` frame that follows this one carries, **not** how many the ring holds. The two differ whenever `protean.trace.capacity` exceeds the 200-row replay cap; announcing a count while withholding the rows would be worse than announcing neither.
 - `tickMs` — the push period (`1000`), so a client's silence watchdog has a contract to size itself against instead of assuming one.
 - `capacity` — `protean.trace.capacity` **as of this connection**, letting a client say "nothing older than this is on the server". It is a live key, so a later change does not reach an already-connected client; the value is re-sent on reconnect.
