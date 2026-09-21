@@ -65,7 +65,11 @@ public class TraceAdminController {
     /**
      * Per-module aggregated metrics (opt-in; {@code protean.trace.metrics.enabled}). With {@code moduleId},
      * returns that module's metrics (empty list if untracked); without it, every tracked module.
-     * Returns an empty list when metrics are disabled.
+     *
+     * <p>Disabling metrics does <b>not</b> empty this: the flag gates aggregation, not exposure, so rows
+     * observed before it was turned off keep being returned. An empty list therefore means "nothing was ever
+     * aggregated", never "aggregation is off" — a client that needs to tell those apart reads the flag, which
+     * the SSE {@code ready} frame carries as {@code metricsEnabled}.
      */
     @GetMapping("/metrics")
     public List<ModuleMetricsSnapshot> metrics(@RequestParam(required = false) String moduleId) {

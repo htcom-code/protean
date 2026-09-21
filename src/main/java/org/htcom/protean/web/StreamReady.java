@@ -26,12 +26,22 @@ package org.htcom.protean.web;
  *                        a fabricated answer to "which version am I talking to".
  * @param tracesEnabled   {@code protean.trace.enabled}: distinguishes "recording is off" from "recording is on
  *                        but nothing has happened yet", which an empty stream cannot.
- * @param metricsEnabled  {@code protean.trace.metrics.enabled}: same distinction for the {@code metrics} frame.
+ * @param metricsEnabled  {@code protean.trace.enabled} AND {@code protean.trace.metrics.enabled}, not the
+ *                        metrics switch alone: recording is gated before aggregation is reached, so the switch
+ *                        means nothing while {@code tracesEnabled} is false. This is the same value the MCP
+ *                        metrics tool reports under the same name. It answers "are metrics accruing" and
+ *                        <em>not</em> "would enabling them help" — on {@code (false, false)} a client reading
+ *                        only this field would offer to turn metrics on, which changes nothing while recording
+ *                        is off, so {@code tracesEnabled} still has to be read first.
  * @param buffered        how many rows the {@code trace} frame that follows this one carries — <em>not</em> how
  *                        many the ring holds. The two differ whenever the ring is larger than the replay cap, and
  *                        announcing a count while withholding the rows is worse than announcing neither.
- * @param tickMs          the push period, so a client's silence watchdog has a contract to size itself against
- *                        instead of assuming one.
+ * @param tickMs          the push interval, so a client's silence watchdog has a contract to size itself against
+ *                        instead of assuming one. It is a <b>floor, not a guarantee</b>: the ticker runs on a
+ *                        fixed <em>delay</em>, so a cycle starts this long after the previous one ends, and a
+ *                        cycle walks every module, recomputes the window over the whole ring, and serializes four
+ *                        frames to each connected client in turn. A watchdog should allow a generous multiple of
+ *                        this rather than treat it as an exact period.
  * @param capacity        {@code protean.trace.capacity} <em>as of this connection</em>, letting a client say
  *                        "nothing older than this is on the server". It is a live key, so a later change does not
  *                        reach an already-connected client; the value is re-sent on reconnect.

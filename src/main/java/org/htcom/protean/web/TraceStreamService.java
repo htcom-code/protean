@@ -127,8 +127,12 @@ public class TraceStreamService {
      */
     private StreamReady ready(int buffered) {
         ProteanProperties.Trace trace = props.getTrace();
-        return StreamReady.of(trace.isEnabled(), trace.getMetrics().isEnabled(), buffered, TICK_MS,
-                trace.getCapacity());
+        // metrics.enabled() is the platform's own answer to "are metrics on", and it already folds in
+        // trace.enabled -- recording is gated before aggregation is reached, so the metrics switch alone means
+        // nothing while tracing is off. Reading the raw switch here would make this frame disagree with the MCP
+        // tool, which reports the same name from the same accessor, and would let a client promise rows that can
+        // never arrive.
+        return StreamReady.of(trace.isEnabled(), metrics.enabled(), buffered, TICK_MS, trace.getCapacity());
     }
 
     /** One push cycle: advance the cursor by the newest delta, then fan the deltas + fresh snapshots out. */

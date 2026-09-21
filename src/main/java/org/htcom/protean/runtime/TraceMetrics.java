@@ -116,7 +116,13 @@ public class TraceMetrics {
         return m == null ? Optional.empty() : Optional.of(m.snapshot(key));
     }
 
-    /** Snapshots of every tracked module (unordered). Empty when disabled or nothing observed yet. */
+    /**
+     * Snapshots of every tracked module (unordered). Empty only when nothing has been observed yet —
+     * <b>not</b> when aggregation is disabled. {@code protean.trace.metrics.enabled} gates {@link #observe},
+     * so turning it off stops new observations but retains what was already aggregated, and those rows keep
+     * being returned. Callers that need to say why a result is empty must read the flag separately rather
+     * than infer it from emptiness.
+     */
     public List<ModuleMetricsSnapshot> snapshots() {
         List<ModuleMetricsSnapshot> out = new ArrayList<>();
         for (Map.Entry<String, ModuleMetrics> e : byModule.entrySet()) {
