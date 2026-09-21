@@ -393,15 +393,35 @@ Query per-module aggregate metrics (request count, error rate, latency percentil
 
 ### GET `/platform/traces/stream`
 
-Live server-sent-events (SSE) push stream — the console uses it in place of 5-second polling. One connection multiplexes four named event types; a freshly opened connection first receives an initial snapshot of all four, then incremental pushes (roughly once per second).
+Live server-sent-events (SSE) push stream — the console uses it in place of 5-second polling. A connection is acknowledged with a `ready` frame and then multiplexes four named event types; a freshly opened connection first receives an initial snapshot of all four, then incremental pushes (roughly once per second).
 
 - Produces: `text/event-stream`
 - Named events:
+  - `ready` — connection acknowledgement, always the first frame (see below)
   - `trace` — new `RequestTrace` deltas
   - `metrics` — a `ModuleMetricsSnapshot[]` update (per-module cumulative aggregate; populated only when `protean.trace.metrics.enabled=true`)
   - `modules` — the current `ModuleStatus[]`
   - `summary` — a `TraceSummary`: a **windowed** aggregate for the console header (see below)
 - Like `/platform/traces`, the stream connection itself is excluded from trace recording (no self-observation).
+
+The `ready` event is an acknowledgement, not a data frame. It exists because *"the stream is open"* and *"the server is actually running"* look identical to a client on a quiet platform — nothing else arrives until traffic does. It is sent once per connection, including on every `EventSource` reconnect, ahead of the initial `trace` replay:
+
+```
+event: ready
+data: {"platform":"protean","platformVersion":"0.1.0","tracesEnabled":true,
+       "metricsEnabled":false,"buffered":5,"tickMs":1000,"capacity":200}
+```
+
+It carries only what a client must know **once, at connect time** and cannot derive from the stream afterwards — anything that changes on a schedule belongs to the `metrics`/`modules`/`summary` frames instead:
+
+- `platform` — implementation identifier, always `"protean"`. Present so a console watching several implementations of this contract is not left reading a bare version number and guessing whose it is. **Display and diagnostics only — do not branch behaviour on it.**
+- `platformVersion` — this library's version, read from the jar manifest (`Implementation-Version`). **`null`** when running from a layout that has no manifest (exploded classes: tests, IDE runs) — the version is genuinely unknown there, and a placeholder would be a fabricated answer. The field is always present, so a client never has to distinguish "absent" from "unknown".
+- `tracesEnabled` / `metricsEnabled` — `protean.trace.enabled` and `protean.trace.metrics.enabled`. They separate **"recording is off"** from **"recording is on but nothing has happened yet"**, which an empty stream cannot.
+- `buffered` — how many rows the `trace` frame that follows this one carries, **not** how many the ring holds. The two differ whenever `protean.trace.capacity` exceeds the 200-row replay cap; announcing a count while withholding the rows would be worse than announcing neither.
+- `tickMs` — the push period (`1000`), so a client's silence watchdog has a contract to size itself against instead of assuming one.
+- `capacity` — `protean.trace.capacity` **as of this connection**, letting a client say "nothing older than this is on the server". It is a live key, so a later change does not reach an already-connected client; the value is re-sent on reconnect.
+
+Fields may be added to `ready` in later versions — a client must ignore the ones it does not recognize.
 
 ```
 event: trace

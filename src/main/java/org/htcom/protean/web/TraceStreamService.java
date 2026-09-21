@@ -44,10 +44,11 @@ import java.util.stream.Collectors;
  * the console; other polling consumers are their own choice).
  *
  * <p>The recording hot path ({@code RequestTraceFilter.record()}) is untouched: this reads the store
- * out-of-band on a timer. One SSE connection multiplexes three named events — {@code trace} (incremental,
- * only when there is something new), {@code metrics} and {@code modules} (full snapshots each tick, which
- * also keeps the connection warm through proxies). A fresh connection receives an initial snapshot of all
- * three immediately so it is never blank until the first tick.
+ * out-of-band on a timer. One SSE connection multiplexes four named events — {@code trace} (incremental,
+ * only when there is something new), {@code metrics}, {@code modules} and {@code summary} (full snapshots
+ * each tick, which also keeps the connection warm through proxies). A fresh connection is acknowledged with
+ * a {@link StreamReady} {@code ready} frame and then receives an initial snapshot of all four immediately,
+ * so it is never blank until the first tick.
  *
  * <p>Same gating as the admin controllers ({@code @Profile("!worker")} + {@code protean.admin.enabled}), so
  * it is absent on workers and when the management surface is opted out.
@@ -90,7 +91,9 @@ public class TraceStreamService {
 
     /**
      * Opens a live SSE stream. Timeout is disabled (0) because the stream is meant to stay open; if a proxy
-     * drops it anyway, the browser {@code EventSource} reconnects and gets a fresh initial snapshot.
+     * drops it anyway, the browser {@code EventSource} reconnects and gets a fresh {@code ready} ack plus a
+     * fresh initial snapshot — the ack repeats per connection precisely so a reconnecting client re-learns
+     * the connect-time facts rather than carrying stale ones across the gap.
      */
     public SseEmitter open() {
         SseEmitter emitter = new SseEmitter(0L);
@@ -101,8 +104,11 @@ public class TraceStreamService {
         });
         emitter.onError(ex -> emitters.remove(emitter));
         try {
+            // Read the backlog before the ack so `buffered` can report the rows actually replayed below.
+            List<RequestTrace> initial = store.recent(INITIAL_TRACES, null);
             List<ModuleStatus> mods = moduleStatuses();
-            send(emitter, "trace", store.recent(INITIAL_TRACES, null));
+            send(emitter, "ready", ready(initial.size()));
+            send(emitter, "trace", initial);
             send(emitter, "metrics", metrics.snapshots());
             send(emitter, "modules", mods);
             send(emitter, "summary", summary(mods));
@@ -112,6 +118,17 @@ public class TraceStreamService {
         }
         emitters.add(emitter);
         return emitter;
+    }
+
+    /**
+     * Connection ack for a client about to be replayed {@code buffered} rows. Every value is read here, at
+     * connect time, because all four config keys are live — a value cached at startup would be a stale answer
+     * to a question the client only gets to ask once.
+     */
+    private StreamReady ready(int buffered) {
+        ProteanProperties.Trace trace = props.getTrace();
+        return StreamReady.of(trace.isEnabled(), trace.getMetrics().isEnabled(), buffered, TICK_MS,
+                trace.getCapacity());
     }
 
     /** One push cycle: advance the cursor by the newest delta, then fan the deltas + fresh snapshots out. */
