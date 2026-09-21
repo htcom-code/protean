@@ -423,7 +423,9 @@ It carries only what a client must know **once, at connect time** and cannot der
 
   ⚠️ **Read `tracesEnabled` first anyway.** The conjunction removes one wrong answer — `{"tracesEnabled": false, "metricsEnabled": true}` is not a state this frame can report — but it creates another. On `{"tracesEnabled": false, "metricsEnabled": false}` a client that looks only at `metricsEnabled` will say *"metrics are off; turn them on and rows appear"*, and turning them on changes nothing while recording is off. `metricsEnabled` answers "are metrics accruing", never "would enabling them help".
 - `buffered` — how many rows the `trace` frame that follows this one carries, **not** how many the ring holds. The two differ whenever `protean.trace.capacity` exceeds the 200-row replay cap; announcing a count while withholding the rows would be worse than announcing neither.
-- `tickMs` — the push period (`1000`), so a client's silence watchdog has a contract to size itself against instead of assuming one.
+- `tickMs` — the push interval (`1000`), so a client's silence watchdog has a contract to size itself against instead of assuming one.
+
+  ⚠️ **It is a floor, not a guarantee.** The ticker is scheduled with a *fixed delay*, so the next cycle starts this long after the previous one **ends** — and a cycle walks every module, recomputes the window over the ring, and serializes four frames to every connected client in turn. Under load the effective interval stretches. Size a watchdog at a generous multiple of `tickMs`; a client that treats it as an exact period will report a healthy server as stalled.
 - `capacity` — `protean.trace.capacity` **as of this connection**, letting a client say "nothing older than this is on the server". It is a live key, so a later change does not reach an already-connected client; the value is re-sent on reconnect.
 
 Fields may be added to `ready` in later versions — a client must ignore the ones it does not recognize.
