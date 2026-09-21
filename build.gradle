@@ -29,8 +29,14 @@ plugins {
 group = 'org.htcom'
 // Development default is a SNAPSHOT; override with -Pversion=<release> for a Central Portal upload. The Portal's
 // validate→Publish (VALIDATED) flow requires a non-SNAPSHOT version — a SNAPSHOT is instead PUT to the maven-snapshots
-// repo (a different endpoint/permission), so Level 2 and the eventual go-live pass -Pversion=0.0.1.
-version = providers.gradleProperty('version').getOrElse('0.0.1-SNAPSHOT')
+// repo (a different endpoint/permission), so a go-live passes -Pversion=<release>.
+//
+// The default names the version being WORKED TOWARDS, not the one last released, and it is bumped right after each
+// release. This used to hold the released version permanently, which was harmless while the version was only a
+// publishing coordinate — but the SSE `ready` frame reports it to clients as `platformVersion`, and `0.0.1-SNAPSHOT`
+// sorts BEFORE `0.0.1`, so a build carrying post-0.0.1 features announced itself as older than the release that
+// lacks them. A version nobody reads can be a placeholder; one on the wire cannot.
+version = providers.gradleProperty('version').getOrElse('0.1.0-SNAPSHOT')
 
 java {
     toolchain {
@@ -207,7 +213,7 @@ dependencies {
 publishing {
     publications {
         library(MavenPublication) {
-            // group=org.htcom, artifactId=protean (settings.gradle rootProject.name), version=0.0.1-SNAPSHOT.
+            // group=org.htcom, artifactId=protean (settings.gradle rootProject.name), version=the value set above.
             // components.java = plain jar (for consumption) + sources + javadoc + generated POM.
             // implementation dependencies are written to the POM as runtime scope, api as compile, so consumers resolve them transitively.
             // Sidecar worker artifact (C28, process track): the Shadow plugin already contributes the flat shaded

@@ -415,7 +415,7 @@ data: {"platform":"protean","platformVersion":"0.1.0","tracesEnabled":true,
 여기에는 **연결 시점에 한 번 알아야 하고 이후 스트림으로는 알 수 없는** 값만 싣는다 — 주기적으로 바뀌는 값은 `metrics`·`modules`·`summary` 프레임의 몫이다:
 
 - `platform` — 구현체 식별자. 언제나 `"protean"`. 이 계약을 여러 구현이 공유하므로, 버전 숫자만 받은 콘솔이 그것이 누구의 버전인지 추측하지 않도록 함께 싣는다. **표시·진단용이며 동작을 분기하는 데 쓰지 않는다.**
-- `platformVersion` — 이 라이브러리의 버전. jar manifest 의 `Implementation-Version` 에서 읽는다. manifest 가 없는 레이아웃(exploded classes — 테스트·IDE 실행)에서는 **`null`** 이다. 그 상황에서는 버전을 정말로 모르며, 임의의 대체 문자열은 "지금 어느 버전과 이야기하고 있나" 에 대한 지어낸 답이 된다. 필드 자체는 항상 있으므로 클라이언트가 "없음" 과 "모름" 을 구별할 일이 없다.
+- `platformVersion` — 이 라이브러리의 버전. jar manifest 의 `Implementation-Version` 에서 읽는다. manifest 가 없는 레이아웃(exploded classes — 이 라이브러리 자신의 테스트, 그리고 클래스 디렉터리로 잡힌 IDE 실행)에서는 **`null`** 이다. 그 상황에서는 버전을 정말로 모르며, 임의의 대체 문자열은 "지금 어느 버전과 이야기하고 있나" 에 대한 지어낸 답이 된다. 실제로는 보기 드물다 — 소비자 앱은 protean 을 jar 로 해석하고 `examples/quickstart` 데모도 그러므로, **콘솔이 실제로 붙는 경로는 전부 진짜 버전을 내려보낸다.** 필드 자체는 항상 있으므로 클라이언트가 "없음" 과 "모름" 을 구별할 일이 없다.
 - `tracesEnabled` / `metricsEnabled` — `protean.trace.enabled` 와 `protean.trace.metrics.enabled`. **"기록이 꺼져 있다"** 와 **"켜져 있는데 아직 아무 일도 없었다"** 를 가른다. 빈 스트림만으로는 이 둘이 구별되지 않는다.
 - `buffered` — 이 프레임 **다음에 오는 `trace` 프레임이 싣는 행 수**이며, 링이 보유한 행 수가 아니다. `protean.trace.capacity` 가 재생 상한 200 을 넘으면 둘이 달라진다. 숫자만 알리고 행은 주지 않는 것은 둘 다 안 하느니만 못하다.
 - `tickMs` — 푸시 주기(`1000`). 클라이언트의 침묵 감지 워치독이 가정 대신 계약을 기준으로 자기 값을 정할 수 있게 한다.

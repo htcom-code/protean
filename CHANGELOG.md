@@ -64,6 +64,15 @@ delegate to them, read the migration note at the end of this section.
 
 ### Changed
 
+- The committed development version is now `0.1.0-SNAPSHOT` (it was `0.0.1-SNAPSHOT`,
+  left at the released coordinate). **Development snapshots on GitHub Packages move
+  with it** — a build pinned to `org.htcom:protean:0.0.1-SNAPSHOT` stops receiving
+  updates and must move to `0.1.0-SNAPSHOT`. Released coordinates are unaffected and
+  are still injected with `-Pversion`, never committed. The reason for the change is
+  the new `ready` frame: it reports this value to clients as `platformVersion`, and
+  `0.0.1-SNAPSHOT` sorts *before* `0.0.1`, so every development build was announcing
+  itself as older than a release it had already surpassed.
+
 - `debug.evaluate` and `debug.redefine` now advertise **`destructiveHint: true`**
   (was `false`). The spec's default for that hint is `true`, so `false` was not
   silence — it claimed these were safer than a tool that says nothing. They are
