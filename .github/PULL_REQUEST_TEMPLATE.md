@@ -31,15 +31,22 @@ not break are ClassLoader/lifecycle hygiene and promotion-gate integrity.
 
 ## Verification
 
-The operations guide (`docs/guide/11-operations.ko.md`) is the source of truth.
-**Run `test` and `bootJar` as SEPARATE gradle invocations** — combining them can
-OOM `LeakDiagnosisTest`.
+The operations guide (`docs/guide/11-operations.md`, `.ko.md`) is the source of
+truth. **Run `bootJar` and `test` as SEPARATE gradle invocations, bootJar first** —
+combining them can OOM `LeakDiagnosisTest`, and running `clean test` first deletes
+the `-boot.jar` that the container/isolation tests mount, so 16 of them self-skip
+and the green covers less than it appears to.
 
-- [ ] `gradle clean test` passes (full regression)
-- [ ] `gradle bootJar` assembles
+```bash
+./gradlew clean bootJar
+./gradlew test
+```
+
+- [ ] `gradle clean bootJar` assembles
+- [ ] `gradle test` passes (full regression, run after the jar exists)
 - [ ] Docs updated if behaviour/config changed (README/README.ko, `docs/*`)
-- [ ] Docker-dependent tests (Testcontainers/container isolation) run or
-      knowingly skipped (Docker absent)
+- [ ] Container/isolation tests actually ran (not self-skipped). If they skipped,
+      say why — no `-boot.jar`, or no Docker.
 
 ## Related
 
