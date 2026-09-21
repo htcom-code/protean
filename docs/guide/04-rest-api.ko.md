@@ -393,15 +393,35 @@ POST /platform/modules/cp-mod/approve?approver=alice
 
 ### GET `/platform/traces/stream`
 
-라이브 푸시 스트림(SSE) — 콘솔이 5초 폴링 대신 쓴다. 한 연결이 네 종류의 named 이벤트를 멀티플렉싱하며, 새로 연 연결은 네 종류의 초기 스냅샷을 먼저 받은 뒤 증분 푸시(대략 1초마다)를 받는다.
+라이브 푸시 스트림(SSE) — 콘솔이 5초 폴링 대신 쓴다. 연결은 `ready` 프레임으로 확인(ack)된 뒤 네 종류의 named 이벤트를 멀티플렉싱하며, 새로 연 연결은 네 종류의 초기 스냅샷을 먼저 받은 뒤 증분 푸시(대략 1초마다)를 받는다.
 
 - Produces: `text/event-stream`
 - named 이벤트:
+  - `ready` — 연결 확인(ack). 언제나 첫 프레임이다(아래 참고)
   - `trace` — 새 `RequestTrace` 델타
   - `metrics` — `ModuleMetricsSnapshot[]` 갱신(모듈별 누적 집계, `protean.trace.metrics.enabled=true` 일 때만 채워짐)
   - `modules` — 현재 `ModuleStatus[]`
   - `summary` — `TraceSummary`: 콘솔 헤더용 **윈도** 집계(아래 참고)
 - `/platform/traces` 와 마찬가지로 스트림 연결 자체는 trace 기록에서 제외된다(자기-관측 방지).
+
+`ready` 이벤트는 데이터 프레임이 아니라 **연결 확인 응답(ack)** 이다. 트래픽이 없는 플랫폼에서는 *"스트림이 열렸다"* 와 *"서버가 실제로 돌고 있다"* 가 클라이언트 눈에 똑같이 보이기 때문에 존재한다 — 요청이 들어오기 전까지는 아무것도 도착하지 않는다. 연결마다 한 번씩, `EventSource` 가 재연결할 때도 매번, 초기 `trace` 재생보다 앞서 나간다:
+
+```
+event: ready
+data: {"platform":"protean","platformVersion":"0.1.0","tracesEnabled":true,
+       "metricsEnabled":false,"buffered":5,"tickMs":1000,"capacity":200}
+```
+
+여기에는 **연결 시점에 한 번 알아야 하고 이후 스트림으로는 알 수 없는** 값만 싣는다 — 주기적으로 바뀌는 값은 `metrics`·`modules`·`summary` 프레임의 몫이다:
+
+- `platform` — 구현체 식별자. 언제나 `"protean"`. 이 계약을 여러 구현이 공유하므로, 버전 숫자만 받은 콘솔이 그것이 누구의 버전인지 추측하지 않도록 함께 싣는다. **표시·진단용이며 동작을 분기하는 데 쓰지 않는다.**
+- `platformVersion` — 이 라이브러리의 버전. jar manifest 의 `Implementation-Version` 에서 읽는다. manifest 가 없는 레이아웃(exploded classes — 테스트·IDE 실행)에서는 **`null`** 이다. 그 상황에서는 버전을 정말로 모르며, 임의의 대체 문자열은 "지금 어느 버전과 이야기하고 있나" 에 대한 지어낸 답이 된다. 필드 자체는 항상 있으므로 클라이언트가 "없음" 과 "모름" 을 구별할 일이 없다.
+- `tracesEnabled` / `metricsEnabled` — `protean.trace.enabled` 와 `protean.trace.metrics.enabled`. **"기록이 꺼져 있다"** 와 **"켜져 있는데 아직 아무 일도 없었다"** 를 가른다. 빈 스트림만으로는 이 둘이 구별되지 않는다.
+- `buffered` — 이 프레임 **다음에 오는 `trace` 프레임이 싣는 행 수**이며, 링이 보유한 행 수가 아니다. `protean.trace.capacity` 가 재생 상한 200 을 넘으면 둘이 달라진다. 숫자만 알리고 행은 주지 않는 것은 둘 다 안 하느니만 못하다.
+- `tickMs` — 푸시 주기(`1000`). 클라이언트의 침묵 감지 워치독이 가정 대신 계약을 기준으로 자기 값을 정할 수 있게 한다.
+- `capacity` — **이 연결 시점의** `protean.trace.capacity`. 클라이언트가 "이보다 과거는 서버에 없다" 를 말할 수 있다. LIVE 키이므로 이후 변경은 이미 연결된 클라이언트에 닿지 않으며, 재연결 때 새 값이 다시 나간다.
+
+이후 버전에서 `ready` 에 필드가 더해질 수 있다 — 클라이언트는 모르는 필드를 무시해야 한다.
 
 ```
 event: trace

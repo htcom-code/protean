@@ -10,10 +10,27 @@ While the version is `0.x`, the public API may change between minor releases.
 
 ## [Unreleased]
 
-No public API was added, removed, or changed in this release: a consumer compiled
-against `0.0.1` links unchanged. What changed is what the built-in MCP tools
-*answer*. If you wrap, subclass, or delegate to them, read the migration note at
-the end of this section.
+One addition to the wire contract of the console SSE stream (below); the Java API a
+consumer compiles against is otherwise unchanged from `0.0.1` and still links. What
+else changed is what the built-in MCP tools *answer*. If you wrap, subclass, or
+delegate to them, read the migration note at the end of this section.
+
+### Added
+
+- `GET /platform/traces/stream` now opens with a **`ready` acknowledgement frame**,
+  sent ahead of the initial snapshot. On a platform with no traffic, *"the stream is
+  open"* and *"the server is actually running"* are indistinguishable to a client —
+  nothing arrives until a request does. The ack closes that gap and carries what a
+  client can only learn at connect time: `platform` and `platformVersion` (the latter
+  `null` when running from a layout with no jar manifest, rather than a fabricated
+  placeholder), `tracesEnabled` / `metricsEnabled` (which separate "recording is off"
+  from "recording is on but idle" — an empty stream does not), `buffered` (**the rows
+  the following `trace` frame carries**, not the rows the ring holds), `tickMs` (so a
+  silence watchdog has a contract to size itself against instead of an assumption),
+  and `capacity` as of this connection. It repeats on every `EventSource` reconnect,
+  and clients must ignore fields they do not recognize. Existing clients are
+  unaffected — `EventSource` drops named events that have no listener. Documented in
+  `docs/guide/04-rest-api.md`.
 
 ### Fixed
 
