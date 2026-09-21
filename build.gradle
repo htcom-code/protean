@@ -424,6 +424,21 @@ tasks.named('test') {
         events 'passed', 'failed', 'skipped'
         showStandardStreams = true
     }
+    // The container/OS-isolation tests mount the fat -boot.jar and self-skip without it, so a run that never saw
+    // one is green over ~16 fewer tests than it appears to be. `clean test` is exactly that case: clean deletes the
+    // jar the tests are about to look for. CI does this deliberately (the isolation-test job builds the jar and runs
+    // them separately), but a developer running this locally has no second job to fall back on -- so say it out loud
+    // instead of leaving the gap to hide inside a skip count nobody reads.
+    def libsDir = layout.buildDirectory.dir('libs')
+    doFirst {
+        File dir = libsDir.get().asFile
+        boolean hasBootJar = dir.isDirectory() && dir.listFiles().any { it.name.endsWith('-boot.jar') }
+        if (!hasBootJar) {
+            logger.lifecycle("NOTE: no -boot.jar in build/libs, so the container/OS-isolation tests will self-skip."
+                    + " Run './gradlew bootJar' first (as a separate invocation) to include them."
+                    + " CI covers them in the isolation-test job.")
+        }
+    }
 }
 
 // The PoC application gate. Runs the criteria suite across isolation-mode x auto-provision combinations and writes

@@ -168,18 +168,29 @@ protean:
 - **worker jar**(`-worker` classifier, `protean-<ver>-worker.jar`): **sidecar** 워커 런타임의 process 트랙용 평평한 shaded uber-jar(Shadow). 이 트랙은 bare `java -cp` 로 띄우는데 `-boot.jar` 의 중첩 `BOOT-INF` 레이아웃으론 안 되므로 평평한 jar 가 필요하다. shade 시 Spring auto-config imports·JDBC 드라이버 service 파일을 concatenate 해 워커 컨텍스트가 정상 기동한다.
 - **worker image**(`ghcr.io/<owner>/protean-worker:<ver>`, Jib 로 빌드 — `build/libs` 파일 아님): sidecar 워커 런타임의 container 트랙. worker jar 를 JDK 베이스 이미지의 `/app/` 에 담는다(워커가 런타임에 모듈 소스를 재컴파일하므로 `javac` 필요). [05. 격리 모드](05-isolation-modes.ko.md) 참고.
 
-### bootJar 와 test 는 분리 실행(필수)
+### bootJar 와 test 는 분리 실행 — 그리고 bootJar 가 먼저다(필수)
 
 `test` 태스크는 누수 카나리에서 soft reference 를 강제로 비우려 힙을 `maxHeapSize=512m` 로 제한한다. `bootJar`(fat jar 조립, 메모리 압박)와 `test` 를 한 gradle 호출에 묶으면 `LeakDiagnosisTest` 등이 collateral OOM 을 낼 수 있다. **반드시 분리 호출한다.**
+
+호출은 둘, 그리고 **순서가 중요하다**: container·OS isolation 테스트는 fat `-boot.jar` 를 마운트하므로 그 jar 가 없으면 스스로 skip 한다(`OsIsolationTest` 의 `assumeTrue(bootJarExists())`). 그런데 `clean` 이 그 jar 를 지운다. `clean test` 를 먼저 돌리면 16건이 조용히 skip 된다 — 결과는 여전히 green 이지만 596건이 아니라 580건짜리 green 이고, 출력 어디에도 그 사실이 적히지 않는다.
 
 ```bash
 # 나쁜 예 — 결합하면 OOM 위험
 ./gradlew clean bootJar test
 
-# 좋은 예 — 분리
+# 나쁜 예 — 분리는 했지만 clean 이 -boot.jar 를 지워서
+#           container·isolation 16건이 skip 되고 green 의 범위가 좁아진다
 ./gradlew clean test
 ./gradlew bootJar
+
+# 좋은 예 — 분리하고, 테스트가 필요로 할 때 jar 가 이미 있다
+./gradlew clean bootJar
+./gradlew test
 ```
+
+로컬에서 하나의 호출에 전부 담는 데는 대가가 하나 있다: container 테스트가 Docker 를 함께 돌리므로 CI 의 분리 실행보다 부하가 크다. 그 부하에서 worker 기동 health check(`WorkerProcessIsolation.waitHealthy`)가 제한 시간을 넘겨, 단독으로는 통과하는 테스트가 실패할 수 있다 — 이 절을 쓰면서 전체 2회 중 1회 실제로 겪었다. 로컬 `maxRetries` 는 flake 를 감추지 않으려고 일부러 0 이므로, 그런 실패를 진짜로 취급하기 전에 해당 클래스만 다시 돌려 본다(`./gradlew test --tests 'org.htcom.protean.WorkerPoolTest'`).
+
+CI 는 일부러 다르게 하며 그 차이는 고칠 버그가 아니다: CI 의 `test` job 은 bootJar **없이** 돌려 container 테스트가 거기서 self-skip 되게 하고, 전용 `isolation-test` job 이 jar 를 만든 뒤 바로 그 테스트들만 돌린다(`.github/workflows/ci.yml`). 둘을 쪼개 두면 두 게이트를 따로 진단할 수 있고 병렬로도 돈다. 로컬에는 그런 분리가 없으므로, push 전 로컬 점검은 jar 를 먼저 만들지 않으면 그 16건을 아예 돌리지 않는 셈이 된다.
 
 ### 발행
 

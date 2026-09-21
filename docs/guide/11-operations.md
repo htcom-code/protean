@@ -168,18 +168,29 @@ Three jars come out in `build/libs`, plus a worker container image built by Jib.
 - **worker jar** (`-worker` classifier, `protean-<ver>-worker.jar`): a flat shaded uber-jar (Shadow) for the **sidecar** worker runtime's process track. That track launches with a bare `java -cp`, which a `-boot.jar`'s nested `BOOT-INF` layout cannot satisfy — hence a flat jar. Spring auto-configuration imports and JDBC driver service files are concatenated during shading so the worker context still comes up.
 - **worker image** (`ghcr.io/<owner>/protean-worker:<ver>`, built by Jib — no `build/libs` file): the sidecar worker runtime's container track. Bundles the worker jar at `/app/` on a JDK base image (the worker recompiles module sources at runtime, so it needs `javac`). See [05. Isolation Modes](05-isolation-modes.md).
 
-### bootJar and test must run separately (required)
+### bootJar and test must run separately — and bootJar goes first (required)
 
 The `test` task limits the heap to `maxHeapSize=512m` to forcibly clear soft references in the leak canary. Bundling `bootJar` (fat-jar assembly, memory pressure) and `test` in one gradle invocation can make `LeakDiagnosisTest` and others throw a collateral OOM. **Always invoke them separately.**
+
+Two invocations, and **the order matters**: the container and OS-isolation tests mount the fat `-boot.jar`, so they self-skip when it is absent (`assumeTrue(bootJarExists())` in `OsIsolationTest`). `clean` deletes it. Run `clean test` first and 16 tests skip silently — the run is still green, but green over 580 tests rather than 596, and nothing in the output says so.
 
 ```bash
 # Bad — combining risks OOM
 ./gradlew clean bootJar test
 
-# Good — separated
+# Bad — separated, but `clean` removed the -boot.jar, so 16 container/isolation
+#       tests self-skip and the green is narrower than it looks
 ./gradlew clean test
 ./gradlew bootJar
+
+# Good — separated, and the jar exists by the time the tests need it
+./gradlew clean bootJar
+./gradlew test
 ```
+
+One consequence of putting everything in one local invocation: it is heavier than CI's split, because the container tests run Docker alongside the rest. Worker-spawn health checks (`WorkerProcessIsolation.waitHealthy`) can time out under that load and fail a test that passes on its own — observed once in two full runs while writing this section. Local `maxRetries` is 0 on purpose so flakiness stays visible, so re-run the class by itself (`./gradlew test --tests 'org.htcom.protean.WorkerPoolTest'`) before treating such a failure as real.
+
+CI does this differently on purpose, and that difference is not a bug to fix: its `test` job runs *without* a bootJar so the container tests self-skip there, and a dedicated `isolation-test` job builds the jar and then runs exactly those tests (`.github/workflows/ci.yml`). Splitting them keeps the two gates independently diagnosable and lets them run in parallel. Locally there is no such split, so a local pre-push check must put the jar first or it does not exercise those 16 tests at all.
 
 ### Publish
 
