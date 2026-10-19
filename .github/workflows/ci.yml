@@ -5,7 +5,7 @@
 # 512m to force soft-reference eviction).
 #
 # Gradle is pinned by the committed wrapper (gradle/wrapper/gradle-wrapper.properties,
-# 8.14.5) and invoked via ./gradlew; setup-gradle only provides dependency caching.
+# 8.14.6) and invoked via ./gradlew; setup-gradle only provides dependency caching.
 
 name: CI
 
