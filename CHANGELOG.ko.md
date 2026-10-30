@@ -10,8 +10,9 @@
 
 ## [Unreleased]
 
-콘솔 SSE 스트림의 wire 계약에 하나가 추가됐다(아래). 소비자가 컴파일하는 Java API 자체는
-`0.0.1` 에서 바뀌지 않았고 그대로 링크된다. 그 밖에 바뀐 것은 내장 MCP 툴이 **무엇을 답하는가**다.
+wire 계약 변경은 둘이다 — 콘솔 SSE 스트림에 하나가 추가됐고, **MCP 툴 오류의 problem detail 이
+`structuredContent` 에서 `_meta` 로 옮겨졌다**(둘 다 아래). 소비자가 컴파일하는 Java API 는 상수
+하나가 늘었을 뿐 `0.0.1` 에서 바뀌지 않았고 그대로 링크된다. 그 밖에 바뀐 것은 내장 MCP 툴이 **무엇을 답하는가**다.
 이 툴들을 wrap·subclass·위임해서 쓰고 있다면 이 절 끝의 마이그레이션 노트를 읽어야 한다.
 
 ### 추가
@@ -27,8 +28,17 @@
   연결 시점의 `capacity`. `EventSource` 가 재연결할 때마다 다시 나가며, 클라이언트는 모르는
   필드를 무시해야 한다. 기존 클라이언트에는 영향이 없다 — `EventSource` 는 리스너가 없는 named
   이벤트를 버린다. 문서는 `docs/guide/04-rest-api.ko.md`.
+- `McpToolResult.PROBLEM_META_KEY`(`"org.htcom.protean/problem"`) — 코드가 붙은 툴 오류가 이제
+  problem detail 을 싣는 `_meta` 키(아래 *변경* 참고).
 
 ### 수정
+
+- `protean.list_runtimes` 가 `runtimes[].scope` 를 `string` 으로 선언했는데, 같은 툴의 설명은
+  auto-provision 이 꺼져 있으면(기본값) `null` 이라고 적고 있었다. 그래서 기본 설치에서는 모든
+  호출이 툴의 `outputSchema` 를 어기는 결과를 냈다 — 검증하는 클라이언트는 `scope: null found,
+  string expected` 를 보고했고, `protean.mcp.strict-schema=true` 에서는 디스패처의 출력 검사가
+  호출을 `OUTPUT_SCHEMA_VIOLATION` 으로 바꿔 툴을 아예 쓸 수 없었다. 이제 `scope` 는
+  `["string", "null"]` 로 선언한다.
 
 - `protean.list_modules` 의 `trustTier` 필터가 인자(`String`)를 `ModuleStatus.trustTier()`
   (`TrustTier` enum)와 비교해 `String.equals(Object)` 가 모든 모듈에 대해 false 였다 —
@@ -55,6 +65,18 @@
 
 ### 변경
 
+- **코드가 붙은 MCP 툴 오류가 RFC 9457 problem detail 을 `structuredContent` 가 아니라 result
+  `_meta` 의 `org.htcom.protean/problem` 에 싣는다.** `0.0.1` 에서는 problem 객체(`type`·`title`·
+  `detail`·`code` 와 확장 멤버)를 `structuredContent` 에 썼는데, 스펙은 그 자리를 툴의
+  `outputSchema` 가 기술하는 페이로드에 두고 스키마를 따르도록 요구한다. `outputSchema` 를 선언한
+  내장 툴이 전부 해당됐다 — 예: auto-provision 이 꺼진 상태의 `protean.scope_list`, 없는 모듈에
+  대한 `protean.patch_module`. 오류 result 에서도 `structuredContent` 를 검증하는 클라이언트
+  (TypeScript SDK `@modelcontextprotocol/sdk` 1.x 가 그렇다)는 실제 오류를 `Structured content
+  does not match the tool's output schema` 로 바꿔 버려, 에이전트가 무엇이 잘못됐는지 보지
+  못했다. **오류에서 `structuredContent.code` 를 읽던 클라이언트는
+  `_meta["org.htcom.protean/problem"].code` 를 읽어야 한다.** `[CODE]` 접두 텍스트는 그대로다.
+  툴이 붙인 `_meta` 는 problem 과 함께 유지된다. 성공 result 와 JSON-RPC 프로토콜 오류
+  (`error.data`)는 바뀌지 않았다. 문서는 `docs/guide/08-mcp-integration.ko.md`(*툴 오류*).
 - 커밋되는 개발 버전이 `0.1.0-SNAPSHOT` 이 됐다(종전에는 릴리스된 좌표 그대로인
   `0.0.1-SNAPSHOT`). **GitHub Packages 의 개발 스냅샷도 이 좌표로 옮겨 간다** —
   `org.htcom:protean:0.0.1-SNAPSHOT` 에 고정된 빌드는 더 이상 갱신을 받지 못하므로

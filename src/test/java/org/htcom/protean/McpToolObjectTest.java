@@ -143,10 +143,10 @@ class McpToolObjectTest {
         params.set("arguments", mapper.createObjectNode());
         JsonNode result = call(dispatcher(fullTool(false)), "tools/call", params).path("result");
         assertTrue(result.path("isError").asBoolean(false), "a missing required field is blocked via isError");
-        // RFC 9457: [CODE]-prefixed text + structuredContent.code.
+        // RFC 9457: [CODE]-prefixed text + the problem code in _meta.
         String text = result.path("content").get(0).path("text").asText();
         assertTrue(text.contains("[OUTPUT_SCHEMA_VIOLATION]"), text);
-        assertEquals("OUTPUT_SCHEMA_VIOLATION", result.path("structuredContent").path("code").asText());
+        assertEquals("OUTPUT_SCHEMA_VIOLATION", result.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("code").asText());
     }
 
     @Test

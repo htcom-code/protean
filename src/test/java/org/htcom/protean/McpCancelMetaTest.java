@@ -11,6 +11,7 @@ package org.htcom.protean;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.htcom.protean.error.ErrorCode;
 import org.htcom.protean.mcp.McpCallContext;
 import org.htcom.protean.mcp.McpDispatcher;
 import org.htcom.protean.mcp.McpTool;
@@ -126,6 +127,31 @@ class McpCancelMetaTest {
     }
 
     @Test
+    void coded_error_problem_joins_the_tool_meta_without_touching_structured_content() {
+        // A coded error that also carries tool _meta: the problem is added next to the tool's keys, and nothing lands in
+        // structuredContent (which belongs to the outputSchema-described success payload).
+        McpTool failing = new McpTool() {
+            @Override public String name() { return "test.fail"; }
+            @Override public String description() { return "coded error with _meta"; }
+            @Override public ObjectNode inputSchema() { return inputObj(); }
+            @Override public McpToolResult call(JsonNode args, McpCallContext ctx) {
+                return McpToolResult.error(ErrorCode.STATE_CONFLICT, "not now").withMeta(ctx.meta());
+            }
+        };
+        McpDispatcher d = new McpDispatcher(mapper, List.of(failing), allowAll, null, null, null, null);
+        ObjectNode meta = mapper.createObjectNode();
+        meta.put("trace", "abc-123");
+        JsonNode result = d.dispatch(callReq("r4", "test.fail", null, meta), McpCallContext.anonymous()).path("result");
+        assertTrue(result.path("isError").asBoolean(false));
+        assertFalse(result.has("structuredContent"), "a coded error must not emit structuredContent: " + result);
+        assertEquals("abc-123", result.path("_meta").path("trace").asText(), "the tool's own _meta is kept: " + result);
+        assertEquals("STATE_CONFLICT",
+                result.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("code").asText(), "problem in _meta: " + result);
+        assertEquals("abc-123", meta.path("trace").asText());
+        assertFalse(meta.has(McpToolResult.PROBLEM_META_KEY), "the tool's _meta object is copied, not mutated");
+    }
+
+    @Test
     void authorization_denied_has_clear_error_text() {
         ModuleActionAuthorizer deny =
                 (caller, action, moduleId) -> ModuleActionAuthorizer.Decision.deny("forbidden by policy");
@@ -138,10 +164,10 @@ class McpCancelMetaTest {
         McpDispatcher d = new McpDispatcher(mapper, List.of(anyTool), deny, null, null, null, null);
         JsonNode result = d.dispatch(callReq("r3", "test.guarded", null, null), McpCallContext.anonymous()).path("result");
         assertTrue(result.path("isError").asBoolean(false));
-        // RFC 9457 - [CODE]-prefixed text (for lossy harnesses) plus problem-detail in structuredContent.
+        // RFC 9457 - [CODE]-prefixed text (for lossy harnesses) plus problem-detail in _meta.
         String text = result.path("content").get(0).path("text").asText();
         assertTrue(text.contains("[PERMISSION_DENIED]"), "code-prefixed text: " + text);
-        JsonNode problem = result.path("structuredContent");
+        JsonNode problem = result.path("_meta").path(McpToolResult.PROBLEM_META_KEY);
         assertEquals("PERMISSION_DENIED", problem.path("code").asText(), "discriminator key (code)");
         assertEquals("test.guarded", problem.path("tool").asText(), "tool name carried as structured correction data");
         assertEquals("CUSTOM", problem.path("action").asText(), "action is structured too");

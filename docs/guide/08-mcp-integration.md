@@ -278,7 +278,26 @@ Manage the DB **scope** lifecycle under `worker.db.auto-provision` — the MCP a
 
 To deploy a **LIBRARY** module (shared-module typed sharing) instead of a normal one, add `kind: "LIBRARY"` and `exports` (the packages to publish) at the top level and omit `controller`; a module that consumes a library adds `uses` (the library module ids). These sit alongside `id`/`version`, the same as `controller`. See [02. Module Authoring §8](02-module-authoring.md).
 
+### Tool errors
+
 Domain failures such as a gate rejection or compile failure are not mapped to a JSON-RPC error but to a tool result with `isError: true` (+ diagnostic text). Only protocol-level errors (unknown tool, missing required argument, etc.) go out as JSON-RPC errors.
+
+A coded tool error carries its RFC 9457 problem detail in the result **`_meta`** under the key `org.htcom.protean/problem` (the constant `McpToolResult.PROBLEM_META_KEY`), next to any `_meta` the tool attached — **not** in `structuredContent`:
+
+```json
+{
+  "content": [{ "type": "text", "text": "[STATE_CONFLICT] scope tools require worker.db.auto-provision=true — …" }],
+  "isError": true,
+  "_meta": {
+    "org.htcom.protean/problem": {
+      "type": "urn:protean:error:state-conflict", "title": "State conflict",
+      "detail": "scope tools require worker.db.auto-provision=true — …", "code": "STATE_CONFLICT"
+    }
+  }
+}
+```
+
+`structuredContent` is reserved for the payload the tool's `outputSchema` describes. The spec requires it to conform to that schema, and some clients validate it on error results too — a problem object there would make them report a schema violation instead of the actual error. Read the stable `code` (and extension members such as `gate`, `moduleId`, `diagnostics`) from `_meta["org.htcom.protean/problem"]`; the `[CODE]`-prefixed text is the fallback for clients that surface only text.
 
 ## Authentication & authorization
 
@@ -429,7 +448,7 @@ When a tool that declared `outputSchema` returns **success**, the dispatcher che
 - that `structuredContent` exists and is an **object**
 - that all of the schema's **top-level `required`** fields are present
 
-If either is violated, it does not silently pass but blocks with `isError` ("output schema violation: …") — to stop, at the server, the class of bugs where malformed structured output leaks to the client. This check is not applied to `isError` results (domain failures), where the absence of structured output is normal.
+If either is violated, it does not silently pass but blocks with `isError` ("output schema violation: …") — to stop, at the server, the class of bugs where malformed structured output leaks to the client. This check is not applied to `isError` results (domain failures), where the absence of structured output is normal — a coded error's problem detail goes in `_meta`, not `structuredContent` (see [Tool errors](#tool-errors) above). A custom tool that does attach `structuredContent` to an error result must keep it conformant too, since some clients validate it there as well.
 
 **By default it does not perform full JSON Schema validation of nested fields, types, formats, etc.** The MCP core is deliberately zero-dep and does not pull in a schema validator, and the spec too leaves full validation to the **client** ("Clients SHOULD validate structured results against this schema"). That is, the server's job is to **advertise `outputSchema` accurately** so the client can validate fully, and the default server-side guard is a safety net that catches only blatant contract violations (missing/non-object).
 

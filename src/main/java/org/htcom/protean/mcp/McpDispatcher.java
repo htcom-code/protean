@@ -626,16 +626,20 @@ public class McpDispatcher {
         if (r.isError()) {
             res.put("isError", true);
         }
-        // Success: the tool payload. Error (a problem is attached): the RFC 9457 problem-detail shape as structuredContent.
-        JsonNode structured = r.structured();
-        if (structured == null && r.problem() != null) {
-            structured = r.problem().toJson(mapper);
+        if (r.structured() != null) {
+            res.set("structuredContent", r.structured());
         }
-        if (structured != null) {
-            res.set("structuredContent", structured);
+        // A stable-code error's RFC 9457 problem goes in _meta, never in structuredContent: a tool's outputSchema
+        // describes its success payload, the spec requires structuredContent to conform to it, and clients that
+        // validate it on error results too would replace the actionable error with a schema-violation error.
+        JsonNode meta = r.meta();   // additional metadata attached by the tool
+        if (r.problem() != null) {
+            ObjectNode merged = meta instanceof ObjectNode o ? o.deepCopy() : mapper.createObjectNode();
+            merged.set(McpToolResult.PROBLEM_META_KEY, r.problem().toJson(mapper));
+            meta = merged;
         }
-        if (r.meta() != null) {
-            res.set("_meta", r.meta());   // additional metadata attached by the tool
+        if (meta != null) {
+            res.set("_meta", meta);
         }
         return res;
     }

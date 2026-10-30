@@ -20,11 +20,15 @@ import org.htcom.protean.error.ProblemDetail;
  * (ModuleStatus) or a {@code jobId} union. Currently it always returns only the terminal state.
  *
  * <p>Stable-code errors ({@link #error(ErrorCode, String)}) carry an RFC 9457 shape in {@code problem}, and the
- * boundary ({@code McpDispatcher.toolResultNode}) serializes it into {@code structuredContent}. The mapping lives
- * in one boundary — the mapper is not placed here. Plain-text errors without a {@code problem} are promoted to
- * codes in a later phase.
+ * boundary ({@code McpDispatcher.toolResultNode}) serializes it into the result {@code _meta} under
+ * {@link #PROBLEM_META_KEY} — not into {@code structuredContent}, which is reserved for the payload described by
+ * the tool's {@code outputSchema}. The mapping lives in one boundary — the mapper is not placed here. Plain-text
+ * errors without a {@code problem} are promoted to codes in a later phase.
  */
 public record McpToolResult(String text, boolean isError, JsonNode structured, JsonNode meta, ProblemDetail problem) {
+
+    /** {@code _meta} key under which a stable-code error result carries its RFC 9457 problem detail. */
+    public static final String PROBLEM_META_KEY = "org.htcom.protean/problem";
 
     public static McpToolResult ok(String text) {
         return new McpToolResult(text, false, null, null, null);
@@ -41,7 +45,7 @@ public record McpToolResult(String text, boolean isError, JsonNode structured, J
 
     /**
      * Stable-code error (RFC 9457). {@code text} is a {@code [CODE]}-prefixed detail for lossy harnesses, and
-     * {@code problem} is the problem-detail shape that the boundary serializes into {@code structuredContent}.
+     * {@code problem} is the problem-detail shape that the boundary serializes into {@code _meta[PROBLEM_META_KEY]}.
      * Attach structured remediation data with {@link #with} (e.g. {@code gate}, {@code diagnostics}).
      */
     public static McpToolResult error(ErrorCode code, String detail) {

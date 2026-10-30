@@ -86,8 +86,9 @@ public class ListRuntimesTool implements McpTool {
         p.putObject("runtimeId").put("type", "string")
                 .put("description", "Opaque host id, joins to a module's runtimeId (main | worker:<uuid> | container:<name>)");
         p.putObject("mode").put("type", "string").put("description", "in-process | worker | container");
-        p.putObject("scope").put("type", "string")
-                .put("description", "DB scope this runtime is bound to; null when auto-provision is off");
+        ObjectNode scope = p.putObject("scope");
+        scope.putArray("type").add("string").add("null");   // null when auto-provision is off (the default)
+        scope.put("description", "DB scope this runtime is bound to; null when auto-provision is off");
         p.putObject("state").put("type", "string").put("description", "LIVE | RETIRING");
         p.putObject("sinceEpochMs").put("type", "integer").put("description", "Start time (epoch ms) for uptime");
         p.putObject("moduleIds").put("type", "array").put("description", "Modules hosted here; empty when warm/retiring")

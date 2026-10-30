@@ -273,7 +273,26 @@ tier 모델과 키별 의미는 [03. 설정](03-configuration.ko.md) 참고.
 
 일반 모듈 대신 **LIBRARY** 모듈(shared-module 타입 공유)을 배포하려면 top-level 에 `kind: "LIBRARY"` 와 `exports`(발행할 패키지)를 주고 `controller` 는 생략한다; 라이브러리를 소비하는 모듈은 `uses`(라이브러리 모듈 id)를 추가한다. `controller` 처럼 `id`/`version` 과 같은 레벨에 둔다. [02. 모듈 작성 §8](02-module-authoring.ko.md) 참고.
 
+### 툴 오류
+
 게이트 거부·컴파일 실패 같은 도메인 실패는 JSON-RPC error 가 아니라 tool result 의 `isError: true`(+진단 텍스트)로 매핑된다. 프로토콜 수준 오류(알 수 없는 툴·필수 인자 누락 등)만 JSON-RPC error 로 나간다.
+
+코드가 붙은 툴 오류는 RFC 9457 problem detail 을 `structuredContent` 가 **아니라** result **`_meta`** 의 `org.htcom.protean/problem` 키(상수 `McpToolResult.PROBLEM_META_KEY`)에 싣는다. 툴이 직접 붙인 `_meta` 키는 그대로 함께 나간다:
+
+```json
+{
+  "content": [{ "type": "text", "text": "[STATE_CONFLICT] scope tools require worker.db.auto-provision=true — …" }],
+  "isError": true,
+  "_meta": {
+    "org.htcom.protean/problem": {
+      "type": "urn:protean:error:state-conflict", "title": "State conflict",
+      "detail": "scope tools require worker.db.auto-provision=true — …", "code": "STATE_CONFLICT"
+    }
+  }
+}
+```
+
+`structuredContent` 는 툴의 `outputSchema` 가 기술하는 페이로드 전용이다. 스펙은 그것이 스키마를 따르도록 요구하고, 일부 클라이언트는 오류 result 에서도 검증한다 — 거기에 problem 객체가 있으면 그 클라이언트는 실제 오류 대신 스키마 위반을 보고한다. 안정 `code`(와 `gate`·`moduleId`·`diagnostics` 같은 확장 멤버)는 `_meta["org.htcom.protean/problem"]` 에서 읽는다. `[CODE]` 접두 텍스트는 텍스트만 보여 주는 클라이언트를 위한 폴백이다.
 
 ## 인증·인가
 
@@ -424,7 +443,7 @@ claude mcp add --transport http protean http://localhost:8080/platform/mcp
 - `structuredContent` 가 존재하고 **객체**인지
 - 스키마의 **top-level `required`** 필드가 모두 있는지
 
-둘 중 하나라도 어기면 조용히 흘리지 않고 `isError`("출력 스키마 위반: …") 로 막는다 — 잘못된 구조화 출력이 클라로 새는 버그 계열을 서버에서 차단하기 위함이다. `isError` result(도메인 실패)에는 이 검사를 적용하지 않는다(구조화 출력이 없는 게 정상).
+둘 중 하나라도 어기면 조용히 흘리지 않고 `isError`("출력 스키마 위반: …") 로 막는다 — 잘못된 구조화 출력이 클라로 새는 버그 계열을 서버에서 차단하기 위함이다. `isError` result(도메인 실패)에는 이 검사를 적용하지 않는다(구조화 출력이 없는 게 정상) — 코드가 붙은 오류의 problem detail 은 `structuredContent` 가 아니라 `_meta` 에 실린다(위 [툴 오류](#툴-오류) 참고). 커스텀 툴이 오류 result 에 `structuredContent` 를 직접 붙인다면 그것도 스키마를 따라야 한다 — 일부 클라이언트는 거기서도 검증한다.
 
 **기본값에선 중첩 필드·타입·형식 등 전체 JSON Schema 검증은 하지 않는다.** MCP 코어는 의도적으로 zero-dep 이라 스키마 밸리데이터를 끌어오지 않으며, 스펙도 전체 검증을 **클라이언트 몫**("Clients SHOULD validate structured results against this schema")으로 둔다. 즉 `outputSchema` 는 클라가 완전 검증할 수 있도록 **정확히 광고**하는 것이 서버의 역할이고, 기본 서버측 가드는 명백한 계약 위반(누락·비객체)만 잡는 안전망이다.
 

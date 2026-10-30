@@ -10,9 +10,11 @@ While the version is `0.x`, the public API may change between minor releases.
 
 ## [Unreleased]
 
-One addition to the wire contract of the console SSE stream (below); the Java API a
-consumer compiles against is otherwise unchanged from `0.0.1` and still links. What
-else changed is what the built-in MCP tools *answer*. If you wrap, subclass, or
+Two wire-contract changes: an addition to the console SSE stream, and **a move of the
+MCP tool-error problem detail from `structuredContent` to `_meta`** (both below). The
+Java API a consumer compiles against gains one constant and is otherwise unchanged
+from `0.0.1`, so it still links. What else changed is what the built-in MCP tools
+*answer*. If you wrap, subclass, or
 delegate to them, read the migration note at the end of this section.
 
 ### Added
@@ -31,8 +33,18 @@ delegate to them, read the migration note at the end of this section.
   and clients must ignore fields they do not recognize. Existing clients are
   unaffected — `EventSource` drops named events that have no listener. Documented in
   `docs/guide/04-rest-api.md`.
+- `McpToolResult.PROBLEM_META_KEY` (`"org.htcom.protean/problem"`) — the `_meta` key a
+  coded tool error now carries its problem detail under (see *Changed*).
 
 ### Fixed
+
+- `protean.list_runtimes` declared `runtimes[].scope` as `string`, while its own
+  description says it is `null` when auto-provision is off — the default. Every call
+  on a default install therefore returned a result that violated the tool's
+  `outputSchema`: a client validating it reported `scope: null found, string
+  expected`, and with `protean.mcp.strict-schema=true` the dispatcher's own output
+  check turned the call into `OUTPUT_SCHEMA_VIOLATION`, so the tool could not be used
+  at all. `scope` is now declared `["string", "null"]`.
 
 - `protean.list_modules`'s `trustTier` filter compared the argument (a `String`)
   against `ModuleStatus.trustTier()` (a `TrustTier` enum), so `String.equals(Object)`
@@ -64,6 +76,21 @@ delegate to them, read the migration note at the end of this section.
 
 ### Changed
 
+- **A coded MCP tool error now carries its RFC 9457 problem detail in the result
+  `_meta` under `org.htcom.protean/problem`, not in `structuredContent`.** On `0.0.1`
+  the problem object (`type`·`title`·`detail`·`code` and extension members) was
+  written to `structuredContent`, which the spec reserves for the payload the tool's
+  `outputSchema` describes and requires to conform to it. Every built-in tool that
+  declares an `outputSchema` was affected — for example `protean.scope_list` with
+  auto-provision off, or `protean.patch_module` on an unknown module. A client that
+  validates `structuredContent` on error results too — the TypeScript SDK's
+  `@modelcontextprotocol/sdk` 1.x does — replaced the actionable error with
+  `Structured content does not match the tool's output schema`, so the agent never
+  saw what went wrong. **Clients that read `structuredContent.code` on an error must
+  read `_meta["org.htcom.protean/problem"].code` instead**; the `[CODE]`-prefixed text
+  content is unchanged. A tool's own `_meta` is kept alongside the problem. Success
+  results and JSON-RPC protocol errors (`error.data`) are unchanged. Documented in
+  `docs/guide/08-mcp-integration.md` (*Tool errors*).
 - The committed development version is now `0.1.0-SNAPSHOT` (it was `0.0.1-SNAPSHOT`,
   left at the released coordinate). **Development snapshots on GitHub Packages move
   with it** — a build pinned to `org.htcom:protean:0.0.1-SNAPSHOT` stops receiving
