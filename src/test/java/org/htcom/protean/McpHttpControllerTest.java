@@ -63,6 +63,22 @@ class McpHttpControllerTest {
     }
 
     @Test
+    void coded_tool_error_over_http_carries_its_problem_in_meta() throws Exception {
+        // The wire shape a client actually receives: auto-provision is off, so scope_list errors with STATE_CONFLICT.
+        // The problem detail must arrive in _meta, never in structuredContent (validated against the outputSchema).
+        String body = "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\","
+                + "\"params\":{\"name\":\"protean.scope_list\",\"arguments\":{}}}";
+        mockMvc.perform(post("/platform/mcp").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.result.isError").value(true))
+                .andExpect(jsonPath("$.result.structuredContent").doesNotExist())
+                .andExpect(jsonPath("$.result._meta['org.htcom.protean/problem'].code").value("STATE_CONFLICT"))
+                .andExpect(jsonPath("$.result._meta['org.htcom.protean/problem'].type")
+                        .value("urn:protean:error:state-conflict"))
+                .andExpect(jsonPath("$.result.content[0].text").value(org.hamcrest.Matchers.startsWith("[STATE_CONFLICT]")));
+    }
+
+    @Test
     void notification_gets_202_no_body() throws Exception {
         String body = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}";
         mockMvc.perform(post("/platform/mcp").contentType(MediaType.APPLICATION_JSON).content(body))
