@@ -106,14 +106,14 @@ class McpStrictSchemaTest {
         badArg.put("n", "not-a-number"); // string where integer is required — top-level presence check would miss this
         JsonNode result = callTool(strict(customTool("ok", false), SchemaValidator.create()), badArg);
         assertTrue(result.path("isError").asBoolean(false), "wrong-typed input rejected: " + result);
-        assertEquals("INVALID_ARGUMENT", result.path("structuredContent").path("code").asText());
+        assertEquals("INVALID_ARGUMENT", result.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("code").asText());
     }
 
     @Test
     void strict_rejects_missing_required_input() {
         JsonNode result = callTool(strict(customTool("ok", false), SchemaValidator.create()), mapper.createObjectNode());
         assertTrue(result.path("isError").asBoolean(false), "missing required arg rejected: " + result);
-        assertEquals("INVALID_ARGUMENT", result.path("structuredContent").path("code").asText());
+        assertEquals("INVALID_ARGUMENT", result.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("code").asText());
     }
 
     @Test
@@ -121,7 +121,7 @@ class McpStrictSchemaTest {
         // "value" IS present (so the top-level guard passes) but is an integer, not the declared string.
         JsonNode result = callTool(strict(customTool("123", true), SchemaValidator.create()), argN(1));
         assertTrue(result.path("isError").asBoolean(false), "wrong-typed output rejected under strict: " + result);
-        assertEquals("OUTPUT_SCHEMA_VIOLATION", result.path("structuredContent").path("code").asText());
+        assertEquals("OUTPUT_SCHEMA_VIOLATION", result.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("code").asText());
     }
 
     @Test

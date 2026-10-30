@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.mcpext.McpExtBeans;
 import org.htcom.protean.mcp.McpCallContext;
 import org.htcom.protean.mcp.McpDispatcher;
+import org.htcom.protean.mcp.McpToolResult;
 import org.htcom.protean.mcp.ModuleActionAuthorizer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,10 +88,10 @@ class McpExtensionPointsTest {
         args.putArray("files");
         JsonNode result = callTool("protean.deploy_module", args);
         assertTrue(result.path("isError").asBoolean(false));
-        // RFC 9457 - [CODE]-prefixed text plus structuredContent problem-detail (code/tool/action).
+        // RFC 9457 - [CODE]-prefixed text plus the problem-detail (code/tool/action) in _meta.
         String text = result.path("content").get(0).path("text").asText();
         assertTrue(text.contains("[PERMISSION_DENIED]"), text);
-        JsonNode problem = result.path("structuredContent");
+        JsonNode problem = result.path("_meta").path(McpToolResult.PROBLEM_META_KEY);
         assertEquals("PERMISSION_DENIED", problem.path("code").asText());
         assertEquals("protean.deploy_module", problem.path("tool").asText());
     }

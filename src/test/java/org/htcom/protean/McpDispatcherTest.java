@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.mcp.McpCallContext;
 import org.htcom.protean.mcp.McpDispatcher;
 import org.htcom.protean.mcp.McpException;
+import org.htcom.protean.mcp.McpToolResult;
 import org.htcom.protean.module.ModuleDescriptor;
 import org.htcom.protean.module.ModulePlatform;
 import org.junit.jupiter.api.AfterEach;
@@ -320,7 +321,7 @@ class McpDispatcherTest {
         missArgs.put("id", "does-not-exist");
         JsonNode miss = callTool("protean.get_module", missArgs);
         assertTrue(miss.path("isError").asBoolean(false));
-        JsonNode problem = miss.path("structuredContent");
+        JsonNode problem = miss.path("_meta").path(McpToolResult.PROBLEM_META_KEY);
         assertEquals("MODULE_NOT_FOUND", problem.path("code").asText(), "discriminator key");
         assertEquals("urn:protean:error:module-not-found", problem.path("type").asText());
         assertEquals("does-not-exist", problem.path("moduleId").asText(), "moduleId extension for correlation");
@@ -365,15 +366,15 @@ class McpDispatcherTest {
         missClass.put("className", "no.such.Clazz");
         JsonNode missClassRes = callTool("protean.get_module_source", missClass);
         assertTrue(missClassRes.path("isError").asBoolean(false));
-        assertEquals("MODULE_NOT_FOUND", missClassRes.path("structuredContent").path("code").asText());
-        assertEquals("no.such.Clazz", missClassRes.path("structuredContent").path("resource").asText());
+        assertEquals("MODULE_NOT_FOUND", missClassRes.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("code").asText());
+        assertEquals("no.such.Clazz", missClassRes.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("resource").asText());
 
         // Missing module -> tool result isError + code
         ObjectNode missMod = mapper.createObjectNode();
         missMod.put("id", "does-not-exist");
         JsonNode missModRes = callTool("protean.get_module_source", missMod);
         assertTrue(missModRes.path("isError").asBoolean(false));
-        assertEquals("MODULE_NOT_FOUND", missModRes.path("structuredContent").path("code").asText());
+        assertEquals("MODULE_NOT_FOUND", missModRes.path("_meta").path(McpToolResult.PROBLEM_META_KEY).path("code").asText());
     }
 
     private JsonNode callTool(String tool, ObjectNode args) {

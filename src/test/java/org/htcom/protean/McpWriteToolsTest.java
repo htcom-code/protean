@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.htcom.protean.mcp.McpCallContext;
 import org.htcom.protean.mcp.McpDispatcher;
 import org.htcom.protean.mcp.McpException;
+import org.htcom.protean.mcp.McpToolResult;
 import org.htcom.protean.module.ModulePlatform;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -161,7 +162,7 @@ class McpWriteToolsTest {
         JsonNode result = callTool("protean.deploy_module", args).path("result");
         assertTrue(result.path("isError").asBoolean(false), "a gate rejection is a tool result isError");
         // Gate failure is emitted structurally: code=GATE_FAILED + gate identifier.
-        JsonNode problem = result.path("structuredContent");
+        JsonNode problem = result.path("_meta").path(McpToolResult.PROBLEM_META_KEY);
         assertEquals("GATE_FAILED", problem.path("code").asText());
         assertEquals("tests", problem.path("gate").asText(), "the failed gate identifier");
         assertTrue(result.path("content").get(0).path("text").asText().contains("[GATE_FAILED]"),

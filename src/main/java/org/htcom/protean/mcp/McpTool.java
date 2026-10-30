@@ -40,7 +40,10 @@ public interface McpTool {
      * Output JSON Schema (optional). When declared, a successful result's {@code structuredContent} must conform
      * to it; the dispatcher validates a minimal fit (is-object and top-level {@code required}) and blocks with
      * {@code isError} on a mismatch (guarding against structuredContent-class bugs). Full schema validation is the
-     * client's responsibility (per spec). {@code null} = not declared.
+     * client's responsibility (per spec). Some clients validate {@code structuredContent} on error results too, so a
+     * tool that attaches {@code structuredContent} to an {@code isError} result must keep it conformant as well;
+     * stable-code errors never do — their problem detail travels in {@code _meta} under
+     * {@link McpToolResult#PROBLEM_META_KEY}. {@code null} = not declared.
      */
     default ObjectNode outputSchema() {
         return null;
