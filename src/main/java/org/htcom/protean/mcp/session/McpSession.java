@@ -42,14 +42,33 @@ public final class McpSession {
     private volatile long lastActivityNanos = System.nanoTime();
     private volatile SseEmitter stream;   // persistent GET stream (null if none)
     private volatile com.fasterxml.jackson.databind.JsonNode clientCapabilities; // reported by the client at initialize
+    private final String owner;   // principal name that created the session (null = unauthenticated)
 
     McpSession(String id, int bufferCap) {
+        this(id, bufferCap, null);
+    }
+
+    McpSession(String id, int bufferCap, String owner) {
         this.id = id;
         this.bufferCap = Math.max(1, bufferCap);
+        this.owner = owner;
     }
 
     public String id() {
         return id;
+    }
+
+    /** Principal name that created the session at initialize (null when the request was unauthenticated). */
+    public String owner() {
+        return owner;
+    }
+
+    /**
+     * Whether a request made as {@code principalName} may use this session — only the principal that created it.
+     * Two unauthenticated callers (both null) are indistinguishable, so the binding only protects authenticated use.
+     */
+    public boolean ownedBy(String principalName) {
+        return java.util.Objects.equals(owner, principalName);
     }
 
     /** Capabilities the client reported at initialize (null if none). Used to gate server-to-client requests. */

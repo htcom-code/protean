@@ -26,7 +26,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * MCP Streamable HTTP session registry and server-to-client notification channel.
@@ -51,9 +50,18 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
     private final long streamTimeoutMillis;
     private final Map<String, McpSession> sessions = new ConcurrentHashMap<>();
     private final ScheduledExecutorService sweeper;
-    /** Server-to-client request correlation: server request id -> future awaiting the response. */
-    private final Map<String, CompletableFuture<JsonNode>> pending = new ConcurrentHashMap<>();
-    private final AtomicLong serverReqSeq = new AtomicLong();
+    /**
+     * Server-to-client request correlation: server request id -> the session it was sent to plus the future awaiting
+     * the response. Ids are random, and a response completes the future only when it arrives on that same session.
+     */
+    private final Map<String, Pending> pending = new ConcurrentHashMap<>();
+
+    private record Pending(String sessionId, CompletableFuture<JsonNode> future) {
+    }
+
+    /** Called with the session id after a session is terminated (explicitly, by idle reclaim or at shutdown). */
+    private final java.util.List<java.util.function.Consumer<String>> terminationListeners =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
 
     public McpSessionRegistry(ObjectMapper mapper, long idleTimeoutMillis, int bufferCap, long streamTimeoutMillis) {
         this.mapper = mapper;
@@ -68,11 +76,37 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
         this.sweeper.scheduleWithFixedDelay(this::sweep, HEARTBEAT_MS, HEARTBEAT_MS, TimeUnit.MILLISECONDS);
     }
 
-    /** Issues a new session (initialize). */
+    /** Issues a new session (initialize) with no owner — usable by unauthenticated requests only. */
     public McpSession create() {
-        McpSession s = new McpSession(UUID.randomUUID().toString(), bufferCap);
+        return create(null);
+    }
+
+    /**
+     * Issues a new session (initialize) bound to {@code owner}, the principal name of the initializing request
+     * (null when unauthenticated). Later requests on the session must come from the same principal.
+     */
+    public McpSession create(String owner) {
+        McpSession s = new McpSession(UUID.randomUUID().toString(), bufferCap, owner);
         sessions.put(s.id(), s);
         return s;
+    }
+
+    /**
+     * Looks up a session for a request made as {@code principalName}: null if there is no such session or it belongs
+     * to another principal (indistinguishable to the caller). Only a successful lookup counts as activity.
+     */
+    public McpSession get(String id, String principalName) {
+        McpSession s = id == null ? null : sessions.get(id);
+        if (s == null || !s.ownedBy(principalName)) {
+            return null;
+        }
+        s.touch();
+        return s;
+    }
+
+    /** Registers a callback invoked with the session id whenever a session is terminated. */
+    public void onTerminate(java.util.function.Consumer<String> listener) {
+        terminationListeners.add(listener);
     }
 
     /** Looks up a session (null if none). The lookup itself counts as activity and resets the idle timer. */
@@ -92,6 +126,13 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
         McpSession s = sessions.remove(id);
         if (s == null) {
             return;
+        }
+        for (java.util.function.Consumer<String> l : terminationListeners) {
+            try {
+                l.accept(id);
+            } catch (RuntimeException e) {
+                log.warn("MCP session termination listener failed for {}", id, e);
+            }
         }
         SseEmitter e = s.stream();
         if (e != null) {
@@ -142,8 +183,8 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
             future.completeExceptionally(new IllegalStateException("No MCP session (cannot send request): " + sessionId));
             return future;
         }
-        String reqId = "srv:" + serverReqSeq.incrementAndGet();
-        pending.put(reqId, future);
+        String reqId = "srv:" + UUID.randomUUID();
+        pending.put(reqId, new Pending(s.id(), future));
         ObjectNode req = mapper.createObjectNode();
         req.put("jsonrpc", "2.0");
         req.put("id", reqId);
@@ -153,9 +194,9 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
         }
         deliver(s, req.toString());   // deliver the request over the persistent stream (+ record in replay buffer)
         sweeper.schedule(() -> {
-            CompletableFuture<JsonNode> f = pending.remove(reqId);
-            if (f != null) {
-                f.completeExceptionally(new TimeoutException("Client response timed out: " + method));
+            Pending p = pending.remove(reqId);
+            if (p != null) {
+                p.future().completeExceptionally(new TimeoutException("Client response timed out: " + method));
             }
         }, timeoutMillis, TimeUnit.MILLISECONDS);
         return future;
@@ -168,19 +209,21 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
     }
 
     /**
-     * If the client-POSTed message is a <b>response to a server-to-client request</b> (its textual id is in
-     * {@code pending}), matches it, completes the future, and returns {@code true}. Otherwise (a new
-     * request/notification) returns {@code false} — the controller hands it to the dispatcher.
+     * If the message POSTed on {@code sessionId} is a <b>response to a server-to-client request</b> that was sent to
+     * that same session, completes the waiting future and returns {@code true}. A response whose id matches nothing,
+     * or matches a request sent to a different session, returns {@code false} and leaves the request pending.
      */
-    public boolean completeFromClient(JsonNode message) {
+    public boolean completeFromClient(String sessionId, JsonNode message) {
         JsonNode idNode = message == null ? null : message.get("id");
-        if (idNode == null || !idNode.isTextual()) {
+        if (sessionId == null || idNode == null || !idNode.isTextual()) {
             return false;
         }
-        CompletableFuture<JsonNode> future = pending.remove(idNode.asText());
-        if (future == null) {
+        String reqId = idNode.asText();
+        Pending p = pending.get(reqId);
+        if (p == null || !p.sessionId().equals(sessionId) || !pending.remove(reqId, p)) {
             return false;
         }
+        CompletableFuture<JsonNode> future = p.future();
         if (message.has("error")) {
             future.completeExceptionally(new IllegalStateException(
                     "Client error: " + message.path("error").path("message").asText()));
@@ -190,11 +233,32 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
         return true;
     }
 
+    /**
+     * Session-less matching is no longer supported: a response is accepted only on the session its request was sent
+     * to. Kept for binary compatibility; it never completes a request.
+     *
+     * @deprecated use {@link #completeFromClient(String, JsonNode)}
+     */
+    @Deprecated(since = "0.0.2", forRemoval = true)
+    public boolean completeFromClient(JsonNode message) {
+        return false;
+    }
+
     @Override
     public void broadcast(JsonNode notification) {
         String json = notification.toString();
         for (McpSession s : sessions.values()) {
             deliver(s, json);
+        }
+    }
+
+    @Override
+    public void broadcast(JsonNode notification, java.util.function.Predicate<String> toSession) {
+        String json = notification.toString();
+        for (McpSession s : sessions.values()) {
+            if (toSession.test(s.id())) {
+                deliver(s, json);
+            }
         }
     }
 
@@ -260,7 +324,7 @@ public class McpSessionRegistry implements McpServerNotifier, McpClientChannel {
         for (String id : sessions.keySet()) {
             terminate(id);
         }
-        pending.forEach((id, f) -> f.completeExceptionally(new IllegalStateException("MCP server shutting down")));
+        pending.forEach((id, p) -> p.future().completeExceptionally(new IllegalStateException("MCP server shutting down")));
         pending.clear();
     }
 }

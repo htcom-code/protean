@@ -70,14 +70,22 @@ public class McpDispatcher {
     private final boolean strictSchemaFixed;
     /** Full JSON-Schema validator backing strict mode; unavailable() when the validator jar is absent. */
     private final SchemaValidator schemaValidator;
-    /** Set of subscribed resource URIs. resources/updated only notifies for URIs in this set. Server-global (honest). */
-    private final Set<String> resourceSubscriptions = ConcurrentHashMap.newKeySet();
+    /**
+     * Resource subscriptions per session id. resources/updated reaches a session only for a URI that session
+     * subscribed to. Session-less callers (stateless HTTP, stdio, non-session notifiers) share {@link #NO_SESSION}.
+     */
+    private final Map<String, Set<String>> resourceSubscriptions = new ConcurrentHashMap<>();
     /** In-flight request cancellation registry: session-scoped request key → cancellation token + worker thread. */
     private final Map<String, Inflight> inflight = new ConcurrentHashMap<>();
     /** List page size (runtime-adjustable). */
     private volatile int pageSize = DEFAULT_PAGE_SIZE;
-    /** Server-global log threshold. Defaults to INFO before setLevel. Log records below this level are not emitted. */
-    private volatile McpLogLevel logLevel = McpLogLevel.INFO;
+    /** Log threshold per session id, set by that session's logging/setLevel. Sessions that never set one use INFO. */
+    private final Map<String, McpLogLevel> sessionLogLevels = new ConcurrentHashMap<>();
+    /** Log threshold of the session-less audience (stateless HTTP, stdio, non-session notifiers). Defaults to INFO. */
+    private volatile McpLogLevel logLevel = DEFAULT_LOG_LEVEL;
+    private static final McpLogLevel DEFAULT_LOG_LEVEL = McpLogLevel.INFO;
+    /** Key of the session-less subscription bucket (not a valid session id). */
+    private static final String NO_SESSION = "";
 
     public McpDispatcher(ObjectMapper mapper, List<McpTool> toolBeans, ModuleActionAuthorizer authorizer,
                          McpResources resources, McpPrompts prompts,
@@ -121,6 +129,15 @@ public class McpDispatcher {
         for (McpTool t : toolBeans) {
             tools.put(t.name(), t);
         }
+        // Per-session state lives only as long as the session.
+        if (notifier instanceof org.htcom.protean.mcp.session.McpSessionRegistry registry) {
+            registry.onTerminate(this::forgetSession);
+        }
+    }
+
+    private void forgetSession(String sessionId) {
+        sessionLogLevels.remove(sessionId);
+        resourceSubscriptions.remove(sessionId);
     }
 
     /** Strict full-schema validation of tool I/O (opt-in via {@code protean.mcp.strict-schema}); read live when Spring-wired. */
@@ -172,20 +189,33 @@ public class McpDispatcher {
         return null;
     }
 
-    /** {@code logging/setLevel} — sets the server-global log threshold. An unknown level yields invalidParams. */
-    private JsonNode setLogLevel(JsonNode params) {
+    /**
+     * {@code logging/setLevel} — sets the log threshold of the calling session only; another session's threshold is
+     * never affected. A session-less call sets the session-less audience's threshold. An unknown level yields
+     * invalidParams.
+     */
+    private JsonNode setLogLevel(JsonNode params, McpCallContext ctx) {
         String level = params == null ? null : params.path("level").asText(null);
         McpLogLevel parsed = McpLogLevel.fromWire(level);
         if (parsed == null) {
             throw McpException.invalidParams("unknown log level: " + level);
         }
-        this.logLevel = parsed;
+        if (ctx.sessionId() == null) {
+            this.logLevel = parsed;
+        } else {
+            sessionLogLevels.put(ctx.sessionId(), parsed);
+        }
         return mapper.createObjectNode();
     }
 
-    /** The current server-global log threshold. */
+    /** The log threshold of the session-less audience (stateless HTTP, stdio). See {@link #logLevel(String)}. */
     public McpLogLevel logLevel() {
         return logLevel;
+    }
+
+    /** The log threshold of {@code sessionId} (INFO until that session calls logging/setLevel); null = session-less. */
+    public McpLogLevel logLevel(String sessionId) {
+        return sessionId == null ? logLevel : sessionLogLevels.getOrDefault(sessionId, DEFAULT_LOG_LEVEL);
     }
 
     /**
@@ -193,7 +223,7 @@ public class McpDispatcher {
      * kind, delegates to {@link McpPrompts#complete}/{@link McpResources#complete} (empty candidates if neither is
      * present). Spec result: {@code {completion:{values,total,hasMore}}}, with at most 100 values.
      */
-    private JsonNode complete(JsonNode params) {
+    private JsonNode complete(JsonNode params, McpCallContext ctx) {
         if (params == null) {
             throw McpException.invalidParams("completion/complete: params required");
         }
@@ -206,6 +236,8 @@ public class McpDispatcher {
         if ("ref/prompt".equals(refType)) {
             values = prompts != null ? prompts.complete(ref.path("name").asText(null), argName, value) : List.of();
         } else if ("ref/resource".equals(refType)) {
+            // Resource completion enumerates deployed module ids — a module-less read, judged like list_modules.
+            authorizeRead(ctx, null);
             values = resources != null ? resources.complete(ref.path("uri").asText(null), argName, value) : List.of();
         } else {
             throw McpException.invalidParams("unknown completion ref type: " + refType);
@@ -223,16 +255,16 @@ public class McpDispatcher {
 
     /**
      * Server→client log emission ({@code notifications/message}). A library primitive — invoked by consumer
-     * tools/platforms. Sends over the standing stream only for levels at or above the current threshold, and only
-     * when the session surface is on (notifier != null). The threshold is a <b>server-global</b> value adjusted via
-     * {@code logging/setLevel} (shared by all connected clients).
+     * tools/platforms. Sends over the standing stream only when the session surface is on (notifier != null), and to
+     * each session only if {@code level} is at or above <b>that session's</b> threshold ({@code logging/setLevel}).
+     * Which records are emitted at all — and so which sessions may see their content — is the caller's decision.
      *
      * @param level  severity
      * @param logger log source name (optional, omitted if null)
      * @param data   structured payload (arbitrary JSON)
      */
     public void emitLog(McpLogLevel level, String logger, JsonNode data) {
-        if (level == null || notifier == null || !level.atLeast(logLevel)) {
+        if (level == null || notifier == null) {
             return;
         }
         ObjectNode notif = mapper.createObjectNode();
@@ -244,19 +276,50 @@ public class McpDispatcher {
             p.put("logger", logger);
         }
         p.set("data", data == null ? mapper.nullNode() : data);
-        notifier.broadcast(notif);
+        notifier.broadcast(notif, sessionId -> level.atLeast(logLevel(sessionId)));
     }
 
     /** {@code resources/subscribe} — subscribe to change notifications for a URI. Idempotent. */
-    private JsonNode subscribe(JsonNode params) {
-        resourceSubscriptions.add(requireUri(params, "resources/subscribe"));
+    private JsonNode subscribe(JsonNode params, McpCallContext ctx) {
+        String uri = requireUri(params, "resources/subscribe");
+        authorizeRead(ctx, McpResources.moduleIdOf(uri));
+        resourceSubscriptions.computeIfAbsent(subscriber(ctx), k -> ConcurrentHashMap.newKeySet()).add(uri);
         return mapper.createObjectNode();
     }
 
-    /** {@code resources/unsubscribe}. Idempotent. */
-    private JsonNode unsubscribe(JsonNode params) {
-        resourceSubscriptions.remove(requireUri(params, "resources/unsubscribe"));
+    /**
+     * READ authorization for the non-tool paths that expose module data (resources/read, resources/subscribe,
+     * resource completion). Consults the same {@link ModuleActionAuthorizer} as {@code tools/call}, so a caller the
+     * consumer's policy denies on a tool cannot read the same data through a resource. {@code moduleId} is null for
+     * module-less reads (the module list, traces, id completion) — the same argument the list/trace tools pass.
+     */
+    private void authorizeRead(McpCallContext ctx, String moduleId) {
+        ModuleActionAuthorizer.Decision decision =
+                authorizer.authorize(ctx.caller(), ModuleActionAuthorizer.ModuleAction.READ, moduleId);
+        if (!decision.allowed()) {
+            String reason = decision.reason() == null ? "authorizer denied" : decision.reason();
+            throw new McpException(ErrorCode.PERMISSION_DENIED, reason)
+                    .with("action", ModuleActionAuthorizer.ModuleAction.READ.name());
+        }
+    }
+
+    /** {@code resources/unsubscribe} — removes the calling session's subscription. Idempotent. */
+    private JsonNode unsubscribe(JsonNode params, McpCallContext ctx) {
+        String uri = requireUri(params, "resources/unsubscribe");
+        Set<String> uris = resourceSubscriptions.get(subscriber(ctx));
+        if (uris != null) {
+            uris.remove(uri);
+        }
         return mapper.createObjectNode();
+    }
+
+    private static String subscriber(McpCallContext ctx) {
+        return ctx.sessionId() == null ? NO_SESSION : ctx.sessionId();
+    }
+
+    private boolean subscribed(String sessionId, String uri) {
+        Set<String> uris = resourceSubscriptions.get(sessionId == null ? NO_SESSION : sessionId);
+        return uris != null && uris.contains(uri);
     }
 
     private String requireUri(JsonNode params, String ctx) {
@@ -268,19 +331,19 @@ public class McpDispatcher {
 
     /**
      * Resource-content change notification ({@code notifications/resources/updated}). A library primitive —
-     * invoked by the platform/bridge when a resource changes. Broadcasts over the standing stream only for a
-     * <b>subscribed uri</b> and only when the session surface is on (notifier != null). Subscriptions are
-     * server-global (shared by all connected clients).
+     * invoked by the platform/bridge when a resource changes. Sent over the standing stream only when the session
+     * surface is on (notifier != null), and only to the sessions that subscribed to {@code uri} — subscribing is
+     * READ-authorized, so a session the authorizer denies never receives the notification.
      */
     public void notifyResourceUpdated(String uri) {
-        if (uri == null || notifier == null || !resourceSubscriptions.contains(uri)) {
+        if (uri == null || notifier == null) {
             return;
         }
         ObjectNode notif = mapper.createObjectNode();
         notif.put("jsonrpc", "2.0");
         notif.put("method", "notifications/resources/updated");
         notif.putObject("params").put("uri", uri);
-        notifier.broadcast(notif);
+        notifier.broadcast(notif, sessionId -> subscribed(sessionId, uri));
     }
 
     // ── Client-capability requests — server→client requests. Library primitives (invoked by consumer tools/platform).
@@ -404,13 +467,16 @@ public class McpDispatcher {
             case "tools/call" -> callTool(params, ctx);
             case "resources/list" -> paginate((ObjectNode) resources.list(), "resources", params);
             case "resources/templates/list" -> paginate((ObjectNode) resources.listTemplates(), "resourceTemplates", params);
-            case "resources/read" -> resources.read(params);
+            case "resources/read" -> {
+                authorizeRead(ctx, McpResources.moduleIdOf(requireUri(params, "resources/read")));
+                yield resources.read(params);
+            }
             case "prompts/list" -> paginate((ObjectNode) prompts.list(), "prompts", params);
             case "prompts/get" -> prompts.get(params);
-            case "logging/setLevel" -> setLogLevel(params);
-            case "completion/complete" -> complete(params);
-            case "resources/subscribe" -> subscribe(params);
-            case "resources/unsubscribe" -> unsubscribe(params);
+            case "logging/setLevel" -> setLogLevel(params, ctx);
+            case "completion/complete" -> complete(params, ctx);
+            case "resources/subscribe" -> subscribe(params, ctx);
+            case "resources/unsubscribe" -> unsubscribe(params, ctx);
             case "notifications/cancelled" -> cancelInflight(params, ctx);   // actual cancellation
             case "notifications/initialized",
                  "notifications/roots/list_changed" -> null; // no-op notif (roots changes are queried on demand, so there is no cache)

@@ -47,7 +47,7 @@ The MCP adapter is the entry point that lets an agent deploy and execute arbitra
 
 ### Authentication / authorization
 
-The library does not implement authentication. **Authentication is delegated to the consumer's Spring Security**, and only the "who can do what" policy is plugged in via the `ModuleActionAuthorizer` bean. Every MCP tool call passes through `McpDispatcher`'s common choke point and is checked with `authorize(caller, action, moduleId)`.
+The library does not implement authentication. **Authentication is delegated to the consumer's Spring Security**, and only the "who can do what" policy is plugged in via the `ModuleActionAuthorizer` bean. Every MCP tool call passes through `McpDispatcher`'s common choke point and is checked with `authorize(caller, action, moduleId)`; so do `resources/read`, `resources/subscribe` and resource completion, which ask for `READ`. The authorizer covers the MCP surface only — the REST admin (`/platform/*`) is protected by your Spring Security rules, not by this bean.
 
 - The default implementation `PermissiveModuleActionAuthorizer` **allows everything** (the same posture as the unauthenticated REST admin).
 - If the consumer registers a `ModuleActionAuthorizer` bean, `@ConditionalOnMissingBean` replaces the default.

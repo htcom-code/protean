@@ -172,7 +172,7 @@ protean:
 
 ## ModuleActionAuthorizer — MCP authorization
 
-The common choke point for MCP tool calls. Protean does not implement authentication (it delegates to the consumer's Spring Security) and plugs in only the **policy** of "who can do what" via this bean. The default implementation (`PermissiveModuleActionAuthorizer`) allows everything, so the posture matches the existing unauthenticated REST admin.
+The common choke point for MCP tool calls, and for the resource and completion methods that expose module data (asked as `READ`). Protean does not implement authentication (it delegates to the consumer's Spring Security) and plugs in only the **policy** of "who can do what" via this bean. The default implementation (`PermissiveModuleActionAuthorizer`) allows everything, so the posture matches the existing unauthenticated REST admin.
 
 ```java
 package org.htcom.protean.mcp;

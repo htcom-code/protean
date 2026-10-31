@@ -11,11 +11,48 @@ While the version is `0.x`, the public API may change between minor releases.
 ## [Unreleased]
 
 Two wire-contract changes: an addition to the console SSE stream, and **a move of the
-MCP tool-error problem detail from `structuredContent` to `_meta`** (both below). The
-Java API a consumer compiles against gains one constant and is otherwise unchanged
-from `0.0.1`, so it still links. What else changed is what the built-in MCP tools
-*answer*. If you wrap, subclass, or
+MCP tool-error problem detail from `structuredContent` to `_meta`** (both below). This
+release also **fixes two MCP security advisories** (see *Security*). The Java API a
+consumer compiles against only gains members — one constant and the session-scoped
+methods listed under *Security* — so code built against `0.0.1` still links. What else
+changed is what the built-in MCP tools *answer*. If you wrap, subclass, or
 delegate to them, read the migration note at the end of this section.
+
+### Security
+
+- **[GHSA-3wwm-m437-9pmp](https://github.com/htcom-code/protean/security/advisories/GHSA-3wwm-m437-9pmp)
+  — the `ModuleActionAuthorizer` now governs every MCP path that exposes module
+  data, not only `tools/call`.** `resources/read` and `resources/subscribe` ask it
+  for `READ` on the module the URI names, and the module-less resources
+  (`protean://modules`, `protean://traces`) and resource `completion/complete` ask
+  for `READ` with a `null` module id — the same call `protean.list_modules` and
+  `protean.query_traces` make. A denial is a JSON-RPC error carrying the
+  `PERMISSION_DENIED` problem. **If you register a custom authorizer, it is now
+  invoked on these methods too**; with the default `PermissiveModuleActionAuthorizer`
+  nothing changes.
+- **GHSA-3wwm-m437-9pmp — per-session log threshold and subscriptions.**
+  `logging/setLevel` used to set one server-wide threshold, and resource
+  subscriptions were server-wide, so one client decided what every other session
+  received. Both are now per session and are dropped when the session ends.
+  `McpDispatcher.emitLog` delivers to each session whose own threshold the level
+  meets; `McpDispatcher.logLevel()` now means the threshold of session-less callers
+  (stateless HTTP, stdio), and `logLevel(String sessionId)` reads a session's.
+  `McpServerNotifier` gains a filtered `broadcast(notification, toSession)` as a
+  default method, so existing implementations still compile and are treated as a
+  single session-less audience.
+- **GHSA-3wwm-m437-9pmp — a session belongs to the principal that initialized it.**
+  A request, `GET` stream or `DELETE` on that session from another principal is
+  answered as for an unknown session (`404`). Unauthenticated sessions are
+  unaffected — two anonymous callers cannot be told apart.
+  `McpSessionRegistry.create(owner)` and `get(id, principalName)` are the
+  owner-aware forms.
+- **[GHSA-82hq-333x-wffq](https://github.com/htcom-code/protean/security/advisories/GHSA-82hq-333x-wffq)
+  — a client response to a server-initiated request (elicitation, sampling, roots)
+  completes it only when it arrives on the session the request was sent to.** It
+  used to be matched by request id alone, before the session was checked, and the
+  ids were a counter. Session-less responses are ignored, and request ids are
+  random. `McpSessionRegistry.completeFromClient(JsonNode)` is **deprecated for
+  removal** and never matches; use `completeFromClient(sessionId, message)`.
 
 ### Added
 

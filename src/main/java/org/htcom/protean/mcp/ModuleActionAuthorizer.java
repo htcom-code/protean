@@ -11,7 +11,9 @@ package org.htcom.protean.mcp;
 import java.security.Principal;
 
 /**
- * Authorization SPI — the common choke point for MCP tool calls. protean does not implement
+ * Authorization SPI — the common choke point for MCP tool calls, and for the resource and completion methods that
+ * expose module data ({@code resources/read}, {@code resources/subscribe} and resource {@code completion/complete},
+ * asked as {@link ModuleAction#READ}; {@code moduleId} is null for module-less reads). protean does not implement
  * authentication; it delegates that to the consumer's Spring Security, and the consumer supplies only
  * the <b>policy</b> for "who can do what" through this bean. (Symmetric with the
  * {@code IsolationStrategy} / {@code CodeRule} SPIs.)

@@ -26,4 +26,18 @@ public interface McpServerNotifier {
 
     /** Sends a notification to a single session. Ignored if the session does not exist. */
     void notifySession(String sessionId, JsonNode notification);
+
+    /**
+     * Sends a notification only to the sessions {@code toSession} accepts (it is given each session id). Used for
+     * per-session state such as the log threshold and resource subscriptions, so one client's settings never decide
+     * what another receives.
+     *
+     * <p>The default is for notifiers that do not track sessions: they are treated as a single session-less
+     * audience, asked as {@code toSession.test(null)}. Session-aware implementations should override this.
+     */
+    default void broadcast(JsonNode notification, java.util.function.Predicate<String> toSession) {
+        if (toSession.test(null)) {
+            broadcast(notification);
+        }
+    }
 }

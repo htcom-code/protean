@@ -77,7 +77,7 @@ curl -s http://localhost:8080/platform/mcp \
 **세션 & 상시 서버→클라 스트림**(`protean.mcp.session.enabled=true`, 기본 on): `initialize` 응답에 `Mcp-Session-Id` 헤더가 실려 온다. 이후 요청에 이 헤더를 넣으면 세션이 유지되고, 같은 엔드포인트에 **`GET /platform/mcp`**(`Accept: text/event-stream`, `Mcp-Session-Id` 필수)로 **상시 SSE 스트림**을 열 수 있다 — 서버가 호출 밖에서 알림을 여기로 민다. 연결이 끊기면 마지막으로 받은 이벤트 id 를 `Last-Event-ID` 헤더로 재연결해 그 이후를 **재전송(resumability)** 받는다.
 
 - **`tools.listChanged`**: 서버는 `initialize` 에서 `capabilities.tools.listChanged=true` 를 광고한다. 툴 셋이 런타임에 바뀌면(소비자가 `McpDispatcher.registerTool`/`unregisterTool` 로 자기 툴을 추가/제거) `notifications/tools/list_changed` 를 상시 스트림으로 밀어, 클라가 **재연결 없이** `tools/list` 를 다시 받아 갱신한다.
-- **하위호환**: `Mcp-Session-Id` 없이 보내면 예전처럼 **stateless**(요청/응답)로 동작한다. 알 수 없는/만료 세션 id 는 `404`(재-`initialize` 유도). `MCP-Protocol-Version` 헤더가 지원 밖이면 `400`.
+- **하위호환**: `Mcp-Session-Id` 없이 보내면 예전처럼 **stateless**(요청/응답)로 동작한다. 알 수 없는/만료 세션 id 는 `404`(재-`initialize` 유도). 세션은 그것을 initialize 한 주체의 것이다 — 다른 인증 주체가 그 세션으로 보낸 요청·`GET` 스트림·`DELETE` 는 같은 `404` 로 답한다(인증 없는 세션은 서로 구별할 수 없어 묶이지 않는다). `MCP-Protocol-Version` 헤더가 지원 밖이면 `400`.
 - `MCP-Protocol-Version` 헤더는 `initialize` 이후 요청에 붙인다(없으면 최신으로 관용).
 
 ### 2) stdio — 로컬 spawn
@@ -299,7 +299,7 @@ tier 모델과 키별 의미는 [03. 설정](03-configuration.ko.md) 참고.
 **라이브러리는 인증을 구현하지 않는다.** 두 축으로 나뉜다.
 
 - **인증(누구인가)**: 소비자의 Spring Security 몫. `POST /platform/mcp` 로 들어온 요청의 `Principal` 을 그대로 인가 컨텍스트(`McpCallContext.caller`)로 흘려보낸다. 무보안이면 `null`. stdio 는 **로컬 신뢰 경계**라 spawn 주체가 곧 인가 주체이므로 항상 `caller=null` 이다.
-- **인가(무엇을 할 수 있나)**: `ModuleActionAuthorizer` SPI. 모든 툴 호출(코어 툴 + 소비자 커스텀 툴)이 이 하나의 choke point 를 거친다. 툴마다 `ModuleAction`(`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`)이 분류되어 있어, 동작별로 정책을 분기할 수 있다. 단, 설정·shared-lib 쓰기 툴(`config.set`·`protean.deploy_shared_lib`·`protean.remove_shared_lib`)은 `CUSTOM` 으로 분류된다 — 이들을 가둬야 하는 정책은 `CUSTOM` 케이스 안에서 툴 이름으로 분기한다(`DEPLOY`/`DELETE` 가 아니다).
+- **인가(무엇을 할 수 있나)**: `ModuleActionAuthorizer` SPI. 모든 툴 호출(코어 툴 + 소비자 커스텀 툴)이 이 하나의 choke point 를 거치고, 모듈 데이터를 내놓는 툴 외 메서드도 거친다 — `resources/read`·`resources/subscribe` 는 URI 가 가리키는 모듈에 대해 `READ` 를 묻고, 모듈이 없는 리소스(`protean://modules`·`protean://traces`)와 리소스 `completion/complete` 는 모듈 id `null` 로 `READ` 를 묻는다(`protean.list_modules` 와 같은 호출). 거기서의 거부는 `PERMISSION_DENIED` problem 을 실은 JSON-RPC error 다. 툴마다 `ModuleAction`(`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`)이 분류되어 있어, 동작별로 정책을 분기할 수 있다. 단, 설정·shared-lib 쓰기 툴(`config.set`·`protean.deploy_shared_lib`·`protean.remove_shared_lib`)은 `CUSTOM` 으로 분류된다 — 이들을 가둬야 하는 정책은 `CUSTOM` 케이스 안에서 툴 이름으로 분기한다(`DEPLOY`/`DELETE` 가 아니다).
 
 기본 구현은 `PermissiveModuleActionAuthorizer`(전부 allow)다. 소비자가 `ModuleActionAuthorizer` 빈을 등록하면 `@ConditionalOnMissingBean` 으로 기본이 대체된다.
 
@@ -467,7 +467,7 @@ claude mcp add --transport http protean http://localhost:8080/platform/mcp
 {"jsonrpc":"2.0","id":10,"method":"logging/setLevel","params":{"level":"debug"}}
 ```
 
-> 임계값은 **서버-전역**이다(연결된 모든 클라 공통) — 제어 평면 특성상 단순·정직한 선택. 방출은 세션 표면이 켜져 있을 때만 상시 스트림으로 나간다. 라이브러리 소비자는 `McpDispatcher.emitLog(level, logger, data)` 로 자기 로그를 방출할 수 있다.
+> 임계값은 **세션 단위**다 — `logging/setLevel` 은 호출한 세션의 임계값만 바꾸고(설정 전에는 INFO), 세션이 끝나면 지워진다. 방출은 세션 표면이 켜져 있을 때만 상시 스트림으로 나가며, 레벨이 각 세션 자신의 임계값을 넘는 세션에만 간다. 라이브러리 소비자는 `McpDispatcher.emitLog(level, logger, data)` 로 자기 로그를 방출할 수 있다.
 
 ### 자동완성 (`completions`)
 
@@ -501,7 +501,7 @@ claude mcp add --transport http protean http://localhost:8080/platform/mcp
 {"jsonrpc":"2.0","id":12,"method":"resources/subscribe","params":{"uri":"protean://modules"}}
 ```
 
-> 구독은 **서버-전역**으로 추적하고, 변경 시 연결된 모든 세션에 브로드캐스트한다. 코어 `ModulePlatform` 변경이 `McpResourceUpdateBridge` 를 거쳐 통지로 이어진다(REST·MCP 어느 경로의 변경이든 동일하게 반영).
+> 구독은 **세션 단위**로 추적한다 — 변경은 그 uri 를 구독한 세션에만 통지되고, 세션의 구독은 세션과 함께 끝난다. 구독은 `resources/read` 처럼 `READ` 인가를 거치므로 authorizer 가 거부한 세션은 통지를 받지 않는다. 코어 `ModulePlatform` 변경이 `McpResourceUpdateBridge` 를 거쳐 통지로 이어진다(REST·MCP 어느 경로의 변경이든 동일하게 반영).
 
 ### 페이지네이션 (커서)
 

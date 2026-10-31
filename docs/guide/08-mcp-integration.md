@@ -77,7 +77,7 @@ The protocol version is pinned to `2025-11-25`. `initialize` echoes the requeste
 **Sessions & the standing server→client stream** (`protean.mcp.session.enabled=true`, on by default): the `initialize` response carries an `Mcp-Session-Id` header. Include this header on subsequent requests to keep the session alive, and on the same endpoint you can open a **standing SSE stream** with **`GET /platform/mcp`** (`Accept: text/event-stream`, `Mcp-Session-Id` required) — the server pushes notifications that occur outside of a call here. If the connection drops, reconnect with the last received event id in the `Last-Event-ID` header to **resume (resumability)** from just after it.
 
 - **`tools.listChanged`**: the server advertises `capabilities.tools.listChanged=true` in `initialize`. When the tool set changes at runtime (a consumer adds/removes its own tools via `McpDispatcher.registerTool`/`unregisterTool`), it pushes `notifications/tools/list_changed` over the standing stream so the client re-fetches `tools/list` **without reconnecting**.
-- **Backward compatibility**: send without `Mcp-Session-Id` and it behaves **statelessly** (request/response) as before. An unknown/expired session id returns `404` (prompting a re-`initialize`). If the `MCP-Protocol-Version` header is out of the supported range, `400`.
+- **Backward compatibility**: send without `Mcp-Session-Id` and it behaves **statelessly** (request/response) as before. An unknown/expired session id returns `404` (prompting a re-`initialize`). A session belongs to the principal that initialized it: a request, `GET` stream or `DELETE` on it from a different authenticated principal is answered with the same `404` (unauthenticated sessions cannot be told apart and are not bound). If the `MCP-Protocol-Version` header is out of the supported range, `400`.
 - The `MCP-Protocol-Version` header is attached to requests after `initialize` (if absent, tolerantly treated as the latest).
 
 ### 2) stdio — local spawn
@@ -304,7 +304,7 @@ A coded tool error carries its RFC 9457 problem detail in the result **`_meta`**
 **The library implements no authentication.** It splits into two axes.
 
 - **Authentication (who)**: the consumer's Spring Security responsibility. The `Principal` of a request arriving at `POST /platform/mcp` is passed straight through as the authorization context (`McpCallContext.caller`). With no security it is `null`. stdio is a **local trust boundary**, so the spawning subject is the authorization subject and `caller=null` always.
-- **Authorization (what can be done)**: the `ModuleActionAuthorizer` SPI. Every tool call (core tools + consumer custom tools) passes through this single choke point. Each tool is classified with a `ModuleAction` (`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`), so policy can branch per action. Note that the configuration and shared-lib write tools (`config.set`, `protean.deploy_shared_lib`, `protean.remove_shared_lib`) are classified `CUSTOM` — a policy that must gate them branches on tool name within the `CUSTOM` case (they are not `DEPLOY`/`DELETE`).
+- **Authorization (what can be done)**: the `ModuleActionAuthorizer` SPI. Every tool call (core tools + consumer custom tools) passes through this single choke point, and so do the non-tool methods that expose module data: `resources/read` and `resources/subscribe` ask for `READ` on the module the URI names, while the module-less resources (`protean://modules`, `protean://traces`) and resource `completion/complete` ask for `READ` with a `null` module id — the same call `protean.list_modules` makes. A denial there is a JSON-RPC error carrying the `PERMISSION_DENIED` problem. Each tool is classified with a `ModuleAction` (`READ`·`DEPLOY`·`UPDATE`·`DELETE`·`APPROVE`·`DEBUG`·`CUSTOM`), so policy can branch per action. Note that the configuration and shared-lib write tools (`config.set`, `protean.deploy_shared_lib`, `protean.remove_shared_lib`) are classified `CUSTOM` — a policy that must gate them branches on tool name within the `CUSTOM` case (they are not `DEPLOY`/`DELETE`).
 
 The default implementation is `PermissiveModuleActionAuthorizer` (allow everything). When a consumer registers a `ModuleActionAuthorizer` bean, `@ConditionalOnMissingBean` replaces the default.
 
@@ -472,7 +472,7 @@ Adjusting the server log threshold with `logging/setLevel` makes the server emit
 {"jsonrpc":"2.0","id":10,"method":"logging/setLevel","params":{"level":"debug"}}
 ```
 
-> The threshold is **server-global** (shared across all connected clients) — a simple, honest choice given the control-plane nature. Emission goes out over the standing stream only when the session surface is on. A library consumer can emit its own logs with `McpDispatcher.emitLog(level, logger, data)`.
+> The threshold is **per session**: `logging/setLevel` changes only the calling session's threshold (INFO until it is set), and is dropped when the session ends. Emission goes out over the standing stream only when the session surface is on, to each session whose own threshold the level meets. A library consumer can emit its own logs with `McpDispatcher.emitLog(level, logger, data)`.
 
 ### Completions (`completions`)
 
@@ -506,7 +506,7 @@ Subscribe to changes of a specific resource uri with `resources/subscribe` (+ `u
 {"jsonrpc":"2.0","id":12,"method":"resources/subscribe","params":{"uri":"protean://modules"}}
 ```
 
-> Subscriptions are tracked **server-globally** and, on change, broadcast to all connected sessions. A core `ModulePlatform` change flows through `McpResourceUpdateBridge` into the notification (a change on either the REST or MCP path is reflected identically).
+> Subscriptions are tracked **per session**: a change notifies only the sessions subscribed to that uri, and a session's subscriptions end with it. Subscribing is `READ`-authorized like `resources/read`, so a session the authorizer denies never receives the notification. A core `ModulePlatform` change flows through `McpResourceUpdateBridge` into the notification (a change on either the REST or MCP path is reflected identically).
 
 ### Pagination (cursor)
 

@@ -172,7 +172,7 @@ protean:
 
 ## ModuleActionAuthorizer — MCP 인가
 
-MCP 툴 호출의 공통 choke point. Protean 은 인증을 구현하지 않고(소비자의 Spring Security 에 위임) "누가 무엇을 할 수 있나"의 **정책**만 이 빈으로 꽂는다. 기본 구현(`PermissiveModuleActionAuthorizer`)은 전부 allow 라 기존 무인증 REST admin 과 동일 태세다.
+MCP 툴 호출, 그리고 모듈 데이터를 내놓는 리소스·completion 메서드(`READ` 로 검사)의 공통 choke point. Protean 은 인증을 구현하지 않고(소비자의 Spring Security 에 위임) "누가 무엇을 할 수 있나"의 **정책**만 이 빈으로 꽂는다. 기본 구현(`PermissiveModuleActionAuthorizer`)은 전부 allow 라 기존 무인증 REST admin 과 동일 태세다.
 
 ```java
 package org.htcom.protean.mcp;

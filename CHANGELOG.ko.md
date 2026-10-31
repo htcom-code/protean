@@ -11,9 +11,34 @@
 ## [Unreleased]
 
 wire 계약 변경은 둘이다 — 콘솔 SSE 스트림에 하나가 추가됐고, **MCP 툴 오류의 problem detail 이
-`structuredContent` 에서 `_meta` 로 옮겨졌다**(둘 다 아래). 소비자가 컴파일하는 Java API 는 상수
-하나가 늘었을 뿐 `0.0.1` 에서 바뀌지 않았고 그대로 링크된다. 그 밖에 바뀐 것은 내장 MCP 툴이 **무엇을 답하는가**다.
+`structuredContent` 에서 `_meta` 로 옮겨졌다**(둘 다 아래). 이번 릴리스는 **MCP 보안 advisory 두 건도
+고친다**(*보안* 참조). 소비자가 컴파일하는 Java API 는 멤버가 **늘기만** 했다 — 상수 하나와 *보안* 에 적은
+세션 단위 메서드들 — 그래서 `0.0.1` 로 빌드한 코드는 그대로 링크된다. 그 밖에 바뀐 것은 내장 MCP 툴이 **무엇을 답하는가**다.
 이 툴들을 wrap·subclass·위임해서 쓰고 있다면 이 절 끝의 마이그레이션 노트를 읽어야 한다.
+
+### 보안
+
+- **[GHSA-3wwm-m437-9pmp](https://github.com/htcom-code/protean/security/advisories/GHSA-3wwm-m437-9pmp)
+  — `ModuleActionAuthorizer` 가 `tools/call` 만이 아니라 모듈 데이터를 내놓는 모든 MCP 경로를 거친다.**
+  `resources/read`·`resources/subscribe` 는 URI 가 가리키는 모듈에 대해 `READ` 를 묻고, 모듈이 없는
+  리소스(`protean://modules`·`protean://traces`)와 리소스 `completion/complete` 는 모듈 id `null` 로
+  `READ` 를 묻는다 — `protean.list_modules`·`protean.query_traces` 가 하는 것과 같은 호출이다. 거부는
+  `PERMISSION_DENIED` problem 을 실은 JSON-RPC error 다. **커스텀 authorizer 를 등록했다면 이 메서드들에서도
+  호출된다.** 기본 `PermissiveModuleActionAuthorizer` 에서는 달라지는 것이 없다.
+- **GHSA-3wwm-m437-9pmp — 로그 임계값과 구독이 세션 단위가 됐다.** `logging/setLevel` 은 서버 전체에 하나뿐인
+  임계값을 바꿨고 리소스 구독도 서버 전역이어서, 한 클라이언트가 다른 모든 세션이 받는 것을 정했다. 이제 둘 다
+  세션 단위이고 세션이 끝나면 지워진다. `McpDispatcher.emitLog` 는 레벨이 각 세션 자신의 임계값을 넘는 세션에만
+  보낸다. `McpDispatcher.logLevel()` 은 이제 세션 없는 호출자(stateless HTTP·stdio)의 임계값을 뜻하고, 세션의
+  값은 `logLevel(String sessionId)` 로 읽는다. `McpServerNotifier` 에 필터를 받는 `broadcast(notification,
+  toSession)` 이 default 메서드로 추가됐다 — 기존 구현체는 그대로 컴파일되고 세션 없는 단일 수신자로 취급된다.
+- **GHSA-3wwm-m437-9pmp — 세션은 그것을 initialize 한 주체의 것이다.** 다른 주체가 그 세션으로 보낸 요청·`GET`
+  스트림·`DELETE` 는 모르는 세션과 똑같이 `404` 로 답한다. 인증 없는 세션은 영향이 없다 — 익명 호출자 둘은 구별할
+  수 없다. 주체를 아는 형태는 `McpSessionRegistry.create(owner)`·`get(id, principalName)` 이다.
+- **[GHSA-82hq-333x-wffq](https://github.com/htcom-code/protean/security/advisories/GHSA-82hq-333x-wffq)
+  — 서버가 시작한 요청(elicitation·sampling·roots)에 대한 클라이언트 응답은 그 요청을 보낸 세션으로 도착할 때만
+  요청을 완료한다.** 예전에는 세션을 확인하기 전에 요청 id 하나로 짝지었고 id 는 순번이었다. 세션 없는 응답은
+  무시되고 요청 id 는 무작위다. `McpSessionRegistry.completeFromClient(JsonNode)` 는 **제거 예정(deprecated)** 이며
+  아무것도 매칭하지 않는다 — `completeFromClient(sessionId, message)` 를 쓴다.
 
 ### 추가
 

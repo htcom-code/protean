@@ -98,26 +98,29 @@ public class McpHttpController {
                     ErrorCode.UNSUPPORTED_PROTOCOL_VERSION.format(protocolVersion), null);
         }
 
-        // If this is a response to a server-to-client request (sampling/roots/elicitation) — i.e. it has
-        // result/error but no method — don't route it to the dispatcher; complete the waiting future
-        // instead. If it matches nothing, ignore it (a late or duplicate response).
-        if (!message.hasNonNull("method") && (message.has("result") || message.has("error"))) {
-            if (sessions != null) {
-                sessions.completeFromClient(message);
-            }
-            return ResponseEntity.accepted().build();
-        }
-
         String method = message.path("method").asText();
+        boolean clientResponse = !message.hasNonNull("method") && (message.has("result") || message.has("error"));
 
-        // Session validation: if a session id is present it must be known (unknown/expired -> 404,
-        // prompting re-initialization). Without a session id, proceed statelessly (backward compatibility).
+        // Session validation: if a session id is present it must be known and belong to the calling principal
+        // (unknown/expired/someone else's -> 404, prompting re-initialization). Without a session id, proceed
+        // statelessly (backward compatibility).
         if (sessions != null && sessionId != null && !sessionId.isBlank()
-                && !"initialize".equals(method) && sessions.get(sessionId) == null) {
+                && !"initialize".equals(method) && sessions.get(sessionId, name(principal)) == null) {
             // Return a genuine problem+json with type/status 404, instead of a 404 status paired with a
             // mismatched -32600 envelope code.
             return problem(ErrorCode.UNKNOWN_SESSION,
                     ErrorCode.UNKNOWN_SESSION.format(sessionId), sessionId);
+        }
+
+        // A response to a server-to-client request (sampling/roots/elicitation) — result/error but no method — is
+        // not routed to the dispatcher; it completes the waiting future, but only for a request that was sent to
+        // this same session (validated above). A response with no session, or one that matches nothing (late,
+        // duplicate or another session's), is ignored.
+        if (clientResponse) {
+            if (sessions != null && sessionId != null && !sessionId.isBlank()) {
+                sessions.completeFromClient(sessionId, message);
+            }
+            return ResponseEntity.accepted().build();
         }
 
         JsonNode progressToken = message.path("params").path("_meta").get("progressToken");
@@ -134,7 +137,7 @@ public class McpHttpController {
         // On successful initialize, issue a session and return it in the Mcp-Session-Id header, recording
         // the client's capabilities for later gating of server-to-client requests.
         if (sessions != null && "initialize".equals(method) && response.path("result").has("protocolVersion")) {
-            McpSession s = sessions.create();
+            McpSession s = sessions.create(name(principal));
             s.setClientCapabilities(message.path("params").get("capabilities"));
             return ResponseEntity.ok().header(SESSION_HEADER, s.id()).body(response);
         }
@@ -149,7 +152,8 @@ public class McpHttpController {
      */
     @GetMapping
     public Object openStream(@RequestHeader(value = SESSION_HEADER, required = false) String sessionId,
-                             @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+                             @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+                             Principal principal) {
         // GET errors return a status code only, with no body — the client's Accept is text/event-stream,
         // so a JSON body would produce a 406 (Not Acceptable). The status code is the signal (405/400/404).
         if (sessions == null) {
@@ -158,7 +162,7 @@ public class McpHttpController {
         if (sessionId == null || sessionId.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        McpSession s = sessions.get(sessionId);
+        McpSession s = sessions.get(sessionId, name(principal));
         if (s == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
@@ -166,13 +170,20 @@ public class McpHttpController {
         return sessions.openStream(s, after);
     }
 
-    /** Terminates the session. */
+    /** Terminates the session — only the principal that created it can. */
     @DeleteMapping
-    public ResponseEntity<Void> terminate(@RequestHeader(value = SESSION_HEADER, required = false) String sessionId) {
-        if (sessions != null && sessionId != null && !sessionId.isBlank()) {
+    public ResponseEntity<Void> terminate(@RequestHeader(value = SESSION_HEADER, required = false) String sessionId,
+                                         Principal principal) {
+        if (sessions != null && sessionId != null && !sessionId.isBlank()
+                && sessions.get(sessionId, name(principal)) != null) {
             sessions.terminate(sessionId);
         }
         return ResponseEntity.noContent().build();
+    }
+
+    /** The principal name a session is bound to (null = unauthenticated). */
+    private static String name(Principal principal) {
+        return principal == null ? null : principal.getName();
     }
 
     private static long parseLastEventId(String lastEventId) {

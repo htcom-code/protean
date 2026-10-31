@@ -108,6 +108,19 @@ public class McpResources {
         return java.util.List.of();
     }
 
+    /**
+     * The module a resource uri belongs to — {@code id} for {@code protean://modules/{id}/…}, null for module-less
+     * resources ({@code protean://modules}, {@code protean://traces}). Used as the authorization target.
+     */
+    public static String moduleIdOf(String uri) {
+        if (uri == null || !uri.startsWith("protean://modules/")) {
+            return null;
+        }
+        String rest = uri.substring("protean://modules/".length());
+        int slash = rest.indexOf('/');
+        return slash > 0 ? rest.substring(0, slash) : null;
+    }
+
     private Object resolve(String uri) {
         if (uri.equals("protean://modules")) {
             // Full status including generation bindings, matching the REST /platform/modules list and the

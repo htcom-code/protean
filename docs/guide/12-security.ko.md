@@ -47,7 +47,7 @@ MCP 어댑터는 에이전트가 임의 Java 소스를 배포·실행하게 하�
 
 ### 인증·인가
 
-라이브러리는 인증을 구현하지 않는다. **인증은 소비자의 Spring Security 에 위임**하고, "누가 무엇을 할 수 있나"의 정책만 `ModuleActionAuthorizer` 빈으로 꽂는다. 모든 MCP 툴 호출은 `McpDispatcher` 의 공통 choke point 를 지나며 `authorize(caller, action, moduleId)` 로 검사된다.
+라이브러리는 인증을 구현하지 않는다. **인증은 소비자의 Spring Security 에 위임**하고, "누가 무엇을 할 수 있나"의 정책만 `ModuleActionAuthorizer` 빈으로 꽂는다. 모든 MCP 툴 호출은 `McpDispatcher` 의 공통 choke point 를 지나며 `authorize(caller, action, moduleId)` 로 검사된다. `resources/read`·`resources/subscribe`·리소스 completion 도 `READ` 로 검사된다. authorizer 는 MCP 표면만 덮는다 — REST admin(`/platform/*`)은 이 빈이 아니라 소비자의 Spring Security 규칙이 지킨다.
 
 - 기본 구현 `PermissiveModuleActionAuthorizer` 는 **전부 allow** 다(무인증 REST admin 과 동일 태세).
 - 소비자가 `ModuleActionAuthorizer` 빈을 등록하면 `@ConditionalOnMissingBean` 으로 기본이 대체된다.
