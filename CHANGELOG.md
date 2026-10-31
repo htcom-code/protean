@@ -10,6 +10,8 @@ While the version is `0.x`, the public API may change between minor releases.
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-10-31
+
 Two wire-contract changes: an addition to the console SSE stream, and **a move of the
 MCP tool-error problem detail from `structuredContent` to `_meta`** (both below). This
 release also **fixes two MCP security advisories** (see *Security*). The Java API a
@@ -161,6 +163,9 @@ delegate to them, read the migration note at the end of this section.
   do (`debug.frames` with `sessionId: ""` answers `no debug session: `). This is
   documented rather than changed, so the boundary is explicit; `debug.launch` is
   the exception, since it shares the module tools' argument handling.
+- The runtime dependency `org.ow2.asm:asm` moved from `9.10.1` to `9.11.1` (it backs
+  the review gate's bytecode scan). It is an `implementation` dependency, so it
+  appears in the published POM and resolves transitively for consumers.
 
 ### Migration — if you wrap or subclass the built-in MCP tools
 
