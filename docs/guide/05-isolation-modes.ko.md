@@ -171,7 +171,7 @@ protean:
     runtime: sidecar
     sidecar:
       jar: /opt/protean/protean-worker.jar    # process 트랙
-      image: ghcr.io/htcom-code/protean-worker:0.0.1  # container 트랙
+      image: ghcr.io/htcom-code/protean-worker:0.0.2  # container 트랙
       shared-api: /opt/protean/shared-api.jar # 워커 컴파일용 공유 타입
 ```
 

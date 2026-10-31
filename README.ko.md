@@ -121,7 +121,7 @@ Protean 은 Maven Central 에 plain jar 로 발행된다(Spring Boot fat jar 아
 
 ```gradle
 dependencies {
-    implementation 'org.htcom:protean:0.0.1'
+    implementation 'org.htcom:protean:0.0.2'
     // 소비자 앱은 Spring Boot 앱이므로 이미 보유(Protean 은 spring 을 runtime scope 로만 전이):
     implementation 'org.springframework.boot:spring-boot-starter-web'
 }
