@@ -6,7 +6,7 @@ This walks the shortest path to adding Protean as a dependency to an existing Sp
 
 ## 1. Add the Dependency
 
-The Protean coordinate is `org.htcom:protean:0.0.1` (`group = org.htcom`, artifactId = `protean`,
+The Protean coordinate is `org.htcom:protean:0.0.2` (`group = org.htcom`, artifactId = `protean`,
 Spring Boot 3.5.x / Java 21). It is published to Maven Central, so no extra repository declaration is
 needed beyond the `mavenCentral()` a Spring Boot build already has.
 
@@ -18,7 +18,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.htcom:protean:0.0.1'
+    implementation 'org.htcom:protean:0.0.2'
 }
 ```
 
@@ -28,7 +28,7 @@ Maven:
 <dependency>
     <groupId>org.htcom</groupId>
     <artifactId>protean</artifactId>
-    <version>0.0.1</version>
+    <version>0.0.2</version>
 </dependency>
 ```
 

@@ -171,7 +171,7 @@ protean:
     runtime: sidecar
     sidecar:
       jar: /opt/protean/protean-worker.jar    # process track
-      image: ghcr.io/htcom-code/protean-worker:0.0.1  # container track
+      image: ghcr.io/htcom-code/protean-worker:0.0.2  # container track
       shared-api: /opt/protean/shared-api.jar # shared types for worker compilation
 ```
 

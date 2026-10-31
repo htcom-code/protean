@@ -7,7 +7,7 @@ Protean 을 기존 Spring Boot 애플리케이션에 의존성으로 넣고, 재
 
 ## 1. 의존성 추가
 
-Protean 좌표는 `org.htcom:protean:0.0.1` 이다(`group = org.htcom`, artifactId = `protean`,
+Protean 좌표는 `org.htcom:protean:0.0.2` 이다(`group = org.htcom`, artifactId = `protean`,
 Spring Boot 3.5.x / Java 21). Maven Central 에 발행되므로 Spring Boot 빌드가 이미 갖고 있는
 `mavenCentral()` 외에 추가할 저장소가 없다.
 
@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.htcom:protean:0.0.1'
+    implementation 'org.htcom:protean:0.0.2'
 }
 ```
 
@@ -29,7 +29,7 @@ Maven:
 <dependency>
     <groupId>org.htcom</groupId>
     <artifactId>protean</artifactId>
-    <version>0.0.1</version>
+    <version>0.0.2</version>
 </dependency>
 ```
 
