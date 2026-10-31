@@ -10,6 +10,8 @@
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-10-31
+
 wire 계약 변경은 둘이다 — 콘솔 SSE 스트림에 하나가 추가됐고, **MCP 툴 오류의 problem detail 이
 `structuredContent` 에서 `_meta` 로 옮겨졌다**(둘 다 아래). 이번 릴리스는 **MCP 보안 advisory 두 건도
 고친다**(*보안* 참조). 소비자가 컴파일하는 Java API 는 멤버가 **늘기만** 했다 — 상수 하나와 *보안* 에 적은
@@ -128,6 +130,8 @@ wire 계약 변경은 둘이다 — 콘솔 SSE 스트림에 하나가 추가됐�
 - `debug.*` 툴은 위 툴들과 달리 여전히 빈 문자열을 통과시킨다(`debug.frames` 에 `sessionId: ""` 를
   주면 `no debug session: ` 이 돌아온다). 이번에는 바꾸지 않고 **경계를 문서에 명시**했다.
   `debug.launch` 는 모듈 툴과 같은 인자 처리를 쓰므로 예외다.
+- 런타임 의존성 `org.ow2.asm:asm` 이 `9.10.1` 에서 `9.11.1` 로 올라갔다(review 게이트의 바이트코드 스캔이
+  쓴다). `implementation` 의존성이라 배포 POM 에 실리고 소비자에게 전이로 해석된다.
 
 ### 마이그레이션 — 내장 MCP 툴을 wrap·subclass 해서 쓴다면
 
